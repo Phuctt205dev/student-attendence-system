@@ -5,6 +5,7 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -188,7 +189,7 @@ export const getStudentAttendanceHistory = async (studentId, classId = null) => 
 // Validate QR code
 export const validateQRCode = async (qrData) => {
   try {
-    const { attendanceId, timestamp } = JSON.parse(qrData);
+    const { attendanceId } = JSON.parse(qrData);
 
     const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
 
@@ -260,6 +261,98 @@ export const getStudentAttendanceStats = async (studentId, classId) => {
     };
   } catch (error) {
     console.error('Error getting attendance stats:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Delete attendance session
+export const deleteAttendanceSession = async (attendanceId) => {
+  try {
+    await deleteDoc(doc(db, 'attendances', attendanceId));
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting attendance session:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Generate QR code for attendance session
+export const generateQRCode = async (attendanceId, expiryMinutes = 10) => {
+  try {
+    const expiryDate = new Date();
+    expiryDate.setMinutes(expiryDate.getMinutes() + expiryMinutes);
+
+    const qrData = JSON.stringify({
+      attendanceId,
+      timestamp: Date.now()
+    });
+
+    await updateDoc(doc(db, 'attendances', attendanceId), {
+      qrCode: qrData,
+      qrCodeExpiry: Timestamp.fromDate(expiryDate)
+    });
+
+    return {
+      success: true,
+      qrData,
+      expiryTime: expiryDate
+    };
+  } catch (error) {
+    console.error('Error generating QR code:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Get attendance session with student details
+export const getAttendanceDetails = async (attendanceId, classId) => {
+  try {
+    const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
+
+    if (!attendanceDoc.exists()) {
+      return { success: false, error: 'Attendance session not found' };
+    }
+
+    const attendanceData = attendanceDoc.data();
+
+    // Get all students in class
+    const classDoc = await getDoc(doc(db, 'classes', classId));
+    if (!classDoc.exists()) {
+      return { success: false, error: 'Class not found' };
+    }
+
+    const classData = classDoc.data();
+    const studentIds = classData.students || [];
+
+    // Get student details
+    const studentsData = [];
+    for (const studentId of studentIds) {
+      const studentDoc = await getDoc(doc(db, 'users', studentId));
+      if (studentDoc.exists()) {
+        const studentInfo = studentDoc.data();
+        const attendanceRecord = attendanceData.records?.find(r => r.studentId === studentId);
+
+        studentsData.push({
+          uid: studentId,
+          fullName: studentInfo.fullName,
+          email: studentInfo.email,
+          studentId: studentInfo.studentId,
+          status: attendanceRecord ? attendanceRecord.status : 'absent',
+          checkInTime: attendanceRecord?.checkInTime,
+          method: attendanceRecord?.method
+        });
+      }
+    }
+
+    return {
+      success: true,
+      attendance: {
+        id: attendanceDoc.id,
+        ...attendanceData
+      },
+      students: studentsData
+    };
+  } catch (error) {
+    console.error('Error getting attendance details:', error);
     return { success: false, error: error.message };
   }
 };
