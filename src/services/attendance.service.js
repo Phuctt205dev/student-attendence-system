@@ -159,6 +159,56 @@ export const updateAttendanceStatus = async (attendanceId, studentId, status, no
   }
 };
 
+// Batch update manual attendance for multiple students
+export const batchUpdateManualAttendance = async (attendanceId, studentRecords) => {
+  try {
+    console.log('📦 Batch updating manual attendance:', { attendanceId, recordsCount: studentRecords.length });
+    const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
+
+    if (!attendanceDoc.exists()) {
+      return { success: false, error: 'Attendance session not found' };
+    }
+
+    const currentRecords = attendanceDoc.data().records || [];
+    const updatedRecords = [...currentRecords];
+
+    // Process each student record
+    studentRecords.forEach(({ studentId, studentName, status, note }) => {
+      const existingIndex = updatedRecords.findIndex(r => r.studentId === studentId);
+
+      if (existingIndex >= 0) {
+        // Update existing record
+        updatedRecords[existingIndex] = {
+          ...updatedRecords[existingIndex],
+          status,
+          note: note || ''
+        };
+      } else {
+        // Add new record
+        updatedRecords.push({
+          studentId,
+          studentName,
+          status,
+          checkInTime: Timestamp.now(),
+          method: 'manual',
+          note: note || ''
+        });
+      }
+    });
+
+    // Single update to Firestore
+    await updateDoc(doc(db, 'attendances', attendanceId), {
+      records: updatedRecords
+    });
+
+    console.log('✅ Batch attendance updated successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error batch updating attendance:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Get student's attendance history
 export const getStudentAttendanceHistory = async (studentId, classId = null) => {
   try {

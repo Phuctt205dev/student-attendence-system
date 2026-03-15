@@ -3,7 +3,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { logoutUser } from '../../services/auth.service';
 import { getClassesByStudent } from '../../services/class.service';
-import { LogOut, BookOpen, FileText, QrCode, Eye } from 'lucide-react';
+import { getStudentAttendanceHistory } from '../../services/attendance.service';
+import { LogOut, BookOpen, FileText, QrCode, Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -15,6 +16,10 @@ const StudentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedClass, setSelectedClass] = useState(null);
   const [showClassDetailModal, setShowClassDetailModal] = useState(false);
+  const [attendanceHistory, setAttendanceHistory] = useState([]);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [expandedClassId, setExpandedClassId] = useState(null);
+  const [classAttendances, setClassAttendances] = useState({});
 
   useEffect(() => {
     const loadClasses = async () => {
@@ -35,9 +40,40 @@ const StudentDashboard = () => {
     navigate('/login');
   };
 
-  const handleOpenClassDetail = (classItem) => {
+  const handleToggleClass = async (classItem) => {
+    if (expandedClassId === classItem.id) {
+      // Collapse
+      setExpandedClassId(null);
+    } else {
+      // Expand and load attendance
+      setExpandedClassId(classItem.id);
+
+      // Load attendance for this class if not already loaded
+      if (!classAttendances[classItem.id] && userProfile?.uid) {
+        const result = await getStudentAttendanceHistory(userProfile.uid, classItem.id);
+        if (result.success) {
+          setClassAttendances(prev => ({
+            ...prev,
+            [classItem.id]: result.attendances
+          }));
+        }
+      }
+    }
+  };
+
+  const handleOpenClassDetail = async (classItem) => {
     setSelectedClass(classItem);
     setShowClassDetailModal(true);
+
+    // Load attendance for this class
+    if (userProfile?.uid) {
+      setLoadingAttendance(true);
+      const result = await getStudentAttendanceHistory(userProfile.uid, classItem.id);
+      if (result.success) {
+        setAttendanceHistory(result.attendances);
+      }
+      setLoadingAttendance(false);
+    }
   };
 
   return (
@@ -103,33 +139,125 @@ const StudentDashboard = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {classes.map((classItem) => (
-                <div
-                  key={classItem.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="bg-primary-100 p-2 rounded-lg">
-                      <BookOpen className="w-5 h-5 text-primary-600" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">{classItem.classCode}</p>
-                      <p className="text-sm text-gray-600">{classItem.className}</p>
-                      {classItem.teacherName && (
-                        <p className="text-xs text-gray-500">GV: {classItem.teacherName}</p>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Eye className="w-4 h-4" />}
-                    onClick={() => handleOpenClassDetail(classItem)}
+              {classes.map((classItem) => {
+                const isExpanded = expandedClassId === classItem.id;
+                const attendances = classAttendances[classItem.id] || [];
+
+                return (
+                  <div
+                    key={classItem.id}
+                    className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden"
                   >
-                    Chi tiết
-                  </Button>
-                </div>
-              ))}
+                    {/* Class Header */}
+                    <div
+                      className="flex items-center justify-between p-4 hover:bg-gray-100 transition-colors cursor-pointer"
+                      onClick={() => handleToggleClass(classItem)}
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="bg-primary-100 p-2 rounded-lg">
+                          <BookOpen className="w-5 h-5 text-primary-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">{classItem.classCode}</p>
+                          <p className="text-sm text-gray-600">{classItem.className}</p>
+                          {classItem.teacherName && (
+                            <p className="text-xs text-gray-500">GV: {classItem.teacherName}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={<Eye className="w-4 h-4" />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenClassDetail(classItem);
+                          }}
+                        >
+                          Chi tiết
+                        </Button>
+                        <div className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                          <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Attendance List - Expandable */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-gray-200">
+                        <h4 className="font-semibold text-gray-900 mt-3 mb-3">Lịch sử điểm danh</h4>
+                        {attendances.length === 0 ? (
+                          <p className="text-sm text-gray-500 text-center py-4">Chưa có buổi điểm danh nào</p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {attendances.map((attendance) => {
+                              const isPresent = attendance.status === 'present';
+                              const isLate = attendance.status === 'late';
+
+                              return (
+                                <div
+                                  key={attendance.id}
+                                  className={`p-3 rounded-lg border-2 transition-all ${
+                                    isPresent
+                                      ? 'bg-green-50 border-green-300'
+                                      : isLate
+                                      ? 'bg-yellow-50 border-yellow-300'
+                                      : 'bg-red-50 border-red-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      {isPresent ? (
+                                        <CheckCircle className="w-5 h-5 text-green-600" />
+                                      ) : isLate ? (
+                                        <Clock className="w-5 h-5 text-yellow-600" />
+                                      ) : (
+                                        <XCircle className="w-5 h-5 text-red-600" />
+                                      )}
+                                      <span className="text-sm font-semibold text-gray-900">
+                                        {attendance.sessionNumber}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={`text-xs font-semibold px-2 py-1 rounded ${
+                                        isPresent
+                                          ? 'bg-green-100 text-green-800'
+                                          : isLate
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : 'bg-red-100 text-red-800'
+                                      }`}
+                                    >
+                                      {isPresent ? 'Có mặt' : isLate ? 'Muộn' : 'Vắng'}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-500">
+                                    {attendance.date && new Date(attendance.date.seconds * 1000).toLocaleDateString('vi-VN', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric'
+                                    })}
+                                  </p>
+                                  {attendance.checkInTime && (
+                                    <p className="text-xs text-gray-600 mt-1">
+                                      Thời gian: {new Date(attendance.checkInTime.seconds * 1000).toLocaleTimeString('vi-VN', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>
@@ -205,6 +333,67 @@ const StudentDashboard = () => {
                 <p className="text-sm text-gray-600">Sĩ số</p>
                 <p className="text-gray-900">{selectedClass.students?.length || 0} sinh viên</p>
               </div>
+            </div>
+
+            {/* Attendance for selected class */}
+            <div className="border-t pt-4 mt-4">
+              <h4 className="font-semibold text-gray-900 mb-3">Điểm danh lớp này</h4>
+              {loadingAttendance ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                </div>
+              ) : attendanceHistory.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">Chưa có buổi điểm danh nào</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {attendanceHistory.map((attendance) => {
+                    const isPresent = attendance.status === 'present';
+                    const isLate = attendance.status === 'late';
+
+                    return (
+                      <div
+                        key={attendance.id}
+                        className={`p-3 rounded-lg border ${
+                          isPresent
+                            ? 'bg-green-50 border-green-200'
+                            : isLate
+                            ? 'bg-yellow-50 border-yellow-200'
+                            : 'bg-red-50 border-red-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {isPresent ? (
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                            ) : isLate ? (
+                              <Clock className="w-4 h-4 text-yellow-600" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-600" />
+                            )}
+                            <span className="text-sm font-medium text-gray-900">
+                              {attendance.sessionNumber}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-xs font-semibold px-2 py-1 rounded ${
+                              isPresent
+                                ? 'bg-green-100 text-green-800'
+                                : isLate
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {isPresent ? 'Có mặt' : isLate ? 'Muộn' : 'Vắng'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {attendance.date && new Date(attendance.date.seconds * 1000).toLocaleDateString('vi-VN')}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
