@@ -40,8 +40,7 @@ export const getAttendancesByClass = async (classId) => {
   try {
     const q = query(
       collection(db, 'attendances'),
-      where('classId', '==', classId),
-      orderBy('date', 'desc')
+      where('classId', '==', classId)
     );
 
     const attendancesSnapshot = await getDocs(q);
@@ -49,6 +48,13 @@ export const getAttendancesByClass = async (classId) => {
       id: doc.id,
       ...doc.data()
     }));
+
+    // Sort by date on client side (descending - newest first)
+    attendances.sort((a, b) => {
+      const dateA = a.date?.seconds || 0;
+      const dateB = b.date?.seconds || 0;
+      return dateB - dateA;
+    });
 
     return { success: true, attendances };
   } catch (error) {
@@ -152,11 +158,10 @@ export const getStudentAttendanceHistory = async (studentId, classId = null) => 
     if (classId) {
       q = query(
         collection(db, 'attendances'),
-        where('classId', '==', classId),
-        orderBy('date', 'desc')
+        where('classId', '==', classId)
       );
     } else {
-      q = query(collection(db, 'attendances'), orderBy('date', 'desc'));
+      q = query(collection(db, 'attendances'));
     }
 
     const attendancesSnapshot = await getDocs(q);
@@ -177,6 +182,13 @@ export const getStudentAttendanceHistory = async (studentId, classId = null) => 
           ...studentRecord
         });
       }
+    });
+
+    // Sort by date on client side (descending - newest first)
+    studentAttendances.sort((a, b) => {
+      const dateA = a.date?.seconds || 0;
+      const dateB = b.date?.seconds || 0;
+      return dateB - dateA;
     });
 
     return { success: true, attendances: studentAttendances };
