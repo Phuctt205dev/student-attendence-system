@@ -3,11 +3,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { logoutUser } from '../../services/auth.service';
 import { getClassesByStudent } from '../../services/class.service';
-import { getStudentAttendanceHistory } from '../../services/attendance.service';
+import { getStudentAttendanceHistory, markAttendance } from '../../services/attendance.service';
 import { LogOut, BookOpen, FileText, QrCode, Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
+import QRScanner from '../../components/common/QRScanner';
 
 const StudentDashboard = () => {
   const { userProfile } = useAuth();
@@ -20,6 +21,9 @@ const StudentDashboard = () => {
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [expandedClassId, setExpandedClassId] = useState(null);
   const [classAttendances, setClassAttendances] = useState({});
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [scanError, setScanError] = useState('');
+  const [scanSuccess, setScanSuccess] = useState('');
 
   useEffect(() => {
     const loadClasses = async () => {
@@ -73,6 +77,46 @@ const StudentDashboard = () => {
         setAttendanceHistory(result.attendances);
       }
       setLoadingAttendance(false);
+    }
+  };
+
+  const handleOpenQRScanner = () => {
+    setScanError('');
+    setScanSuccess('');
+    setShowQRScanner(true);
+  };
+
+  const handleQRScanSuccess = async ({ attendanceId, studentId, studentName }) => {
+    try {
+      // Call markAttendance service
+      const result = await markAttendance(attendanceId, {
+        studentId,
+        studentName,
+        status: 'present',
+        method: 'qr'
+      });
+
+      if (result.success) {
+        setScanSuccess('Điểm danh thành công!');
+        setScanError('');
+
+        // Reload classes to update attendance count
+        if (userProfile?.uid) {
+          const classesResult = await getClassesByStudent(userProfile.uid);
+          if (classesResult.success) {
+            setClasses(classesResult.classes);
+          }
+        }
+      } else {
+        setScanError(result.error || 'Không thể điểm danh');
+        setScanSuccess('');
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error('Error marking attendance:', error);
+      setScanError(error.message || 'Có lỗi xảy ra khi điểm danh');
+      setScanSuccess('');
+      throw error;
     }
   };
 
@@ -269,9 +313,19 @@ const StudentDashboard = () => {
               <div className="bg-primary-100 p-6 rounded-full mb-4">
                 <QrCode className="w-12 h-12 text-primary-600" />
               </div>
-              <Button variant="primary">
+              <Button variant="primary" onClick={handleOpenQRScanner}>
                 Quét mã QR điểm danh
               </Button>
+              {scanSuccess && (
+                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-700 font-medium">{scanSuccess}</p>
+                </div>
+              )}
+              {scanError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700">{scanError}</p>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -398,6 +452,15 @@ const StudentDashboard = () => {
           </div>
         )}
       </Modal>
+
+      {/* QR Scanner Modal */}
+      <QRScanner
+        isOpen={showQRScanner}
+        onClose={() => setShowQRScanner(false)}
+        onScanSuccess={handleQRScanSuccess}
+        studentId={userProfile?.uid}
+        studentName={userProfile?.fullName}
+      />
     </div>
   );
 };
