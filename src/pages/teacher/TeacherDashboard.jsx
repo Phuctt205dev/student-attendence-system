@@ -11,12 +11,11 @@ import {
 } from '../../services/class.service';
 import {
   createAttendanceSession,
-  markAttendance,
   getAttendancesByClass,
   deleteAttendanceSession,
   generateQRCode,
   getAttendanceDetails,
-  updateAttendanceStatus
+  batchUpdateManualAttendance
 } from '../../services/attendance.service';
 import {
   LogOut,
@@ -292,42 +291,26 @@ const TeacherDashboard = () => {
   const handleSaveManualAttendance = async () => {
     setSavingManual(true);
     setError('');
-    console.log('💾 Starting to save manual attendance...');
-    console.log('📋 Attendance records state:', attendanceRecords);
-    console.log('👥 Class students:', classStudents);
-    console.log('📄 Selected session:', selectedSession);
-
     try {
-      const promises = classStudents.map(async (student) => {
-        const record = attendanceRecords[student.uid];
-        const status = record?.status || 'absent';
-        const existingRecord = selectedSession.records?.find(r => r.studentId === student.uid);
+      // Gom tất cả sinh viên thành 1 mảng, gửi 1 lần duy nhất lên Firestore
+      // Tránh race condition khi Promise.all ghi đè lẫn nhau
+      const studentRecords = classStudents.map((student) => ({
+        studentId: student.uid,
+        studentName: student.fullName,
+        status: attendanceRecords[student.uid]?.status || 'absent',
+        note: attendanceRecords[student.uid]?.note || ''
+      }));
 
-        console.log(`Processing ${student.fullName}:`, { status, hasExistingRecord: !!existingRecord });
+      const result = await batchUpdateManualAttendance(selectedSession.id, studentRecords);
 
-        if (existingRecord) {
-          // Cập nhật nếu đã có record
-          return updateAttendanceStatus(selectedSession.id, student.uid, status, record?.note || '');
-        } else if (status === 'present') {
-          // Tạo mới chỉ khi có mặt
-          return markAttendance(selectedSession.id, {
-            studentId: student.uid,
-            studentName: student.fullName,
-            status,
-            method: 'manual',
-            note: record?.note || ''
-          });
-        }
-        return Promise.resolve();
-      });
-
-      await Promise.all(promises);
-      console.log('✅ All attendance saved successfully!');
-      setSuccess('Lưu điểm danh thành công!');
-      setShowManualAttendanceModal(false);
-      await loadAttendanceSessions(selectedClass.id);
+      if (result.success) {
+        setSuccess('Lưu điểm danh thành công!');
+        setShowManualAttendanceModal(false);
+        await loadAttendanceSessions(selectedClass.id);
+      } else {
+        setError(result.error || 'Không thể lưu điểm danh');
+      }
     } catch (err) {
-      console.error('❌ Error saving attendance:', err);
       setError('Có lỗi xảy ra khi lưu điểm danh');
       console.error(err);
     }
@@ -537,9 +520,8 @@ const TeacherDashboard = () => {
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {attendanceSessions.map((session) => {
-                    const presentCount = session.records?.filter(r => r.status === 'present').length || 0;
-                    const lateCount = session.records?.filter(r => r.status === 'late').length || 0;
-                    const absentCount = Math.max(0, classStudents.length - presentCount - lateCount);
+                    const presentCount = session.records?.length || 0;
+                    const absentCount = Math.max(0, classStudents.length - presentCount);
                     return (
                       <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                         <div className="flex justify-between items-center">
@@ -552,7 +534,6 @@ const TeacherDashboard = () => {
                             </p>
                             <div className="flex gap-3 mt-1 text-xs">
                               <span className="text-green-600"><strong>{presentCount}</strong> có mặt</span>
-                              {lateCount > 0 && <span className="text-yellow-600"><strong>{lateCount}</strong> muộn</span>}
                               <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
                             </div>
                           </div>

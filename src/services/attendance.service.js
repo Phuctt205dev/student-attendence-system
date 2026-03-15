@@ -8,7 +8,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
@@ -38,7 +37,6 @@ export const createAttendanceSession = async (classId, sessionData) => {
 // Get attendance sessions for a class
 export const getAttendancesByClass = async (classId) => {
   try {
-    console.log('📚 Fetching attendances for classId:', classId);
     const q = query(
       collection(db, 'attendances'),
       where('classId', '==', classId)
@@ -50,9 +48,7 @@ export const getAttendancesByClass = async (classId) => {
       ...doc.data()
     }));
 
-    console.log('✅ Found', attendances.length, 'attendance sessions:', attendances);
-
-    // Sort by date on client side (descending - newest first)
+    // Sort by date descending (newest first) on client side
     attendances.sort((a, b) => {
       const dateA = a.date?.seconds || 0;
       const dateB = b.date?.seconds || 0;
@@ -61,7 +57,7 @@ export const getAttendancesByClass = async (classId) => {
 
     return { success: true, attendances };
   } catch (error) {
-    console.error('❌ Error getting attendances:', error);
+    console.error('Error getting attendances:', error);
     return { success: false, error: error.message };
   }
 };
@@ -85,10 +81,9 @@ export const getAttendanceById = async (attendanceId) => {
   }
 };
 
-// Mark attendance for a student (manual or QR)
+// Mark attendance for a student via QR scan
 export const markAttendance = async (attendanceId, studentData) => {
   try {
-    console.log('📝 Marking attendance:', { attendanceId, studentData });
     const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
 
     if (!attendanceDoc.exists()) {
@@ -103,17 +98,15 @@ export const markAttendance = async (attendanceId, studentData) => {
     );
 
     if (existingRecord) {
-      console.log('⚠️ Student already checked in');
       return { success: false, error: 'Student already checked in' };
     }
 
-    // Add new attendance record
     const newRecord = {
       studentId: studentData.studentId,
       studentName: studentData.studentName,
       status: studentData.status || 'present',
       checkInTime: Timestamp.now(),
-      method: studentData.method || 'manual',
+      method: studentData.method || 'qr',
       note: studentData.note || ''
     };
 
@@ -121,48 +114,17 @@ export const markAttendance = async (attendanceId, studentData) => {
       records: [...currentRecords, newRecord]
     });
 
-    console.log('✅ Attendance marked successfully');
     return { success: true };
   } catch (error) {
-    console.error('❌ Error marking attendance:', error);
+    console.error('Error marking attendance:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Update attendance status
-export const updateAttendanceStatus = async (attendanceId, studentId, status, note = '') => {
-  try {
-    console.log('🔄 Updating attendance status:', { attendanceId, studentId, status, note });
-    const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
-
-    if (!attendanceDoc.exists()) {
-      return { success: false, error: 'Attendance session not found' };
-    }
-
-    const currentRecords = attendanceDoc.data().records || [];
-    const updatedRecords = currentRecords.map(record => {
-      if (record.studentId === studentId) {
-        return { ...record, status, note };
-      }
-      return record;
-    });
-
-    await updateDoc(doc(db, 'attendances', attendanceId), {
-      records: updatedRecords
-    });
-
-    console.log('✅ Attendance status updated');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Error updating attendance status:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Batch update manual attendance for multiple students
+// ✅ Batch update manual attendance — đọc 1 lần, ghi 1 lần, không race condition
+// Lưu TẤT CẢ sinh viên kể cả vắng mặt để có thể update lại về sau
 export const batchUpdateManualAttendance = async (attendanceId, studentRecords) => {
   try {
-    console.log('📦 Batch updating manual attendance:', { attendanceId, recordsCount: studentRecords.length });
     const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
 
     if (!attendanceDoc.exists()) {
@@ -170,21 +132,23 @@ export const batchUpdateManualAttendance = async (attendanceId, studentRecords) 
     }
 
     const currentRecords = attendanceDoc.data().records || [];
+
+    // Bắt đầu từ bản sao của records hiện tại
     const updatedRecords = [...currentRecords];
 
-    // Process each student record
     studentRecords.forEach(({ studentId, studentName, status, note }) => {
       const existingIndex = updatedRecords.findIndex(r => r.studentId === studentId);
 
       if (existingIndex >= 0) {
-        // Update existing record
+        // ✅ Sinh viên đã có record → cập nhật status (kể cả khi đổi thành absent)
         updatedRecords[existingIndex] = {
           ...updatedRecords[existingIndex],
           status,
           note: note || ''
         };
       } else {
-        // Add new record
+        // ✅ Sinh viên chưa có record → thêm mới DÙ có mặt hay vắng
+        // (cần lưu cả vắng để lần sau có thể cập nhật lại)
         updatedRecords.push({
           studentId,
           studentName,
@@ -196,15 +160,14 @@ export const batchUpdateManualAttendance = async (attendanceId, studentRecords) 
       }
     });
 
-    // Single update to Firestore
+    // Ghi 1 lần duy nhất lên Firestore
     await updateDoc(doc(db, 'attendances', attendanceId), {
       records: updatedRecords
     });
 
-    console.log('✅ Batch attendance updated successfully');
     return { success: true };
   } catch (error) {
-    console.error('❌ Error batch updating attendance:', error);
+    console.error('Error batch updating attendance:', error);
     return { success: false, error: error.message };
   }
 };
@@ -242,7 +205,6 @@ export const getStudentAttendanceHistory = async (studentId, classId = null) => 
       }
     });
 
-    // Sort by date on client side (descending - newest first)
     studentAttendances.sort((a, b) => {
       const dateA = a.date?.seconds || 0;
       const dateB = b.date?.seconds || 0;
@@ -269,21 +231,15 @@ export const validateQRCode = async (qrData) => {
 
     const data = attendanceDoc.data();
 
-    // Check if QR code is expired
     if (data.qrCodeExpiry) {
       const expiry = data.qrCodeExpiry.toDate();
       const now = new Date();
-
       if (now > expiry) {
         return { success: false, error: 'QR code has expired' };
       }
     }
 
-    return {
-      success: true,
-      attendanceId,
-      classId: data.classId
-    };
+    return { success: true, attendanceId, classId: data.classId };
   } catch (error) {
     console.error('Error validating QR code:', error);
     return { success: false, error: 'Invalid QR code format' };
@@ -314,6 +270,7 @@ export const getStudentAttendanceStats = async (studentId, classId) => {
       if (studentRecord) {
         if (studentRecord.status === 'present') present++;
         else if (studentRecord.status === 'late') late++;
+        else absent++;
       } else {
         absent++;
       }
@@ -362,11 +319,7 @@ export const generateQRCode = async (attendanceId, expiryMinutes = 10) => {
       qrCodeExpiry: Timestamp.fromDate(expiryDate)
     });
 
-    return {
-      success: true,
-      qrData,
-      expiryTime: expiryDate
-    };
+    return { success: true, qrData, expiryTime: expiryDate };
   } catch (error) {
     console.error('Error generating QR code:', error);
     return { success: false, error: error.message };
@@ -376,7 +329,6 @@ export const generateQRCode = async (attendanceId, expiryMinutes = 10) => {
 // Get attendance session with student details
 export const getAttendanceDetails = async (attendanceId, classId) => {
   try {
-    console.log('🔍 Getting attendance details:', { attendanceId, classId });
     const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
 
     if (!attendanceDoc.exists()) {
@@ -384,9 +336,7 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
     }
 
     const attendanceData = attendanceDoc.data();
-    console.log('📄 Attendance data:', attendanceData);
 
-    // Get all students in class
     const classDoc = await getDoc(doc(db, 'classes', classId));
     if (!classDoc.exists()) {
       return { success: false, error: 'Class not found' };
@@ -395,7 +345,6 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
     const classData = classDoc.data();
     const studentIds = classData.students || [];
 
-    // Get student details
     const studentsData = [];
     for (const studentId of studentIds) {
       const studentDoc = await getDoc(doc(db, 'users', studentId));
@@ -415,18 +364,13 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
       }
     }
 
-    console.log('👥 Students data with attendance:', studentsData);
-
     return {
       success: true,
-      attendance: {
-        id: attendanceDoc.id,
-        ...attendanceData
-      },
+      attendance: { id: attendanceDoc.id, ...attendanceData },
       students: studentsData
     };
   } catch (error) {
-    console.error('❌ Error getting attendance details:', error);
+    console.error('Error getting attendance details:', error);
     return { success: false, error: error.message };
   }
 };
