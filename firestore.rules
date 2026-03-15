@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function classDoc(classId) {
+      return get(/databases/$(database)/documents/classes/$(classId));
+    }
+
+    function isClassOwner(classId) {
+      return signedIn() &&
+        classDoc(classId).data.teacherId == request.auth.uid;
+    }
+
+    function sessionDoc(sessionId) {
+      return get(/databases/$(database)/documents/attendanceSessions/$(sessionId));
+    }
+
+    function isSessionOwner(sessionId) {
+      return signedIn() &&
+        sessionDoc(sessionId).data.teacherId == request.auth.uid;
+    }
+
+    // =========================
+    // USERS (Web App)
+    // App web lưu user profile tại: users/{uid}
+    // =========================
+    match /users/{uid} {
+      // Cho phép authenticated users đọc thông tin user khác (để show student list, teacher info)
+      allow read: if signedIn();
+
+      // Chỉ cho phép user tự chỉnh sửa profile của mình
+      allow write: if isSelf(uid);
+    }
+
+    // =========================
+    // TEACHERS (Mobile App)
+    // App mobile đọc tại: teachers/{uid}
+    // =========================
+    match /teachers/{uid} {
+      allow read, write: if isSelf(uid);
+    }
+
+    // =========================
+    // CLASSES
+    // App query lớp theo teacherId hoặc student enrollment
+    // =========================
+    match /classes/{classId} {
+      // Đọc lớp:
+      // - Teacher có thể đọc lớp của mình
+      // - Student có thể đọc lớp mà mình được enroll
+      // - Cho phép query khi filter theo teacherId hoặc students array
+      allow read: if signedIn() && (
+        // Đọc document cụ thể: kiểm tra ownership
+        resource.data.teacherId == request.auth.uid ||
+        request.auth.uid in resource.data.students
+      );
+
+      // Cho phép list/query classes
+      allow list: if signedIn();
+
+      // Tạo lớp: teacherId phải là UID đang đăng nhập
+      allow create: if signedIn() &&
+        request.resource.data.teacherId == request.auth.uid;
+
+      // Sửa/xóa lớp: chỉ chủ lớp
+      allow update, delete: if signedIn() &&
+        resource.data.teacherId == request.auth.uid;
+
+      // =========================
+      // STUDENTS SUBCOLLECTION
+      // App dùng: classes/{classId}/students/{studentId}
+      // =========================
+      match /students/{studentId} {
+        allow read, create, update, delete: if signedIn() &&
+          classDoc(classId).data.teacherId == request.auth.uid;
+      }
+    }
+
+    // =========================
+    // ATTENDANCE SESSIONS
+    // App dùng: attendanceSessions/{sessionId}
+    // =========================
+    match /attendanceSessions/{sessionId} {
+      // Đọc session: chỉ giáo viên tạo session đó
+      allow read: if signedIn() &&
+        resource.data.teacherId == request.auth.uid;
+
+      // Cho phép list/query sessions
+      allow list: if signedIn();
+
+      // Tạo session: teacherId phải là user hiện tại
+      allow create: if signedIn() &&
+        request.resource.data.teacherId == request.auth.uid;
+
+      // Cập nhật/xóa session: chỉ chủ session
+      allow update, delete: if signedIn() &&
+        resource.data.teacherId == request.auth.uid;
+
+      // =========================
+      // RECORDS SUBCOLLECTION
+      // App dùng: attendanceSessions/{sessionId}/records/{studentId}
+      // =========================
+      match /records/{studentId} {
+        allow read, create, update, delete: if signedIn() &&
+          sessionDoc(sessionId).data.teacherId == request.auth.uid;
+      }
+    }
+  }
+}
