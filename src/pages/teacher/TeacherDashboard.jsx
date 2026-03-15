@@ -292,11 +292,18 @@ const TeacherDashboard = () => {
   const handleSaveManualAttendance = async () => {
     setSavingManual(true);
     setError('');
+    console.log('💾 Starting to save manual attendance...');
+    console.log('📋 Attendance records state:', attendanceRecords);
+    console.log('👥 Class students:', classStudents);
+    console.log('📄 Selected session:', selectedSession);
+
     try {
       const promises = classStudents.map(async (student) => {
         const record = attendanceRecords[student.uid];
         const status = record?.status || 'absent';
         const existingRecord = selectedSession.records?.find(r => r.studentId === student.uid);
+
+        console.log(`Processing ${student.fullName}:`, { status, hasExistingRecord: !!existingRecord });
 
         if (existingRecord) {
           // Cập nhật nếu đã có record
@@ -315,10 +322,12 @@ const TeacherDashboard = () => {
       });
 
       await Promise.all(promises);
+      console.log('✅ All attendance saved successfully!');
       setSuccess('Lưu điểm danh thành công!');
       setShowManualAttendanceModal(false);
       await loadAttendanceSessions(selectedClass.id);
     } catch (err) {
+      console.error('❌ Error saving attendance:', err);
       setError('Có lỗi xảy ra khi lưu điểm danh');
       console.error(err);
     }
@@ -528,8 +537,9 @@ const TeacherDashboard = () => {
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {attendanceSessions.map((session) => {
-                    const presentCount = session.records?.length || 0;
-                    const absentCount = Math.max(0, classStudents.length - presentCount);
+                    const presentCount = session.records?.filter(r => r.status === 'present').length || 0;
+                    const lateCount = session.records?.filter(r => r.status === 'late').length || 0;
+                    const absentCount = Math.max(0, classStudents.length - presentCount - lateCount);
                     return (
                       <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                         <div className="flex justify-between items-center">
@@ -542,6 +552,7 @@ const TeacherDashboard = () => {
                             </p>
                             <div className="flex gap-3 mt-1 text-xs">
                               <span className="text-green-600"><strong>{presentCount}</strong> có mặt</span>
+                              {lateCount > 0 && <span className="text-yellow-600"><strong>{lateCount}</strong> muộn</span>}
                               <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
                             </div>
                           </div>

@@ -38,6 +38,7 @@ export const createAttendanceSession = async (classId, sessionData) => {
 // Get attendance sessions for a class
 export const getAttendancesByClass = async (classId) => {
   try {
+    console.log('📚 Fetching attendances for classId:', classId);
     const q = query(
       collection(db, 'attendances'),
       where('classId', '==', classId)
@@ -49,6 +50,8 @@ export const getAttendancesByClass = async (classId) => {
       ...doc.data()
     }));
 
+    console.log('✅ Found', attendances.length, 'attendance sessions:', attendances);
+
     // Sort by date on client side (descending - newest first)
     attendances.sort((a, b) => {
       const dateA = a.date?.seconds || 0;
@@ -58,7 +61,7 @@ export const getAttendancesByClass = async (classId) => {
 
     return { success: true, attendances };
   } catch (error) {
-    console.error('Error getting attendances:', error);
+    console.error('❌ Error getting attendances:', error);
     return { success: false, error: error.message };
   }
 };
@@ -85,6 +88,7 @@ export const getAttendanceById = async (attendanceId) => {
 // Mark attendance for a student (manual or QR)
 export const markAttendance = async (attendanceId, studentData) => {
   try {
+    console.log('📝 Marking attendance:', { attendanceId, studentData });
     const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
 
     if (!attendanceDoc.exists()) {
@@ -99,6 +103,7 @@ export const markAttendance = async (attendanceId, studentData) => {
     );
 
     if (existingRecord) {
+      console.log('⚠️ Student already checked in');
       return { success: false, error: 'Student already checked in' };
     }
 
@@ -107,7 +112,7 @@ export const markAttendance = async (attendanceId, studentData) => {
       studentId: studentData.studentId,
       studentName: studentData.studentName,
       status: studentData.status || 'present',
-      checkInTime: serverTimestamp(),
+      checkInTime: Timestamp.now(),
       method: studentData.method || 'manual',
       note: studentData.note || ''
     };
@@ -116,9 +121,10 @@ export const markAttendance = async (attendanceId, studentData) => {
       records: [...currentRecords, newRecord]
     });
 
+    console.log('✅ Attendance marked successfully');
     return { success: true };
   } catch (error) {
-    console.error('Error marking attendance:', error);
+    console.error('❌ Error marking attendance:', error);
     return { success: false, error: error.message };
   }
 };
@@ -126,6 +132,7 @@ export const markAttendance = async (attendanceId, studentData) => {
 // Update attendance status
 export const updateAttendanceStatus = async (attendanceId, studentId, status, note = '') => {
   try {
+    console.log('🔄 Updating attendance status:', { attendanceId, studentId, status, note });
     const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
 
     if (!attendanceDoc.exists()) {
@@ -144,9 +151,10 @@ export const updateAttendanceStatus = async (attendanceId, studentId, status, no
       records: updatedRecords
     });
 
+    console.log('✅ Attendance status updated');
     return { success: true };
   } catch (error) {
-    console.error('Error updating attendance status:', error);
+    console.error('❌ Error updating attendance status:', error);
     return { success: false, error: error.message };
   }
 };
@@ -318,6 +326,7 @@ export const generateQRCode = async (attendanceId, expiryMinutes = 10) => {
 // Get attendance session with student details
 export const getAttendanceDetails = async (attendanceId, classId) => {
   try {
+    console.log('🔍 Getting attendance details:', { attendanceId, classId });
     const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
 
     if (!attendanceDoc.exists()) {
@@ -325,6 +334,7 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
     }
 
     const attendanceData = attendanceDoc.data();
+    console.log('📄 Attendance data:', attendanceData);
 
     // Get all students in class
     const classDoc = await getDoc(doc(db, 'classes', classId));
@@ -355,6 +365,8 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
       }
     }
 
+    console.log('👥 Students data with attendance:', studentsData);
+
     return {
       success: true,
       attendance: {
@@ -364,7 +376,7 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
       students: studentsData
     };
   } catch (error) {
-    console.error('Error getting attendance details:', error);
+    console.error('❌ Error getting attendance details:', error);
     return { success: false, error: error.message };
   }
 };
