@@ -4,30 +4,41 @@ import {
   getDoc,
   getDocs,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
   where,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase';
 
-// Create attendance session
+// Create attendance session (tương thích với app mobile)
 export const createAttendanceSession = async (classId, sessionData) => {
   try {
-    const attendanceRef = await addDoc(collection(db, 'attendances'), {
+    // Lấy thông tin lớp
+    const classDoc = await getDoc(doc(db, 'classes', classId));
+
+    if (!classDoc.exists()) {
+      return { success: false, error: 'Class not found' };
+    }
+
+    const classInfo = classDoc.data();
+
+    const sessionRef = await addDoc(collection(db, 'attendanceSessions'), {
       classId,
+      className: classInfo.name,
+      teacherId: classInfo.teacherId,
       date: serverTimestamp(),
       sessionNumber: sessionData.sessionNumber,
-      qrCode: sessionData.qrCode || '',
-      qrCodeExpiry: sessionData.qrCodeExpiry || null,
-      records: [],
-      createdBy: sessionData.createdBy,
+      totalStudents: 0, // Sẽ được cập nhật khi có điểm danh
+      presentCount: 0,  // Sẽ được cập nhật khi có điểm danh
       createdAt: serverTimestamp()
     });
 
-    return { success: true, attendanceId: attendanceRef.id };
+    return { success: true, attendanceId: sessionRef.id };
   } catch (error) {
     console.error('Error creating attendance session:', error);
     return { success: false, error: error.message };
@@ -38,14 +49,24 @@ export const createAttendanceSession = async (classId, sessionData) => {
 export const getAttendancesByClass = async (classId) => {
   try {
     const q = query(
-      collection(db, 'attendances'),
+      collection(db, 'attendanceSessions'),
       where('classId', '==', classId)
     );
 
     const attendancesSnapshot = await getDocs(q);
-    const attendances = attendancesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
+    const attendances = await Promise.all(attendancesSnapshot.docs.map(async (sessionDoc) => {
+      const sessionData = sessionDoc.data();
+
+      // Đếm số records từ subcollection
+      const recordsSnapshot = await getDocs(collection(db, 'attendanceSessions', sessionDoc.id, 'records'));
+      const presentCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'PRESENT').length;
+
+      return {
+        id: sessionDoc.id,
+        ...sessionData,
+        recordCount: recordsSnapshot.size,
+        presentCount
+      };
     }));
 
     // Sort by date descending (newest first) on client side
@@ -65,7 +86,7 @@ export const getAttendancesByClass = async (classId) => {
 // Get attendance session by ID
 export const getAttendanceById = async (attendanceId) => {
   try {
-    const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
+    const attendanceDoc = await getDoc(doc(db, 'attendanceSessions', attendanceId));
 
     if (attendanceDoc.exists()) {
       return {
@@ -81,37 +102,40 @@ export const getAttendanceById = async (attendanceId) => {
   }
 };
 
-// Mark attendance for a student via QR scan
-export const markAttendance = async (attendanceId, studentData) => {
+// Mark attendance for a student (được gọi từ app mobile)
+export const markAttendance = async (sessionId, studentData) => {
   try {
-    const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
+    const sessionDoc = await getDoc(doc(db, 'attendanceSessions', sessionId));
 
-    if (!attendanceDoc.exists()) {
+    if (!sessionDoc.exists()) {
       return { success: false, error: 'Attendance session not found' };
     }
 
-    const currentRecords = attendanceDoc.data().records || [];
+    // Kiểm tra xem sinh viên đã điểm danh chưa
+    const studentDoc = await getDoc(doc(db, 'attendanceSessions', sessionId, 'records', studentData.studentId));
 
-    // Check if student already checked in
-    const existingRecord = currentRecords.find(
-      record => record.studentId === studentData.studentId
-    );
-
-    if (existingRecord) {
+    if (studentDoc.exists()) {
       return { success: false, error: 'Student already checked in' };
     }
 
-    const newRecord = {
+    // Thêm record vào subcollection
+    await setDoc(doc(db, 'attendanceSessions', sessionId, 'records', studentData.studentId), {
       studentId: studentData.studentId,
       studentName: studentData.studentName,
-      status: studentData.status || 'present',
-      checkInTime: Timestamp.now(),
-      method: studentData.method || 'qr',
-      note: studentData.note || ''
-    };
+      studentCode: studentData.studentCode || '',
+      status: studentData.status || 'PRESENT',
+      timestamp: serverTimestamp(),
+      method: studentData.method || 'face', // 'face' cho nhận diện khuôn mặt, 'qr' cho QR code
+      confidence: studentData.confidence || null // Độ chính xác của nhận diện khuôn mặt
+    });
 
-    await updateDoc(doc(db, 'attendances', attendanceId), {
-      records: [...currentRecords, newRecord]
+    // Cập nhật presentCount trong session
+    const recordsSnapshot = await getDocs(collection(db, 'attendanceSessions', sessionId, 'records'));
+    const presentCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'PRESENT').length;
+
+    await updateDoc(doc(db, 'attendanceSessions', sessionId), {
+      presentCount,
+      totalStudents: recordsSnapshot.size
     });
 
     return { success: true };
@@ -121,48 +145,37 @@ export const markAttendance = async (attendanceId, studentData) => {
   }
 };
 
-// ✅ Batch update manual attendance — đọc 1 lần, ghi 1 lần, không race condition
-// Lưu TẤT CẢ sinh viên kể cả vắng mặt để có thể update lại về sau
-export const batchUpdateManualAttendance = async (attendanceId, studentRecords) => {
+// Batch update manual attendance (từ web)
+export const batchUpdateManualAttendance = async (sessionId, studentRecords) => {
   try {
-    const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
+    const sessionDoc = await getDoc(doc(db, 'attendanceSessions', sessionId));
 
-    if (!attendanceDoc.exists()) {
+    if (!sessionDoc.exists()) {
       return { success: false, error: 'Attendance session not found' };
     }
 
-    const currentRecords = attendanceDoc.data().records || [];
-
-    // Bắt đầu từ bản sao của records hiện tại
-    const updatedRecords = [...currentRecords];
-
-    studentRecords.forEach(({ studentId, studentName, status, note }) => {
-      const existingIndex = updatedRecords.findIndex(r => r.studentId === studentId);
-
-      if (existingIndex >= 0) {
-        // ✅ Sinh viên đã có record → cập nhật status (kể cả khi đổi thành absent)
-        updatedRecords[existingIndex] = {
-          ...updatedRecords[existingIndex],
-          status,
-          note: note || ''
-        };
-      } else {
-        // ✅ Sinh viên chưa có record → thêm mới DÙ có mặt hay vắng
-        // (cần lưu cả vắng để lần sau có thể cập nhật lại)
-        updatedRecords.push({
-          studentId,
-          studentName,
-          status,
-          checkInTime: Timestamp.now(),
-          method: 'manual',
-          note: note || ''
-        });
-      }
+    // Cập nhật từng record
+    const promises = studentRecords.map(async ({ studentId, studentName, studentCode, status, note }) => {
+      await setDoc(doc(db, 'attendanceSessions', sessionId, 'records', studentId), {
+        studentId,
+        studentName,
+        studentCode: studentCode || '',
+        status: status === 'present' ? 'PRESENT' : 'ABSENT',
+        timestamp: serverTimestamp(),
+        method: 'manual',
+        note: note || ''
+      }, { merge: true });
     });
 
-    // Ghi 1 lần duy nhất lên Firestore
-    await updateDoc(doc(db, 'attendances', attendanceId), {
-      records: updatedRecords
+    await Promise.all(promises);
+
+    // Cập nhật presentCount trong session
+    const recordsSnapshot = await getDocs(collection(db, 'attendanceSessions', sessionId, 'records'));
+    const presentCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'PRESENT').length;
+
+    await updateDoc(doc(db, 'attendanceSessions', sessionId), {
+      presentCount,
+      totalStudents: recordsSnapshot.size
     });
 
     return { success: true };
@@ -178,32 +191,31 @@ export const getStudentAttendanceHistory = async (studentId, classId = null) => 
     let q;
     if (classId) {
       q = query(
-        collection(db, 'attendances'),
+        collection(db, 'attendanceSessions'),
         where('classId', '==', classId)
       );
     } else {
-      q = query(collection(db, 'attendances'));
+      q = query(collection(db, 'attendanceSessions'));
     }
 
-    const attendancesSnapshot = await getDocs(q);
+    const sessionsSnapshot = await getDocs(q);
     const studentAttendances = [];
 
-    attendancesSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const studentRecord = data.records?.find(
-        record => record.studentId === studentId
-      );
+    for (const sessionDoc of sessionsSnapshot.docs) {
+      const sessionData = sessionDoc.data();
+      const recordDoc = await getDoc(doc(db, 'attendanceSessions', sessionDoc.id, 'records', studentId));
 
-      if (studentRecord) {
+      if (recordDoc.exists()) {
         studentAttendances.push({
-          id: doc.id,
-          classId: data.classId,
-          date: data.date,
-          sessionNumber: data.sessionNumber,
-          ...studentRecord
+          id: sessionDoc.id,
+          classId: sessionData.classId,
+          className: sessionData.className,
+          date: sessionData.date,
+          sessionNumber: sessionData.sessionNumber,
+          ...recordDoc.data()
         });
       }
-    });
+    }
 
     studentAttendances.sort((a, b) => {
       const dateA = a.date?.seconds || 0;
@@ -223,7 +235,7 @@ export const validateQRCode = async (qrData) => {
   try {
     const { attendanceId } = JSON.parse(qrData);
 
-    const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
+    const attendanceDoc = await getDoc(doc(db, 'attendanceSessions', attendanceId));
 
     if (!attendanceDoc.exists()) {
       return { success: false, error: 'Invalid QR code' };
@@ -250,31 +262,25 @@ export const validateQRCode = async (qrData) => {
 export const getStudentAttendanceStats = async (studentId, classId) => {
   try {
     const q = query(
-      collection(db, 'attendances'),
+      collection(db, 'attendanceSessions'),
       where('classId', '==', classId)
     );
 
-    const attendancesSnapshot = await getDocs(q);
+    const sessionsSnapshot = await getDocs(q);
     let present = 0;
     let absent = 0;
-    let late = 0;
     let total = 0;
 
-    attendancesSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const studentRecord = data.records?.find(
-        record => record.studentId === studentId
-      );
-
+    for (const sessionDoc of sessionsSnapshot.docs) {
       total++;
-      if (studentRecord) {
-        if (studentRecord.status === 'present') present++;
-        else if (studentRecord.status === 'late') late++;
-        else absent++;
+      const recordDoc = await getDoc(doc(db, 'attendanceSessions', sessionDoc.id, 'records', studentId));
+
+      if (recordDoc.exists() && recordDoc.data().status === 'PRESENT') {
+        present++;
       } else {
         absent++;
       }
-    });
+    }
 
     return {
       success: true,
@@ -282,8 +288,7 @@ export const getStudentAttendanceStats = async (studentId, classId) => {
         total,
         present,
         absent,
-        late,
-        attendanceRate: total > 0 ? ((present + late) / total * 100).toFixed(1) : 0
+        attendanceRate: total > 0 ? ((present / total) * 100).toFixed(1) : 0
       }
     };
   } catch (error) {
@@ -295,7 +300,13 @@ export const getStudentAttendanceStats = async (studentId, classId) => {
 // Delete attendance session
 export const deleteAttendanceSession = async (attendanceId) => {
   try {
-    await deleteDoc(doc(db, 'attendances', attendanceId));
+    // Xóa tất cả records trước
+    const recordsSnapshot = await getDocs(collection(db, 'attendanceSessions', attendanceId, 'records'));
+    const deletePromises = recordsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+
+    // Xóa session
+    await deleteDoc(doc(db, 'attendanceSessions', attendanceId));
     return { success: true };
   } catch (error) {
     console.error('Error deleting attendance session:', error);
@@ -314,7 +325,7 @@ export const generateQRCode = async (attendanceId, expiryMinutes = 10) => {
       timestamp: Date.now()
     });
 
-    await updateDoc(doc(db, 'attendances', attendanceId), {
+    await updateDoc(doc(db, 'attendanceSessions', attendanceId), {
       qrCode: qrData,
       qrCodeExpiry: Timestamp.fromDate(expiryDate)
     });
@@ -329,7 +340,7 @@ export const generateQRCode = async (attendanceId, expiryMinutes = 10) => {
 // Get attendance session with student details
 export const getAttendanceDetails = async (attendanceId, classId) => {
   try {
-    const attendanceDoc = await getDoc(doc(db, 'attendances', attendanceId));
+    const attendanceDoc = await getDoc(doc(db, 'attendanceSessions', attendanceId));
 
     if (!attendanceDoc.exists()) {
       return { success: false, error: 'Attendance session not found' };
@@ -337,32 +348,25 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
 
     const attendanceData = attendanceDoc.data();
 
-    const classDoc = await getDoc(doc(db, 'classes', classId));
-    if (!classDoc.exists()) {
-      return { success: false, error: 'Class not found' };
-    }
+    // Lấy danh sách sinh viên từ subcollection của class
+    const studentsSnapshot = await getDocs(collection(db, 'classes', classId, 'students'));
 
-    const classData = classDoc.data();
-    const studentIds = classData.students || [];
+    const studentsData = await Promise.all(studentsSnapshot.docs.map(async (studentDoc) => {
+      const studentData = studentDoc.data();
 
-    const studentsData = [];
-    for (const studentId of studentIds) {
-      const studentDoc = await getDoc(doc(db, 'users', studentId));
-      if (studentDoc.exists()) {
-        const studentInfo = studentDoc.data();
-        const attendanceRecord = attendanceData.records?.find(r => r.studentId === studentId);
+      // Kiểm tra attendance record
+      const recordDoc = await getDoc(doc(db, 'attendanceSessions', attendanceId, 'records', studentDoc.id));
 
-        studentsData.push({
-          uid: studentId,
-          fullName: studentInfo.fullName,
-          email: studentInfo.email,
-          studentId: studentInfo.studentId,
-          status: attendanceRecord ? attendanceRecord.status : 'absent',
-          checkInTime: attendanceRecord?.checkInTime,
-          method: attendanceRecord?.method
-        });
-      }
-    }
+      return {
+        uid: studentDoc.id,
+        fullName: studentData.name,
+        email: studentData.email,
+        studentId: studentData.studentCode,
+        status: recordDoc.exists() ? (recordDoc.data().status === 'PRESENT' ? 'present' : 'absent') : 'absent',
+        checkInTime: recordDoc.exists() ? recordDoc.data().timestamp : null,
+        method: recordDoc.exists() ? recordDoc.data().method : null
+      };
+    }));
 
     return {
       success: true,
@@ -373,4 +377,40 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
     console.error('Error getting attendance details:', error);
     return { success: false, error: error.message };
   }
+};
+
+// Subscribe to real-time attendance updates
+export const subscribeToAttendanceRecords = (sessionId, callback) => {
+  const recordsRef = collection(db, 'attendanceSessions', sessionId, 'records');
+
+  const unsubscribe = onSnapshot(recordsRef, (snapshot) => {
+    const records = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    callback(records);
+  }, (error) => {
+    console.error('Error subscribing to attendance records:', error);
+  });
+
+  return unsubscribe;
+};
+
+// Subscribe to real-time attendance session updates
+export const subscribeToAttendanceSession = (sessionId, callback) => {
+  const sessionRef = doc(db, 'attendanceSessions', sessionId);
+
+  const unsubscribe = onSnapshot(sessionRef, (snapshot) => {
+    if (snapshot.exists()) {
+      callback({
+        id: snapshot.id,
+        ...snapshot.data()
+      });
+    }
+  }, (error) => {
+    console.error('Error subscribing to attendance session:', error);
+  });
+
+  return unsubscribe;
 };

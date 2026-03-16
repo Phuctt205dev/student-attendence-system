@@ -15,7 +15,8 @@ import {
   deleteAttendanceSession,
   generateQRCode,
   getAttendanceDetails,
-  batchUpdateManualAttendance
+  batchUpdateManualAttendance,
+  subscribeToAttendanceRecords
 } from '../../services/attendance.service';
 import {
   LogOut,
@@ -77,6 +78,7 @@ const TeacherDashboard = () => {
   // ── Manual attendance state ────────────────────────────────────
   const [attendanceRecords, setAttendanceRecords] = useState({});
   const [savingManual, setSavingManual] = useState(false);
+  const [realtimeRecords, setRealtimeRecords] = useState([]); // Real-time records từ app mobile
 
   // ── QR state ──────────────────────────────────────────────────
   const [qrImageUrl, setQrImageUrl] = useState('');
@@ -122,6 +124,31 @@ const TeacherDashboard = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, [qrExpiryTime]);
+
+  // ── Real-time attendance listener ──────────────────────────────
+  useEffect(() => {
+    if (!selectedSession?.id) return;
+
+    const unsubscribe = subscribeToAttendanceRecords(selectedSession.id, (records) => {
+      setRealtimeRecords(records);
+
+      // Cập nhật attendanceRecords với real-time data
+      setAttendanceRecords(prev => {
+        const updated = { ...prev };
+        records.forEach(record => {
+          updated[record.studentId] = {
+            status: record.status === 'PRESENT' ? 'present' : 'absent',
+            note: record.note || '',
+            method: record.method,
+            timestamp: record.timestamp
+          };
+        });
+        return updated;
+      });
+    });
+
+    return () => unsubscribe();
+  }, [selectedSession?.id]);
 
   // ── Helpers ────────────────────────────────────────────────────
   const loadAttendanceSessions = async (classId) => {
@@ -293,10 +320,10 @@ const TeacherDashboard = () => {
     setError('');
     try {
       // Gom tất cả sinh viên thành 1 mảng, gửi 1 lần duy nhất lên Firestore
-      // Tránh race condition khi Promise.all ghi đè lẫn nhau
       const studentRecords = classStudents.map((student) => ({
         studentId: student.uid,
         studentName: student.fullName,
+        studentCode: student.studentId || '',
         status: attendanceRecords[student.uid]?.status || 'absent',
         note: attendanceRecords[student.uid]?.note || ''
       }));
@@ -366,7 +393,7 @@ const TeacherDashboard = () => {
   };
 
   // ── Derived stats ──────────────────────────────────────────────
-  const totalStudents = classes.reduce((sum, cls) => sum + (cls.students?.length || 0), 0);
+  const totalStudents = classes.reduce((sum, cls) => sum + (cls.studentCount || 0), 0);
   const stats = [
     { title: 'Lớp phụ trách', value: classes.length.toString(), icon: BookOpen, color: 'bg-blue-500' },
     { title: 'Tổng sinh viên', value: totalStudents.toString(), icon: Users, color: 'bg-green-500' },
@@ -448,7 +475,7 @@ const TeacherDashboard = () => {
                       <p className="text-gray-600">{classItem.className}</p>
                     </div>
                     <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                      {classItem.students?.length || 0} SV
+                      {classItem.studentCount || 0} SV
                     </span>
                   </div>
                   {classItem.description && <p className="text-sm text-gray-500 mb-3">{classItem.description}</p>}
@@ -520,7 +547,8 @@ const TeacherDashboard = () => {
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {attendanceSessions.map((session) => {
-                    const presentCount = session.records?.length || 0;
+                    const presentCount = session.presentCount || 0;
+                    const totalRecords = session.recordCount || 0;
                     const absentCount = Math.max(0, classStudents.length - presentCount);
                     return (
                       <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -657,6 +685,9 @@ const TeacherDashboard = () => {
                 <div className="space-y-2 max-h-96 overflow-y-auto border rounded-lg p-3">
                   {classStudents.map((student) => {
                     const isPresent = attendanceRecords[student.uid]?.status === 'present';
+                    const method = attendanceRecords[student.uid]?.method;
+                    const isFaceRecognition = method === 'face';
+
                     return (
                       <div
                         key={student.uid}
@@ -672,7 +703,14 @@ const TeacherDashboard = () => {
                           className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 pointer-events-none"
                         />
                         <div className="flex-1">
-                          <p className="font-medium text-gray-900">{student.fullName}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900">{student.fullName}</p>
+                            {isFaceRecognition && (
+                              <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">
+                                📸 Quét mặt
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-600">{student.email}</p>
                           {student.studentId && <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>}
                         </div>

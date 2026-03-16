@@ -6,22 +6,24 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  setDoc,
   query,
   where,
   orderBy,
   serverTimestamp,
-  arrayUnion,
-  arrayRemove,
   limit
 } from 'firebase/firestore';
 import { db } from './firebase';
 
-// Create new class
+// Create new class (tương thích với app mobile)
 export const createClass = async (classData) => {
   try {
     const classRef = await addDoc(collection(db, 'classes'), {
-      ...classData,
-      students: [],
+      name: classData.className,
+      teacherId: classData.teacherId,
+      classCode: classData.classCode,
+      description: classData.description || '',
+      schedule: classData.schedule || '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -68,7 +70,7 @@ export const getClassById = async (classId) => {
   }
 };
 
-// Get classes by teacher ID
+// Get classes by teacher ID (với số lượng sinh viên từ subcollection)
 export const getClassesByTeacher = async (teacherId) => {
   try {
     const q = query(
@@ -77,9 +79,18 @@ export const getClassesByTeacher = async (teacherId) => {
     );
 
     const classesSnapshot = await getDocs(q);
-    const classes = classesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
+    const classes = await Promise.all(classesSnapshot.docs.map(async (classDoc) => {
+      const classData = classDoc.data();
+
+      // Đếm số sinh viên từ subcollection
+      const studentsSnapshot = await getDocs(collection(db, 'classes', classDoc.id, 'students'));
+
+      return {
+        id: classDoc.id,
+        ...classData,
+        className: classData.name, // Map 'name' thành 'className' để tương thích với UI
+        studentCount: studentsSnapshot.size
+      };
     }));
 
     // Sort by createdAt on client side
@@ -96,19 +107,25 @@ export const getClassesByTeacher = async (teacherId) => {
   }
 };
 
-// Get classes by student ID
+// Get classes by student ID (tìm trong subcollection students)
 export const getClassesByStudent = async (studentId) => {
   try {
-    const q = query(
-      collection(db, 'classes'),
-      where('students', 'array-contains', studentId)
-    );
+    // Lấy tất cả các lớp
+    const classesSnapshot = await getDocs(collection(db, 'classes'));
+    const classes = [];
 
-    const classesSnapshot = await getDocs(q);
-    const classes = classesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    // Kiểm tra từng lớp xem có chứa sinh viên không
+    for (const classDoc of classesSnapshot.docs) {
+      const studentDoc = await getDoc(doc(db, 'classes', classDoc.id, 'students', studentId));
+      if (studentDoc.exists()) {
+        const classData = classDoc.data();
+        classes.push({
+          id: classDoc.id,
+          ...classData,
+          className: classData.name
+        });
+      }
+    }
 
     return { success: true, classes };
   } catch (error) {
@@ -143,12 +160,17 @@ export const deleteClass = async (classId) => {
   }
 };
 
-// Enroll student in class
-export const enrollStudent = async (classId, studentId) => {
+// Enroll student in class (thêm vào subcollection students)
+export const enrollStudent = async (classId, studentData) => {
   try {
-    await updateDoc(doc(db, 'classes', classId), {
-      students: arrayUnion(studentId),
-      updatedAt: serverTimestamp()
+    // Thêm student vào subcollection với UID làm ID
+    await setDoc(doc(db, 'classes', classId, 'students', studentData.uid), {
+      name: studentData.fullName,
+      studentCode: studentData.studentId || '',
+      email: studentData.email,
+      photoUrl: studentData.photoUrl || '',
+      faceEmbedding: studentData.faceEmbedding || [],
+      createdAt: serverTimestamp()
     });
 
     return { success: true };
@@ -158,14 +180,10 @@ export const enrollStudent = async (classId, studentId) => {
   }
 };
 
-// Remove student from class
+// Remove student from class (xóa khỏi subcollection)
 export const removeStudent = async (classId, studentId) => {
   try {
-    await updateDoc(doc(db, 'classes', classId), {
-      students: arrayRemove(studentId),
-      updatedAt: serverTimestamp()
-    });
-
+    await deleteDoc(doc(db, 'classes', classId, 'students', studentId));
     return { success: true };
   } catch (error) {
     console.error('Error removing student:', error);
@@ -173,15 +191,11 @@ export const removeStudent = async (classId, studentId) => {
   }
 };
 
-// Get student count for a class
+// Get student count for a class (từ subcollection)
 export const getClassStudentCount = async (classId) => {
   try {
-    const classDoc = await getDoc(doc(db, 'classes', classId));
-    if (classDoc.exists()) {
-      const students = classDoc.data().students || [];
-      return { success: true, count: students.length };
-    }
-    return { success: false, error: 'Class not found' };
+    const studentsSnapshot = await getDocs(collection(db, 'classes', classId, 'students'));
+    return { success: true, count: studentsSnapshot.size };
   } catch (error) {
     console.error('Error getting student count:', error);
     return { success: false, error: error.message };
@@ -217,7 +231,7 @@ export const findUserByEmail = async (email) => {
   }
 };
 
-// Enroll student by email
+// Enroll student by email (cập nhật để sử dụng subcollection)
 export const enrollStudentByEmail = async (classId, studentEmail) => {
   try {
     // Find student by email
@@ -235,55 +249,42 @@ export const enrollStudentByEmail = async (classId, studentEmail) => {
     }
 
     // Check if student is already enrolled
-    const classDoc = await getDoc(doc(db, 'classes', classId));
-    if (classDoc.exists()) {
-      const students = classDoc.data().students || [];
-      if (students.includes(user.uid)) {
-        return { success: false, error: 'Sinh viên đã được thêm vào lớp này rồi' };
-      }
+    const studentDoc = await getDoc(doc(db, 'classes', classId, 'students', user.uid));
+    if (studentDoc.exists()) {
+      return { success: false, error: 'Sinh viên đã được thêm vào lớp này rồi' };
     }
 
-    // Enroll student
-    await updateDoc(doc(db, 'classes', classId), {
-      students: arrayUnion(user.uid),
-      updatedAt: serverTimestamp()
-    });
+    // Enroll student using enrollStudent function
+    const result = await enrollStudent(classId, user);
 
-    return { success: true, student: user };
+    if (result.success) {
+      return { success: true, student: user };
+    } else {
+      return result;
+    }
   } catch (error) {
     console.error('Error enrolling student by email:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Get enrolled students details for a class
+// Get enrolled students details for a class (từ subcollection)
 export const getClassStudents = async (classId) => {
   try {
-    const classDoc = await getDoc(doc(db, 'classes', classId));
+    // Lấy tất cả students từ subcollection
+    const studentsSnapshot = await getDocs(collection(db, 'classes', classId, 'students'));
 
-    if (!classDoc.exists()) {
-      return { success: false, error: 'Lớp không tồn tại' };
-    }
-
-    const studentIds = classDoc.data().students || [];
-
-    if (studentIds.length === 0) {
-      return { success: true, students: [] };
-    }
-
-    // Get all student details
-    const studentPromises = studentIds.map(async (studentId) => {
-      const studentDoc = await getDoc(doc(db, 'users', studentId));
-      if (studentDoc.exists()) {
-        return {
-          uid: studentDoc.id,
-          ...studentDoc.data()
-        };
-      }
-      return null;
+    const students = studentsSnapshot.docs.map(doc => {
+      const studentData = doc.data();
+      return {
+        uid: doc.id,
+        fullName: studentData.name,
+        studentId: studentData.studentCode,
+        email: studentData.email,
+        photoUrl: studentData.photoUrl || '',
+        faceEmbedding: studentData.faceEmbedding || []
+      };
     });
-
-    const students = (await Promise.all(studentPromises)).filter(s => s !== null);
 
     return { success: true, students };
   } catch (error) {

@@ -44,6 +44,17 @@ export const registerUser = async (email, password, fullName, role, additionalDa
 
     await setDoc(doc(db, 'users', user.uid), userProfile);
 
+    // Nếu là teacher, tạo thêm document trong teachers collection (tương thích với app mobile)
+    if (role === 'teacher') {
+      await setDoc(doc(db, 'teachers', user.uid), {
+        name: fullName,
+        email: email,
+        department: additionalData.department || '',
+        title: additionalData.title || '',
+        createdAt: serverTimestamp()
+      });
+    }
+
     return { success: true, user: userProfile };
   } catch (error) {
     console.error('Error registering user:', error);
@@ -61,11 +72,29 @@ export const loginUser = async (email, password) => {
     const userDoc = await getDoc(doc(db, 'users', user.uid));
 
     if (userDoc.exists()) {
+      const userData = userDoc.data();
+
+      // Nếu là teacher, đảm bảo có document trong teachers collection (tương thích với app mobile)
+      if (userData.role === 'teacher') {
+        const teacherDoc = await getDoc(doc(db, 'teachers', user.uid));
+
+        if (!teacherDoc.exists()) {
+          // Tạo teacher document nếu chưa có
+          await setDoc(doc(db, 'teachers', user.uid), {
+            name: userData.fullName,
+            email: userData.email,
+            department: userData.department || '',
+            title: userData.title || '',
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
       return {
         success: true,
         user: {
           uid: user.uid,
-          ...userDoc.data()
+          ...userData
         }
       };
     } else {
