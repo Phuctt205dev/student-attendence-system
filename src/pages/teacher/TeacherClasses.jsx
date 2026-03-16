@@ -1413,7 +1413,7 @@ const TeacherClasses = () => {
                           {index + 1}
                         </th>
                       ))}
-                      <th className="border border-gray-300 px-3 py-2 text-center bg-blue-50 min-w-[80px]">
+                      <th className="border border-gray-300 px-3 py-2 text-center bg-blue-100 text-blue-900 font-bold min-w-[80px]">
                         Tổng
                       </th>
                     </tr>
@@ -1442,14 +1442,14 @@ const TeacherClasses = () => {
                               <td
                                 key={session.id}
                                 className={`border border-gray-300 px-3 py-2 text-center font-semibold ${
-                                  isPresent ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                                  isPresent ? 'bg-green-100 text-green-900' : 'bg-red-100 text-red-900'
                                 }`}
                               >
                                 {isPresent ? '1' : '0'}
                               </td>
                             );
                           })}
-                          <td className="border border-gray-300 px-3 py-2 text-center font-bold bg-blue-50">
+                          <td className="border border-gray-300 px-3 py-2 text-center font-bold bg-blue-100 text-blue-900">
                             {presentCount}/{overviewData.sessions.length}
                           </td>
                         </tr>
@@ -1463,8 +1463,8 @@ const TeacherClasses = () => {
             <div className="flex justify-between items-center pt-4 border-t">
               <div className="text-xs text-gray-600">
                 <p className="mb-1"><strong>Chú thích:</strong></p>
-                <p>• <span className="text-green-700 font-semibold">1</span> = Có mặt</p>
-                <p>• <span className="text-red-700 font-semibold">0</span> = Vắng</p>
+                <p>• <span className="font-semibold bg-green-100 text-green-900 px-2 py-0.5 rounded">1</span> = Có mặt</p>
+                <p>• <span className="font-semibold bg-red-100 text-red-900 px-2 py-0.5 rounded">0</span> = Vắng</p>
               </div>
               <Button
                 type="button"
