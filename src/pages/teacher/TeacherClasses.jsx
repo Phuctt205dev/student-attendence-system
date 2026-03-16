@@ -56,6 +56,7 @@ const TeacherClasses = () => {
   const [showCreateAttendanceModal, setShowCreateAttendanceModal] = useState(false);
   const [showManualAttendanceModal, setShowManualAttendanceModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [showOverviewModal, setShowOverviewModal] = useState(false);
 
   // ── Selected items ─────────────────────────────────────────────
   const [selectedClass, setSelectedClass] = useState(null);
@@ -104,6 +105,10 @@ const TeacherClasses = () => {
   const [qrExpiryTime, setQrExpiryTime] = useState(null);
   const [qrCountdown, setQrCountdown] = useState(0);
   const [generatingQR, setGeneratingQR] = useState(false);
+
+  // ── Overview state ────────────────────────────────────────────
+  const [overviewData, setOverviewData] = useState({ students: [], sessions: [], records: {} });
+  const [loadingOverview, setLoadingOverview] = useState(false);
 
   // ── Load classes ───────────────────────────────────────────────
   const loadClasses = async () => {
@@ -597,6 +602,57 @@ const TeacherClasses = () => {
     }
   };
 
+  // ── Handlers: Overview ─────────────────────────────────────────
+  const handleOpenOverview = async () => {
+    if (!selectedClass || attendanceSessions.length === 0) return;
+
+    setLoadingOverview(true);
+    setShowOverviewModal(true);
+    setError('');
+
+    try {
+      // Prepare data structure
+      const records = {};
+
+      // Load attendance details for all sessions
+      for (const session of attendanceSessions) {
+        const result = await getAttendanceDetails(session.id, selectedClass.id);
+
+        if (result.success) {
+          result.students.forEach(student => {
+            if (!records[student.uid]) {
+              records[student.uid] = {};
+            }
+            records[student.uid][session.id] = student.status || 'absent';
+          });
+        }
+      }
+
+      // Ensure all students have entries for all sessions
+      classStudents.forEach(student => {
+        if (!records[student.uid]) {
+          records[student.uid] = {};
+        }
+        attendanceSessions.forEach(session => {
+          if (!records[student.uid][session.id]) {
+            records[student.uid][session.id] = 'absent';
+          }
+        });
+      });
+
+      setOverviewData({
+        students: sortStudentsByStudentId(classStudents),
+        sessions: attendanceSessions,
+        records: records
+      });
+    } catch (error) {
+      console.error('Error loading overview:', error);
+      setError('Không thể tải dữ liệu tổng quan');
+    } finally {
+      setLoadingOverview(false);
+    }
+  };
+
   // ══════════════════════════════════════════════════════════════
   return (
     <TeacherLayout>
@@ -1038,9 +1094,26 @@ const TeacherClasses = () => {
             <div className="border-b pb-4">
               <div className="flex justify-between items-center mb-3">
                 <h4 className="font-semibold text-gray-900">Buổi điểm danh ({attendanceSessions.length})</h4>
-                <Button variant="primary" size="sm" icon={<ClipboardCheck className="w-4 h-4" />} onClick={handleOpenCreateAttendance}>
-                  Tạo buổi mới
-                </Button>
+                <div className="flex gap-2">
+                  {attendanceSessions.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={<FileSpreadsheet className="w-4 h-4" />}
+                      onClick={handleOpenOverview}
+                    >
+                      Tổng quan
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<ClipboardCheck className="w-4 h-4" />}
+                    onClick={handleOpenCreateAttendance}
+                  >
+                    Tạo buổi mới
+                  </Button>
+                </div>
               </div>
 
               {attendanceSessions.length === 0 ? (
@@ -1285,6 +1358,122 @@ const TeacherClasses = () => {
             ) : null}
 
             <Button type="button" variant="outline" onClick={() => setShowQRModal(false)} fullWidth>Đóng</Button>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Modal: Tổng quan điểm danh ─────────────────────────── */}
+      <Modal
+        isOpen={showOverviewModal}
+        onClose={() => setShowOverviewModal(false)}
+        title="Tổng quan điểm danh"
+        size="xl"
+      >
+        {selectedClass && (
+          <div className="space-y-4">
+            <div className="border-b pb-3">
+              <p className="font-semibold text-gray-900">
+                {selectedClass.classCode} - {selectedClass.className}
+              </p>
+              <p className="text-sm text-gray-500">
+                Tổng cộng: {overviewData.students.length} sinh viên, {overviewData.sessions.length} buổi
+              </p>
+            </div>
+
+            {loadingOverview ? (
+              <div className="py-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">Đang tải dữ liệu...</p>
+              </div>
+            ) : overviewData.students.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Users className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                <p>Chưa có dữ liệu điểm danh</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-300 px-3 py-2 text-center sticky left-0 bg-gray-100 z-10">
+                        STT
+                      </th>
+                      <th className="border border-gray-300 px-3 py-2 text-left sticky left-12 bg-gray-100 z-10">
+                        MSSV
+                      </th>
+                      <th className="border border-gray-300 px-3 py-2 text-left sticky left-32 bg-gray-100 z-10 min-w-[200px]">
+                        Họ và tên
+                      </th>
+                      {overviewData.sessions.map((session, index) => (
+                        <th
+                          key={session.id}
+                          className="border border-gray-300 px-3 py-2 text-center min-w-[80px]"
+                          title={session.sessionNumber}
+                        >
+                          {index + 1}
+                        </th>
+                      ))}
+                      <th className="border border-gray-300 px-3 py-2 text-center bg-blue-50 min-w-[80px]">
+                        Tổng
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overviewData.students.map((student, index) => {
+                      const presentCount = overviewData.sessions.filter(
+                        session => overviewData.records[student.uid]?.[session.id] === 'present'
+                      ).length;
+
+                      return (
+                        <tr key={student.uid} className="hover:bg-gray-50">
+                          <td className="border border-gray-300 px-3 py-2 text-center sticky left-0 bg-white">
+                            {index + 1}
+                          </td>
+                          <td className="border border-gray-300 px-3 py-2 sticky left-12 bg-white">
+                            {student.studentId || 'N/A'}
+                          </td>
+                          <td className="border border-gray-300 px-3 py-2 sticky left-32 bg-white">
+                            {student.fullName}
+                          </td>
+                          {overviewData.sessions.map(session => {
+                            const status = overviewData.records[student.uid]?.[session.id];
+                            const isPresent = status === 'present';
+                            return (
+                              <td
+                                key={session.id}
+                                className={`border border-gray-300 px-3 py-2 text-center font-semibold ${
+                                  isPresent ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                                }`}
+                              >
+                                {isPresent ? '1' : '0'}
+                              </td>
+                            );
+                          })}
+                          <td className="border border-gray-300 px-3 py-2 text-center font-bold bg-blue-50">
+                            {presentCount}/{overviewData.sessions.length}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pt-4 border-t">
+              <div className="text-xs text-gray-600">
+                <p className="mb-1"><strong>Chú thích:</strong></p>
+                <p>• <span className="text-green-700 font-semibold">1</span> = Có mặt</p>
+                <p>• <span className="text-red-700 font-semibold">0</span> = Vắng</p>
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => setShowOverviewModal(false)}
+              >
+                Đóng
+              </Button>
+            </div>
           </div>
         )}
       </Modal>
