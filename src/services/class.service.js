@@ -292,3 +292,61 @@ export const getClassStudents = async (classId) => {
     return { success: false, error: error.message };
   }
 };
+
+// Get all students from users collection
+export const getAllStudents = async () => {
+  try {
+    const q = query(
+      collection(db, 'users'),
+      where('role', '==', 'student')
+    );
+
+    const studentsSnapshot = await getDocs(q);
+    const students = studentsSnapshot.docs.map(doc => ({
+      uid: doc.id,
+      ...doc.data()
+    }));
+
+    return { success: true, students };
+  } catch (error) {
+    console.error('Error getting all students:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Search students by student code or name
+export const searchStudents = async (searchTerm) => {
+  try {
+    if (!searchTerm || searchTerm.trim().length === 0) {
+      return { success: true, students: [] };
+    }
+
+    const q = query(
+      collection(db, 'users'),
+      where('role', '==', 'student')
+    );
+
+    const studentsSnapshot = await getDocs(q);
+    const searchLower = searchTerm.toLowerCase();
+
+    const students = studentsSnapshot.docs
+      .map(doc => ({
+        uid: doc.id,
+        ...doc.data()
+      }))
+      .filter(student => {
+        const studentId = (student.studentId || '').toLowerCase();
+        const fullName = (student.fullName || '').toLowerCase();
+        const email = (student.email || '').toLowerCase();
+
+        return studentId.includes(searchLower) ||
+               fullName.includes(searchLower) ||
+               email.includes(searchLower);
+      });
+
+    return { success: true, students };
+  } catch (error) {
+    console.error('Error searching students:', error);
+    return { success: false, error: error.message };
+  }
+};

@@ -6,8 +6,11 @@ import {
   getClassesByTeacher,
   enrollStudentByEmail,
   getClassStudents,
-  removeStudent
+  removeStudent,
+  searchStudents,
+  enrollStudent
 } from '../../services/class.service';
+import { createStudentAccount } from '../../services/auth.service';
 import {
   createAttendanceSession,
   getAttendancesByClass,
@@ -67,6 +70,15 @@ const TeacherClasses = () => {
   // ── Add student form ───────────────────────────────────────────
   const [studentEmail, setStudentEmail] = useState('');
   const [addingStudent, setAddingStudent] = useState(false);
+  const [addStudentMode, setAddStudentMode] = useState('existing'); // 'existing' or 'new'
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [newStudentData, setNewStudentData] = useState({
+    studentId: '',
+    fullName: ''
+  });
+  const [teacherPassword, setTeacherPassword] = useState('');
 
   // ── Create attendance session form ─────────────────────────────
   const [sessionName, setSessionName] = useState('');
@@ -184,7 +196,36 @@ const TeacherClasses = () => {
     setSelectedClass(classItem);
     setShowAddStudentModal(true);
     setStudentEmail('');
+    setAddStudentMode('existing');
+    setStudentSearchTerm('');
+    setSearchResults([]);
+    setSelectedStudent(null);
+    setNewStudentData({ studentId: '', fullName: '' });
+    setTeacherPassword('');
     setError('');
+  };
+
+  const handleStudentSearch = async (searchTerm) => {
+    setStudentSearchTerm(searchTerm);
+    if (searchTerm.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    const result = await searchStudents(searchTerm);
+    if (result.success) {
+      // Filter out students already in the class
+      const filteredStudents = result.students.filter(
+        student => !classStudents.some(cs => cs.uid === student.uid)
+      );
+      setSearchResults(filteredStudents);
+    }
+  };
+
+  const handleSelectStudent = (student) => {
+    setSelectedStudent(student);
+    setStudentSearchTerm(`${student.studentId || ''} - ${student.fullName}`);
+    setSearchResults([]);
   };
 
   const handleAddStudent = async (e) => {
@@ -192,25 +233,81 @@ const TeacherClasses = () => {
     setError('');
     setSuccess('');
     setAddingStudent(true);
-    if (!studentEmail.trim()) {
-      setError('Vui lòng nhập email sinh viên');
-      setAddingStudent(false);
-      return;
-    }
-    const result = await enrollStudentByEmail(selectedClass.id, studentEmail);
-    if (result.success) {
-      setSuccess('Thêm sinh viên thành công!');
-      setStudentEmail('');
-      setShowAddStudentModal(false);
-      loadClasses();
-      if (showClassDetailModal) {
-        const studentsResult = await getClassStudents(selectedClass.id);
-        if (studentsResult.success) setClassStudents(studentsResult.students);
+
+    try {
+      if (addStudentMode === 'existing') {
+        // Add existing student
+        if (!selectedStudent) {
+          setError('Vui lòng chọn sinh viên từ danh sách');
+          setAddingStudent(false);
+          return;
+        }
+
+        const result = await enrollStudent(selectedClass.id, selectedStudent);
+        if (result.success) {
+          setSuccess('Thêm sinh viên thành công!');
+          setShowAddStudentModal(false);
+          loadClasses();
+          if (showClassDetailModal) {
+            const studentsResult = await getClassStudents(selectedClass.id);
+            if (studentsResult.success) setClassStudents(studentsResult.students);
+          }
+        } else {
+          setError(result.error || 'Không thể thêm sinh viên');
+        }
+      } else {
+        // Create new student account
+        if (!newStudentData.studentId.trim() || !newStudentData.fullName.trim()) {
+          setError('Vui lòng nhập đầy đủ mã sinh viên và họ tên');
+          setAddingStudent(false);
+          return;
+        }
+
+        if (!teacherPassword) {
+          setError('Vui lòng nhập mật khẩu của bạn để xác nhận');
+          setAddingStudent(false);
+          return;
+        }
+
+        // Create student account
+        const createResult = await createStudentAccount(
+          newStudentData.studentId,
+          newStudentData.fullName,
+          userProfile.email,
+          teacherPassword
+        );
+
+        if (createResult.success) {
+          // Add student to class
+          const enrollResult = await enrollStudent(selectedClass.id, createResult.student);
+          if (enrollResult.success) {
+            setSuccess(`Tạo tài khoản và thêm sinh viên ${newStudentData.fullName} thành công!`);
+            setShowAddStudentModal(false);
+            setTeacherPassword('');
+            loadClasses();
+            if (showClassDetailModal) {
+              const studentsResult = await getClassStudents(selectedClass.id);
+              if (studentsResult.success) setClassStudents(studentsResult.students);
+            }
+          } else {
+            setError('Tạo tài khoản thành công nhưng không thể thêm vào lớp: ' + enrollResult.error);
+          }
+        } else {
+          if (createResult.error.includes('email-already-in-use')) {
+            setError(`Sinh viên có MSSV ${newStudentData.studentId} đã có tài khoản. Vui lòng sử dụng chế độ "Thêm sinh viên đã có tài khoản"`);
+          } else if (createResult.error.includes('wrong-password')) {
+            setError('Mật khẩu không đúng. Vui lòng thử lại');
+          } else {
+            setError(createResult.error || 'Không thể tạo tài khoản sinh viên');
+          }
+        }
       }
-    } else {
-      setError(result.error || 'Không thể thêm sinh viên');
+    } catch (err) {
+      console.error('Error adding student:', err);
+      setError('Có lỗi xảy ra: ' + err.message);
+    } finally {
+      setAddingStudent(false);
     }
-    setAddingStudent(false);
   };
 
   const handleRemoveStudent = async (studentId) => {
@@ -518,19 +615,140 @@ const TeacherClasses = () => {
         <div className="mb-4">
           <p className="text-sm text-gray-600">Lớp: <span className="font-semibold">{selectedClass?.classCode} - {selectedClass?.className}</span></p>
         </div>
+
+        {/* Mode selector */}
+        <div className="mb-6 flex gap-2 p-1 bg-gray-100 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setAddStudentMode('existing')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              addStudentMode === 'existing'
+                ? 'bg-white text-primary-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Sinh viên đã có tài khoản
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddStudentMode('new')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              addStudentMode === 'new'
+                ? 'bg-white text-primary-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Tạo sinh viên mới
+          </button>
+        </div>
+
         {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-sm text-red-600">{error}</p></div>}
+
         <form onSubmit={handleAddStudent} className="space-y-4">
-          <Input
-            label="Email sinh viên"
-            type="email"
-            placeholder="student@example.com"
-            value={studentEmail}
-            onChange={(e) => setStudentEmail(e.target.value)}
-            required
-          />
+          {addStudentMode === 'existing' ? (
+            <>
+              {/* Search existing student */}
+              <div className="relative">
+                <Input
+                  label="Tìm kiếm sinh viên"
+                  type="text"
+                  placeholder="Nhập mã sinh viên, họ tên hoặc email..."
+                  value={studentSearchTerm}
+                  onChange={(e) => handleStudentSearch(e.target.value)}
+                  autoComplete="off"
+                />
+                {searchResults.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {searchResults.map((student) => (
+                      <button
+                        key={student.uid}
+                        type="button"
+                        onClick={() => handleSelectStudent(student)}
+                        className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                      >
+                        <p className="font-medium text-gray-900">{student.fullName}</p>
+                        <p className="text-sm text-gray-600">{student.email}</p>
+                        {student.studentId && (
+                          <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedStudent && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-800 font-medium mb-1">✓ Đã chọn sinh viên:</p>
+                  <p className="font-medium text-gray-900">{selectedStudent.fullName}</p>
+                  <p className="text-sm text-gray-600">{selectedStudent.email}</p>
+                  {selectedStudent.studentId && (
+                    <p className="text-xs text-gray-500">MSSV: {selectedStudent.studentId}</p>
+                  )}
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500">
+                💡 Nhập ít nhất 2 ký tự để tìm kiếm sinh viên đã đăng ký trong hệ thống
+              </p>
+            </>
+          ) : (
+            <>
+              {/* Create new student */}
+              <Input
+                label="Mã số sinh viên"
+                type="text"
+                placeholder="Ví dụ: 22520001"
+                value={newStudentData.studentId}
+                onChange={(e) => setNewStudentData({ ...newStudentData, studentId: e.target.value })}
+                required
+              />
+
+              <Input
+                label="Họ và tên"
+                type="text"
+                placeholder="Ví dụ: Nguyễn Văn A"
+                value={newStudentData.fullName}
+                onChange={(e) => setNewStudentData({ ...newStudentData, fullName: e.target.value })}
+                required
+              />
+
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                <p className="text-blue-900 font-medium mb-1">ℹ️ Thông tin tài khoản sẽ tạo:</p>
+                <p className="text-blue-800">
+                  <strong>Email:</strong> {newStudentData.studentId || '[MSSV]'}@gm.uit.edu.vn
+                </p>
+                <p className="text-blue-800">
+                  <strong>Mật khẩu mặc định:</strong> 11111111
+                </p>
+              </div>
+
+              <Input
+                label="Mật khẩu của bạn (để xác nhận)"
+                type="password"
+                placeholder="Nhập mật khẩu tài khoản giáo viên"
+                value={teacherPassword}
+                onChange={(e) => setTeacherPassword(e.target.value)}
+                required
+              />
+
+              <p className="text-xs text-gray-500">
+                ⚠️ Cần nhập mật khẩu của bạn để xác nhận tạo tài khoản sinh viên mới
+              </p>
+            </>
+          )}
+
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setShowAddStudentModal(false)} fullWidth disabled={addingStudent}>Hủy</Button>
-            <Button type="submit" variant="primary" fullWidth loading={addingStudent} disabled={addingStudent}>Thêm sinh viên</Button>
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              loading={addingStudent}
+              disabled={addingStudent || (addStudentMode === 'existing' && !selectedStudent)}
+            >
+              {addStudentMode === 'existing' ? 'Thêm sinh viên' : 'Tạo tài khoản và thêm'}
+            </Button>
           </div>
         </form>
       </Modal>

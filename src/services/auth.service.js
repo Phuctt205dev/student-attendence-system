@@ -120,7 +120,14 @@ export const logoutUser = async () => {
 // Reset password
 export const resetPassword = async (email) => {
   try {
-    await sendPasswordResetEmail(auth, email);
+    // Action code settings for password reset
+    const actionCodeSettings = {
+      // URL to redirect after password reset
+      url: window.location.origin + '/#/login',
+      handleCodeInApp: false, // Let Firebase handle the password reset
+    };
+
+    await sendPasswordResetEmail(auth, email, actionCodeSettings);
     return { success: true, message: 'Password reset email sent' };
   } catch (error) {
     console.error('Error resetting password:', error);
@@ -164,4 +171,41 @@ export const updateUserProfile = async (uid, updates) => {
 // Auth state observer
 export const onAuthStateChange = (callback) => {
   return onAuthStateChanged(auth, callback);
+};
+
+// Create student account (for teachers to add students)
+// Note: This will temporarily sign the teacher out, so we need to sign them back in
+export const createStudentAccount = async (studentId, fullName, currentUserEmail, currentUserPassword) => {
+  try {
+    // Generate email from student ID
+    const studentEmail = `${studentId}@gm.uit.edu.vn`;
+    const defaultPassword = '11111111';
+
+    // Create student account
+    const result = await registerUser(
+      studentEmail,
+      defaultPassword,
+      fullName,
+      'student',
+      { studentId }
+    );
+
+    if (!result.success) {
+      return result;
+    }
+
+    // Sign the current user (teacher) back in
+    if (currentUserEmail && currentUserPassword) {
+      await signInWithEmailAndPassword(auth, currentUserEmail, currentUserPassword);
+    }
+
+    return {
+      success: true,
+      student: result.user,
+      message: 'Tạo tài khoản sinh viên thành công'
+    };
+  } catch (error) {
+    console.error('Error creating student account:', error);
+    return { success: false, error: error.message };
+  }
 };
