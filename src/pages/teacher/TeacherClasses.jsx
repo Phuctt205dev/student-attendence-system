@@ -702,18 +702,6 @@ const TeacherClasses = () => {
         excelData.push(row);
       });
 
-      // Add session names as a separate sheet or footer
-      excelData.push([]); // Empty row
-      excelData.push(['Thông tin các buổi điểm danh:']);
-      overviewData.sessions.forEach((session, index) => {
-        const date = session.date
-          ? new Date(session.date.seconds * 1000).toLocaleDateString('vi-VN', {
-              year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-            })
-          : 'N/A';
-        excelData.push([`Buổi ${index + 1}:`, session.sessionNumber, date]);
-      });
-
       // Create worksheet
       const ws = XLSX.utils.aoa_to_sheet(excelData);
 
@@ -732,33 +720,46 @@ const TeacherClasses = () => {
       const numStudentDataRows = overviewData.students.length;
       const numSessionCols = overviewData.sessions.length;
 
+      // Define border style
+      const borderStyle = {
+        top: { style: 'thin', color: { rgb: '000000' } },
+        bottom: { style: 'thin', color: { rgb: '000000' } },
+        left: { style: 'thin', color: { rgb: '000000' } },
+        right: { style: 'thin', color: { rgb: '000000' } }
+      };
+
       // Define styles
       const centerStyle = {
         alignment: { horizontal: 'center', vertical: 'center' },
-        font: { name: 'Times New Roman', sz: 11 }
+        font: { name: 'Times New Roman', sz: 11 },
+        border: borderStyle
       };
 
       const leftStyle = {
         alignment: { horizontal: 'left', vertical: 'center' },
-        font: { name: 'Times New Roman', sz: 11 }
+        font: { name: 'Times New Roman', sz: 11 },
+        border: borderStyle
       };
 
       const greenStyle = {
         alignment: { horizontal: 'center', vertical: 'center' },
         font: { name: 'Times New Roman', sz: 11 },
-        fill: { fgColor: { rgb: 'C6EFCE' } }
+        fill: { fgColor: { rgb: 'C6EFCE' } },
+        border: borderStyle
       };
 
       const redStyle = {
         alignment: { horizontal: 'center', vertical: 'center' },
         font: { name: 'Times New Roman', sz: 11 },
-        fill: { fgColor: { rgb: 'FFC7CE' } }
+        fill: { fgColor: { rgb: 'FFC7CE' } },
+        border: borderStyle
       };
 
       const headerStyle = {
         alignment: { horizontal: 'center', vertical: 'center' },
         font: { name: 'Times New Roman', sz: 11, bold: true },
-        fill: { fgColor: { rgb: 'D9D9D9' } }
+        fill: { fgColor: { rgb: 'D9D9D9' } },
+        border: borderStyle
       };
 
       // Apply styles to all cells
@@ -796,10 +797,6 @@ const TeacherClasses = () => {
             else {
               ws[cellAddress].s = centerStyle;
             }
-          }
-          // Session info rows - left align
-          else {
-            ws[cellAddress].s = leftStyle;
           }
         }
       }
