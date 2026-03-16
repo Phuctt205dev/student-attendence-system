@@ -36,8 +36,16 @@ service cloud.firestore {
       // Cho phép authenticated users đọc thông tin user khác (để show student list, teacher info)
       allow read: if signedIn();
 
-      // Chỉ cho phép user tự chỉnh sửa profile của mình
-      allow write: if isSelf(uid);
+      // Cho phép tạo student profile (for teachers adding students)
+      allow create: if signedIn() && (
+        // User tự tạo profile của mình
+        isSelf(uid) ||
+        // HOẶC: Cho phép tạo student profile (role == 'student')
+        request.resource.data.role == 'student'
+      );
+
+      // Chỉ cho phép user tự chỉnh sửa/xóa profile của mình
+      allow update, delete: if isSelf(uid);
     }
 
     // =========================
