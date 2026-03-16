@@ -12,6 +12,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import TeacherClasses from './pages/teacher/TeacherClasses';
 import StudentDashboard from './pages/student/StudentDashboard';
+import StudentClasses from './pages/student/StudentClasses';
 
 function App() {
   return (
@@ -63,6 +64,16 @@ function App() {
               <ProtectedRoute>
                 <RoleBasedRoute allowedRoles={['student']}>
                   <StudentDashboard />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/classes"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['student']}>
+                  <StudentClasses />
                 </RoleBasedRoute>
               </ProtectedRoute>
             }
