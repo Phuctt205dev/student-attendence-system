@@ -78,7 +78,6 @@ const TeacherClasses = () => {
     studentId: '',
     fullName: ''
   });
-  const [teacherPassword, setTeacherPassword] = useState('');
 
   // ── Create attendance session form ─────────────────────────────
   const [sessionName, setSessionName] = useState('');
@@ -201,7 +200,6 @@ const TeacherClasses = () => {
     setSearchResults([]);
     setSelectedStudent(null);
     setNewStudentData({ studentId: '', fullName: '' });
-    setTeacherPassword('');
     setError('');
   };
 
@@ -263,18 +261,10 @@ const TeacherClasses = () => {
           return;
         }
 
-        if (!teacherPassword) {
-          setError('Vui lòng nhập mật khẩu của bạn để xác nhận');
-          setAddingStudent(false);
-          return;
-        }
-
         // Create student account
         const createResult = await createStudentAccount(
           newStudentData.studentId,
-          newStudentData.fullName,
-          userProfile.email,
-          teacherPassword
+          newStudentData.fullName
         );
 
         if (createResult.success) {
@@ -283,7 +273,6 @@ const TeacherClasses = () => {
           if (enrollResult.success) {
             setSuccess(`Tạo tài khoản và thêm sinh viên ${newStudentData.fullName} thành công!`);
             setShowAddStudentModal(false);
-            setTeacherPassword('');
             loadClasses();
             if (showClassDetailModal) {
               const studentsResult = await getClassStudents(selectedClass.id);
@@ -295,8 +284,6 @@ const TeacherClasses = () => {
         } else {
           if (createResult.error.includes('email-already-in-use')) {
             setError(`Sinh viên có MSSV ${newStudentData.studentId} đã có tài khoản. Vui lòng sử dụng chế độ "Thêm sinh viên đã có tài khoản"`);
-          } else if (createResult.error.includes('wrong-password')) {
-            setError('Mật khẩu không đúng. Vui lòng thử lại');
           } else {
             setError(createResult.error || 'Không thể tạo tài khoản sinh viên');
           }
@@ -721,20 +708,10 @@ const TeacherClasses = () => {
                 <p className="text-blue-800">
                   <strong>Mật khẩu mặc định:</strong> 11111111
                 </p>
+                <p className="text-xs text-blue-700 mt-2">
+                  💡 Sinh viên có thể đổi mật khẩu sau khi đăng nhập lần đầu
+                </p>
               </div>
-
-              <Input
-                label="Mật khẩu của bạn (để xác nhận)"
-                type="password"
-                placeholder="Nhập mật khẩu tài khoản giáo viên"
-                value={teacherPassword}
-                onChange={(e) => setTeacherPassword(e.target.value)}
-                required
-              />
-
-              <p className="text-xs text-gray-500">
-                ⚠️ Cần nhập mật khẩu của bạn để xác nhận tạo tài khoản sinh viên mới
-              </p>
             </>
           )}
 

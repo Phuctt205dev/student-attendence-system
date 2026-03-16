@@ -7,7 +7,7 @@ import {
   onAuthStateChanged
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { auth, db, secondaryAuth } from './firebase';
 
 // Register new user
 export const registerUser = async (email, password, fullName, role, additionalData = {}) => {
@@ -174,38 +174,59 @@ export const onAuthStateChange = (callback) => {
 };
 
 // Create student account (for teachers to add students)
-// Note: This will temporarily sign the teacher out, so we need to sign them back in
-export const createStudentAccount = async (studentId, fullName, currentUserEmail, currentUserPassword) => {
+// Uses secondary auth instance to avoid logging out the current user
+export const createStudentAccount = async (studentId, fullName) => {
   try {
     // Generate email from student ID
     const studentEmail = `${studentId}@gm.uit.edu.vn`;
     const defaultPassword = '11111111';
 
-    // Create student account
-    const result = await registerUser(
+    // Create authentication account using secondary auth
+    const userCredential = await createUserWithEmailAndPassword(
+      secondaryAuth,
       studentEmail,
-      defaultPassword,
-      fullName,
-      'student',
-      { studentId }
+      defaultPassword
     );
+    const user = userCredential.user;
 
-    if (!result.success) {
-      return result;
-    }
+    // Update display name
+    await updateProfile(user, {
+      displayName: fullName
+    });
 
-    // Sign the current user (teacher) back in
-    if (currentUserEmail && currentUserPassword) {
-      await signInWithEmailAndPassword(auth, currentUserEmail, currentUserPassword);
-    }
+    // Create user profile in Firestore
+    const userProfile = {
+      uid: user.uid,
+      email: studentEmail,
+      fullName: fullName,
+      role: 'student',
+      avatar: '',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      studentId: studentId,
+      department: ''
+    };
+
+    await setDoc(doc(db, 'users', user.uid), userProfile);
+
+    // Sign out from secondary auth to clean up
+    await signOut(secondaryAuth);
 
     return {
       success: true,
-      student: result.user,
+      student: userProfile,
       message: 'Tạo tài khoản sinh viên thành công'
     };
   } catch (error) {
     console.error('Error creating student account:', error);
+
+    // Sign out from secondary auth in case of error
+    try {
+      await signOut(secondaryAuth);
+    } catch (signOutError) {
+      console.error('Error signing out secondary auth:', signOutError);
+    }
+
     return { success: false, error: error.message };
   }
 };
