@@ -169,6 +169,14 @@ const TeacherClasses = () => {
     return `${m}:${s}`;
   };
 
+  const sortStudentsByStudentId = (students) => {
+    return [...students].sort((a, b) => {
+      const idA = a.studentId || '';
+      const idB = b.studentId || '';
+      return idA.localeCompare(idB, 'vi', { numeric: true });
+    });
+  };
+
   // ── Handlers: class ────────────────────────────────────────────
   const handleCreateClass = async (e) => {
     e.preventDefault();
@@ -197,7 +205,7 @@ const TeacherClasses = () => {
     setSelectedClass(classItem);
     setShowClassDetailModal(true);
     const studentsResult = await getClassStudents(classItem.id);
-    if (studentsResult.success) setClassStudents(studentsResult.students);
+    if (studentsResult.success) setClassStudents(sortStudentsByStudentId(studentsResult.students));
     await loadAttendanceSessions(classItem.id);
   };
 
@@ -347,7 +355,7 @@ const TeacherClasses = () => {
       loadClasses();
       if (showClassDetailModal) {
         const studentsResult = await getClassStudents(selectedClass.id);
-        if (studentsResult.success) setClassStudents(studentsResult.students);
+        if (studentsResult.success) setClassStudents(sortStudentsByStudentId(studentsResult.students));
       }
 
       if (finalResults.failed.length === 0) {
@@ -386,7 +394,7 @@ const TeacherClasses = () => {
           loadClasses();
           if (showClassDetailModal) {
             const studentsResult = await getClassStudents(selectedClass.id);
-            if (studentsResult.success) setClassStudents(studentsResult.students);
+            if (studentsResult.success) setClassStudents(sortStudentsByStudentId(studentsResult.students));
           }
         } else {
           setError(result.error || 'Không thể thêm sinh viên');
@@ -414,7 +422,7 @@ const TeacherClasses = () => {
             loadClasses();
             if (showClassDetailModal) {
               const studentsResult = await getClassStudents(selectedClass.id);
-              if (studentsResult.success) setClassStudents(studentsResult.students);
+              if (studentsResult.success) setClassStudents(sortStudentsByStudentId(studentsResult.students));
             }
           } else {
             setError('Tạo tài khoản thành công nhưng không thể thêm vào lớp: ' + enrollResult.error);
@@ -441,7 +449,7 @@ const TeacherClasses = () => {
     if (result.success) {
       setSuccess('Xóa sinh viên thành công!');
       const studentsResult = await getClassStudents(selectedClass.id);
-      if (studentsResult.success) setClassStudents(studentsResult.students);
+      if (studentsResult.success) setClassStudents(sortStudentsByStudentId(studentsResult.students));
       loadClasses();
     } else {
       setError(result.error || 'Không thể xóa sinh viên');
