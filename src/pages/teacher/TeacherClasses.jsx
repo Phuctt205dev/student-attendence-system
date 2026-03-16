@@ -32,7 +32,8 @@ import {
   Eye,
   QrCode,
   Upload,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -650,6 +651,97 @@ const TeacherClasses = () => {
       setError('Không thể tải dữ liệu tổng quan');
     } finally {
       setLoadingOverview(false);
+    }
+  };
+
+  const handleExportOverview = () => {
+    if (!overviewData.students.length || !overviewData.sessions.length) {
+      setError('Không có dữ liệu để xuất');
+      return;
+    }
+
+    try {
+      // Prepare data for Excel
+      const excelData = [];
+
+      // Header row 1: Class info
+      excelData.push([
+        `Lớp: ${selectedClass.classCode} - ${selectedClass.className}`,
+        '',
+        '',
+        ...Array(overviewData.sessions.length).fill(''),
+        ''
+      ]);
+
+      // Header row 2: Column headers
+      const headerRow = [
+        'STT',
+        'MSSV',
+        'Họ và tên',
+        ...overviewData.sessions.map((session, index) => `Buổi ${index + 1}`),
+        'Tổng có mặt'
+      ];
+      excelData.push(headerRow);
+
+      // Data rows
+      overviewData.students.forEach((student, index) => {
+        const presentCount = overviewData.sessions.filter(
+          session => overviewData.records[student.uid]?.[session.id] === 'present'
+        ).length;
+
+        const row = [
+          index + 1,
+          student.studentId || 'N/A',
+          student.fullName,
+          ...overviewData.sessions.map(session => {
+            const status = overviewData.records[student.uid]?.[session.id];
+            return status === 'present' ? 1 : 0;
+          }),
+          `${presentCount}/${overviewData.sessions.length}`
+        ];
+        excelData.push(row);
+      });
+
+      // Add session names as a separate sheet or footer
+      excelData.push([]); // Empty row
+      excelData.push(['Thông tin các buổi điểm danh:']);
+      overviewData.sessions.forEach((session, index) => {
+        const date = session.date
+          ? new Date(session.date.seconds * 1000).toLocaleDateString('vi-VN', {
+              year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            })
+          : 'N/A';
+        excelData.push([`Buổi ${index + 1}:`, session.sessionNumber, date]);
+      });
+
+      // Create worksheet
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+
+      // Set column widths
+      const colWidths = [
+        { wch: 5 },  // STT
+        { wch: 12 }, // MSSV
+        { wch: 25 }, // Họ và tên
+        ...overviewData.sessions.map(() => ({ wch: 8 })), // Buổi 1, 2, 3...
+        { wch: 12 }  // Tổng
+      ];
+      ws['!cols'] = colWidths;
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Tổng quan điểm danh');
+
+      // Generate filename
+      const date = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
+      const filename = `TongQuan_${selectedClass.classCode}_${date}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(wb, filename);
+
+      setSuccess('Xuất file Excel thành công!');
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      setError('Không thể xuất file Excel: ' + error.message);
     }
   };
 
@@ -1466,13 +1558,24 @@ const TeacherClasses = () => {
                 <p>• <span className="font-semibold bg-green-100 text-green-900 px-2 py-0.5 rounded">1</span> = Có mặt</p>
                 <p>• <span className="font-semibold bg-red-100 text-red-900 px-2 py-0.5 rounded">0</span> = Vắng</p>
               </div>
-              <Button
-                type="button"
-                variant="primary"
-                onClick={() => setShowOverviewModal(false)}
-              >
-                Đóng
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleExportOverview}
+                  disabled={!overviewData.students.length || !overviewData.sessions.length}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Xuất Excel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => setShowOverviewModal(false)}
+                >
+                  Đóng
+                </Button>
+              </div>
             </div>
           </div>
         )}
