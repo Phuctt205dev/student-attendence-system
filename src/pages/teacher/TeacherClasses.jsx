@@ -12,7 +12,7 @@ import {
   batchEnrollStudents
 } from '../../services/class.service';
 import { createStudentAccount, batchCreateStudents } from '../../services/auth.service';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import {
   createAttendanceSession,
   getAttendancesByClass,
@@ -727,6 +727,83 @@ const TeacherClasses = () => {
       ];
       ws['!cols'] = colWidths;
 
+      // Apply styling to cells
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      const numStudentDataRows = overviewData.students.length;
+      const numSessionCols = overviewData.sessions.length;
+
+      // Define styles
+      const centerStyle = {
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { name: 'Times New Roman', sz: 11 }
+      };
+
+      const leftStyle = {
+        alignment: { horizontal: 'left', vertical: 'center' },
+        font: { name: 'Times New Roman', sz: 11 }
+      };
+
+      const greenStyle = {
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { name: 'Times New Roman', sz: 11 },
+        fill: { fgColor: { rgb: 'C6EFCE' } }
+      };
+
+      const redStyle = {
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { name: 'Times New Roman', sz: 11 },
+        fill: { fgColor: { rgb: 'FFC7CE' } }
+      };
+
+      const headerStyle = {
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { name: 'Times New Roman', sz: 11, bold: true },
+        fill: { fgColor: { rgb: 'D9D9D9' } }
+      };
+
+      // Apply styles to all cells
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          // Row 0: Class info (merged header)
+          if (R === 0) {
+            ws[cellAddress].s = centerStyle;
+          }
+          // Row 1: Column headers
+          else if (R === 1) {
+            ws[cellAddress].s = headerStyle;
+          }
+          // Student data rows (rows 2 to 2 + numStudentDataRows - 1)
+          else if (R >= 2 && R < 2 + numStudentDataRows) {
+            // Column C (index 2): Student names - left align
+            if (C === 2) {
+              ws[cellAddress].s = leftStyle;
+            }
+            // Attendance columns (starting from column D, index 3)
+            else if (C >= 3 && C < 3 + numSessionCols) {
+              const cellValue = ws[cellAddress].v;
+              if (cellValue === 1) {
+                ws[cellAddress].s = greenStyle;
+              } else if (cellValue === 0) {
+                ws[cellAddress].s = redStyle;
+              } else {
+                ws[cellAddress].s = centerStyle;
+              }
+            }
+            // Other columns (STT, MSSV, Total) - center align
+            else {
+              ws[cellAddress].s = centerStyle;
+            }
+          }
+          // Session info rows - left align
+          else {
+            ws[cellAddress].s = leftStyle;
+          }
+        }
+      }
+
       // Create workbook
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Tổng quan điểm danh');
@@ -735,8 +812,8 @@ const TeacherClasses = () => {
       const date = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
       const filename = `TongQuan_${selectedClass.classCode}_${date}.xlsx`;
 
-      // Download file
-      XLSX.writeFile(wb, filename);
+      // Download file with cell styles
+      XLSX.writeFile(wb, filename, { cellStyles: true });
 
       setSuccess('Xuất file Excel thành công!');
     } catch (error) {
