@@ -6,6 +6,7 @@ import RoleBasedRoute from './routes/RoleBasedRoute';
 // Auth pages
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ForgotPassword from './pages/auth/ForgotPassword';
 
 // Dashboard pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -22,6 +23,7 @@ function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
           {/* Protected routes - Admin */}
           <Route
