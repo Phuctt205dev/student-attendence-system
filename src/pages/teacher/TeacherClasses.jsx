@@ -273,7 +273,11 @@ const TeacherClasses = () => {
           const studentId = row[1]?.toString().trim(); // Column B (index 1)
           const fullName = row[2]?.toString().trim();  // Column C (index 2)
 
-          if (studentId && fullName) {
+          // Skip header row or invalid data
+          if (studentId && fullName &&
+              studentId !== 'MSSV' &&
+              fullName !== 'Họ và Tên' &&
+              fullName !== 'Họ và tên') {
             students.push({ studentId, fullName });
           }
         }
