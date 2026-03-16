@@ -1395,19 +1395,19 @@ const TeacherClasses = () => {
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-gray-100">
-                      <th className="border border-gray-300 px-3 py-2 text-center sticky left-0 bg-gray-100 z-10">
+                      <th className="border border-gray-300 px-3 py-2 text-center sticky left-0 bg-gray-100 z-20 font-semibold text-gray-900 min-w-[60px]">
                         STT
                       </th>
-                      <th className="border border-gray-300 px-3 py-2 text-left sticky left-12 bg-gray-100 z-10">
+                      <th className="border border-gray-300 px-3 py-2 text-left sticky left-[60px] bg-gray-100 z-20 font-semibold text-gray-900 min-w-[100px]">
                         MSSV
                       </th>
-                      <th className="border border-gray-300 px-3 py-2 text-left sticky left-32 bg-gray-100 z-10 min-w-[200px]">
+                      <th className="border border-gray-300 px-3 py-2 text-left sticky left-[160px] bg-gray-100 z-20 min-w-[200px] font-semibold text-gray-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                         Họ và tên
                       </th>
                       {overviewData.sessions.map((session, index) => (
                         <th
                           key={session.id}
-                          className="border border-gray-300 px-3 py-2 text-center min-w-[80px]"
+                          className="border border-gray-300 px-3 py-2 text-center min-w-[80px] font-semibold text-gray-900"
                           title={session.sessionNumber}
                         >
                           {index + 1}
@@ -1426,13 +1426,13 @@ const TeacherClasses = () => {
 
                       return (
                         <tr key={student.uid} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-3 py-2 text-center sticky left-0 bg-white">
+                          <td className="border border-gray-300 px-3 py-2 text-center sticky left-0 bg-white text-gray-900 z-10 font-medium min-w-[60px]">
                             {index + 1}
                           </td>
-                          <td className="border border-gray-300 px-3 py-2 sticky left-12 bg-white">
+                          <td className="border border-gray-300 px-3 py-2 sticky left-[60px] bg-white text-gray-900 z-10 font-medium min-w-[100px]">
                             {student.studentId || 'N/A'}
                           </td>
-                          <td className="border border-gray-300 px-3 py-2 sticky left-32 bg-white">
+                          <td className="border border-gray-300 px-3 py-2 sticky left-[160px] bg-white text-gray-900 z-10 min-w-[200px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                             {student.fullName}
                           </td>
                           {overviewData.sessions.map(session => {
