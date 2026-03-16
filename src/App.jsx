@@ -10,6 +10,7 @@ import Register from './pages/auth/Register';
 // Dashboard pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
+import TeacherClasses from './pages/teacher/TeacherClasses';
 import StudentDashboard from './pages/student/StudentDashboard';
 
 function App() {
@@ -40,6 +41,16 @@ function App() {
               <ProtectedRoute>
                 <RoleBasedRoute allowedRoles={['teacher']}>
                   <TeacherDashboard />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/classes"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['teacher']}>
+                  <TeacherClasses />
                 </RoleBasedRoute>
               </ProtectedRoute>
             }
