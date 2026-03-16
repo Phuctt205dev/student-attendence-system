@@ -350,3 +350,32 @@ export const searchStudents = async (searchTerm) => {
     return { success: false, error: error.message };
   }
 };
+
+// Batch enroll students to class
+export const batchEnrollStudents = async (classId, students) => {
+  const results = {
+    success: [],
+    failed: []
+  };
+
+  for (const student of students) {
+    try {
+      const result = await enrollStudent(classId, student);
+      if (result.success) {
+        results.success.push(student);
+      } else {
+        results.failed.push({
+          student,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      results.failed.push({
+        student,
+        error: error.message
+      });
+    }
+  }
+
+  return results;
+};

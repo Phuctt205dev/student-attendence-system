@@ -6,7 +6,7 @@ import {
   updateProfile,
   onAuthStateChanged
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { auth, db, secondaryAuth } from './firebase';
 
 // Register new user
@@ -229,4 +229,97 @@ export const createStudentAccount = async (studentId, fullName) => {
 
     return { success: false, error: error.message };
   }
+};
+
+// Helper function to find user by email
+const findUserByEmail = async (email) => {
+  try {
+    const q = query(
+      collection(db, 'users'),
+      where('email', '==', email),
+      limit(1)
+    );
+    const usersSnapshot = await getDocs(q);
+    if (usersSnapshot.empty) {
+      return { success: false, error: 'User not found' };
+    }
+    const userDoc = usersSnapshot.docs[0];
+    return {
+      success: true,
+      user: {
+        uid: userDoc.id,
+        ...userDoc.data()
+      }
+    };
+  } catch (error) {
+    console.error('Error finding user by email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Batch create student accounts from Excel import
+export const batchCreateStudents = async (studentsData, onProgress) => {
+  const results = {
+    success: [],
+    failed: [],
+    alreadyExists: []
+  };
+
+  for (let i = 0; i < studentsData.length; i++) {
+    const { studentId, fullName } = studentsData[i];
+
+    // Update progress
+    if (onProgress) {
+      onProgress({
+        current: i + 1,
+        total: studentsData.length,
+        currentStudent: `${studentId} - ${fullName}`
+      });
+    }
+
+    try {
+      const result = await createStudentAccount(studentId, fullName);
+
+      if (result.success) {
+        results.success.push({
+          studentId,
+          fullName,
+          student: result.student
+        });
+      } else {
+        if (result.error.includes('email-already-in-use') || result.error.includes('auth/email-already-in-use')) {
+          // Student already has an account, fetch their profile
+          const studentEmail = `${studentId}@gm.uit.edu.vn`;
+          const userResult = await findUserByEmail(studentEmail);
+          if (userResult.success) {
+            results.alreadyExists.push({
+              studentId,
+              fullName,
+              student: userResult.user
+            });
+          } else {
+            results.failed.push({
+              studentId,
+              fullName,
+              error: 'Tài khoản đã tồn tại nhưng không tìm thấy trong hệ thống'
+            });
+          }
+        } else {
+          results.failed.push({
+            studentId,
+            fullName,
+            error: result.error
+          });
+        }
+      }
+    } catch (error) {
+      results.failed.push({
+        studentId,
+        fullName,
+        error: error.message
+      });
+    }
+  }
+
+  return results;
 };

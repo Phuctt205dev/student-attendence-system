@@ -8,9 +8,11 @@ import {
   getClassStudents,
   removeStudent,
   searchStudents,
-  enrollStudent
+  enrollStudent,
+  batchEnrollStudents
 } from '../../services/class.service';
-import { createStudentAccount } from '../../services/auth.service';
+import { createStudentAccount, batchCreateStudents } from '../../services/auth.service';
+import * as XLSX from 'xlsx';
 import {
   createAttendanceSession,
   getAttendancesByClass,
@@ -28,7 +30,9 @@ import {
   UserPlus,
   Trash2,
   Eye,
-  QrCode
+  QrCode,
+  Upload,
+  FileSpreadsheet
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -70,7 +74,7 @@ const TeacherClasses = () => {
   // ── Add student form ───────────────────────────────────────────
   const [studentEmail, setStudentEmail] = useState('');
   const [addingStudent, setAddingStudent] = useState(false);
-  const [addStudentMode, setAddStudentMode] = useState('existing'); // 'existing' or 'new'
+  const [addStudentMode, setAddStudentMode] = useState('existing'); // 'existing', 'new', or 'excel'
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -78,6 +82,13 @@ const TeacherClasses = () => {
     studentId: '',
     fullName: ''
   });
+
+  // ── Excel upload state ─────────────────────────────────────────
+  const [excelFile, setExcelFile] = useState(null);
+  const [excelData, setExcelData] = useState([]);
+  const [processingExcel, setProcessingExcel] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, currentStudent: '' });
+  const [uploadResults, setUploadResults] = useState(null);
 
   // ── Create attendance session form ─────────────────────────────
   const [sessionName, setSessionName] = useState('');
@@ -200,6 +211,11 @@ const TeacherClasses = () => {
     setSearchResults([]);
     setSelectedStudent(null);
     setNewStudentData({ studentId: '', fullName: '' });
+    // Reset Excel state
+    setExcelFile(null);
+    setExcelData([]);
+    setUploadResults(null);
+    setUploadProgress({ current: 0, total: 0, currentStudent: '' });
     setError('');
   };
 
@@ -224,6 +240,124 @@ const TeacherClasses = () => {
     setSelectedStudent(student);
     setStudentSearchTerm(`${student.studentId || ''} - ${student.fullName}`);
     setSearchResults([]);
+  };
+
+  const handleExcelFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    if (!['xlsx', 'xls'].includes(fileExtension)) {
+      setError('Vui lòng chọn file Excel (.xlsx hoặc .xls)');
+      return;
+    }
+
+    setExcelFile(file);
+    setError('');
+
+    // Read and parse Excel file
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+        // Parse data (assuming columns: B = studentId, C = fullName)
+        // Skip first row if it's a header
+        const students = [];
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          const studentId = row[1]?.toString().trim(); // Column B (index 1)
+          const fullName = row[2]?.toString().trim();  // Column C (index 2)
+
+          if (studentId && fullName) {
+            students.push({ studentId, fullName });
+          }
+        }
+
+        if (students.length === 0) {
+          setError('Không tìm thấy dữ liệu sinh viên trong file Excel. Vui lòng kiểm tra lại định dạng (cột B: MSSV, cột C: Họ tên)');
+          setExcelData([]);
+        } else {
+          setExcelData(students);
+          setError('');
+        }
+      } catch (error) {
+        console.error('Error parsing Excel:', error);
+        setError('Không thể đọc file Excel. Vui lòng kiểm tra lại file');
+        setExcelData([]);
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleProcessExcel = async () => {
+    if (excelData.length === 0) {
+      setError('Không có dữ liệu để xử lý');
+      return;
+    }
+
+    setProcessingExcel(true);
+    setAddingStudent(true);
+    setError('');
+    setUploadResults(null);
+
+    try {
+      // Step 1: Batch create student accounts
+      const createResults = await batchCreateStudents(excelData, (progress) => {
+        setUploadProgress(progress);
+      });
+
+      // Step 2: Collect all students (both newly created and already existing)
+      const allStudents = [
+        ...createResults.success.map(item => item.student),
+        ...createResults.alreadyExists.map(item => item.student)
+      ];
+
+      // Step 3: Batch enroll students to class
+      const enrollResults = await batchEnrollStudents(selectedClass.id, allStudents);
+
+      // Combine results
+      const finalResults = {
+        totalProcessed: excelData.length,
+        accountsCreated: createResults.success.length,
+        accountsExisted: createResults.alreadyExists.length,
+        enrolled: enrollResults.success.length,
+        failed: [
+          ...createResults.failed,
+          ...enrollResults.failed.map(item => ({
+            studentId: item.student.studentId,
+            fullName: item.student.fullName,
+            error: 'Không thể thêm vào lớp: ' + item.error
+          }))
+        ]
+      };
+
+      setUploadResults(finalResults);
+
+      // Reload class data
+      loadClasses();
+      if (showClassDetailModal) {
+        const studentsResult = await getClassStudents(selectedClass.id);
+        if (studentsResult.success) setClassStudents(studentsResult.students);
+      }
+
+      if (finalResults.failed.length === 0) {
+        setSuccess(`Thêm ${finalResults.enrolled} sinh viên thành công!`);
+      } else {
+        setError(`Đã thêm ${finalResults.enrolled} sinh viên. ${finalResults.failed.length} sinh viên thất bại.`);
+      }
+    } catch (error) {
+      console.error('Error processing Excel:', error);
+      setError('Có lỗi xảy ra khi xử lý file Excel: ' + error.message);
+    } finally {
+      setProcessingExcel(false);
+      setAddingStudent(false);
+    }
   };
 
   const handleAddStudent = async (e) => {
@@ -603,131 +737,278 @@ const TeacherClasses = () => {
           <p className="text-sm text-gray-600">Lớp: <span className="font-semibold">{selectedClass?.classCode} - {selectedClass?.className}</span></p>
         </div>
 
-        {/* Mode selector */}
+        {/* Mode selector with 3 tabs */}
         <div className="mb-6 flex gap-2 p-1 bg-gray-100 rounded-lg">
           <button
             type="button"
             onClick={() => setAddStudentMode('existing')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
               addStudentMode === 'existing'
                 ? 'bg-white text-primary-700 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            Sinh viên đã có tài khoản
+            Đã có TK
           </button>
           <button
             type="button"
             onClick={() => setAddStudentMode('new')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
               addStudentMode === 'new'
                 ? 'bg-white text-primary-700 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            Tạo sinh viên mới
+            Tạo mới
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddStudentMode('excel')}
+            className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
+              addStudentMode === 'excel'
+                ? 'bg-white text-primary-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4 inline mr-1" />
+            Excel
           </button>
         </div>
 
         {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-sm text-red-600">{error}</p></div>}
 
-        <form onSubmit={handleAddStudent} className="space-y-4">
-          {addStudentMode === 'existing' ? (
-            <>
-              {/* Search existing student */}
-              <div className="relative">
-                <Input
-                  label="Tìm kiếm sinh viên"
-                  type="text"
-                  placeholder="Nhập mã sinh viên, họ tên hoặc email..."
-                  value={studentSearchTerm}
-                  onChange={(e) => handleStudentSearch(e.target.value)}
-                  autoComplete="off"
-                />
-                {searchResults.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {searchResults.map((student) => (
-                      <button
-                        key={student.uid}
-                        type="button"
-                        onClick={() => handleSelectStudent(student)}
-                        className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                      >
-                        <p className="font-medium text-gray-900">{student.fullName}</p>
-                        <p className="text-sm text-gray-600">{student.email}</p>
-                        {student.studentId && (
-                          <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>
-                        )}
-                      </button>
+        {addStudentMode === 'excel' ? (
+          // Excel Upload Mode
+          <div className="space-y-4">
+            {!processingExcel && !uploadResults ? (
+              <>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                  <label htmlFor="excel-upload" className="cursor-pointer">
+                    <span className="text-primary-600 hover:text-primary-700 font-medium">
+                      Chọn file Excel
+                    </span>
+                    <input
+                      id="excel-upload"
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleExcelFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Hỗ trợ file .xlsx và .xls
+                  </p>
+                </div>
+
+                {excelFile && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-900 font-medium mb-1">
+                      📄 {excelFile.name}
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      {excelData.length} sinh viên được tìm thấy
+                    </p>
+                  </div>
+                )}
+
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+                  <p className="font-medium text-gray-900 mb-2">📋 Hướng dẫn:</p>
+                  <ul className="list-disc list-inside space-y-1 text-gray-700">
+                    <li><strong>Cột B:</strong> Mã số sinh viên (22520001, 22520002...)</li>
+                    <li><strong>Cột C:</strong> Họ và tên đầy đủ</li>
+                    <li>Dòng đầu tiên sẽ được bỏ qua (header)</li>
+                  </ul>
+                  <p className="mt-2 text-gray-600">
+                    💡 Hệ thống tự động tạo email: <strong>[MSSV]@gm.uit.edu.vn</strong>, mật khẩu: <strong>11111111</strong>
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAddStudentModal(false)}
+                    fullWidth
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleProcessExcel}
+                    fullWidth
+                    disabled={excelData.length === 0}
+                    icon={<Upload className="w-4 h-4" />}
+                  >
+                    Xử lý ({excelData.length} SV)
+                  </Button>
+                </div>
+              </>
+            ) : processingExcel ? (
+              // Processing view
+              <div className="py-8">
+                <div className="text-center mb-6">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
+                  <p className="text-sm font-medium text-gray-900">
+                    Đang xử lý... {uploadProgress.current}/{uploadProgress.total}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    {uploadProgress.currentStudent}
+                  </p>
+                </div>
+
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ) : uploadResults ? (
+              // Results view
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-xs text-green-700">Tài khoản mới</p>
+                    <p className="text-2xl font-bold text-green-900">{uploadResults.accountsCreated}</p>
+                  </div>
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-700">Đã có tài khoản</p>
+                    <p className="text-2xl font-bold text-blue-900">{uploadResults.accountsExisted}</p>
+                  </div>
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <p className="text-xs text-purple-700">Đã thêm vào lớp</p>
+                    <p className="text-2xl font-bold text-purple-900">{uploadResults.enrolled}</p>
+                  </div>
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-xs text-red-700">Thất bại</p>
+                    <p className="text-2xl font-bold text-red-900">{uploadResults.failed.length}</p>
+                  </div>
+                </div>
+
+                {uploadResults.failed.length > 0 && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg max-h-40 overflow-y-auto">
+                    <p className="text-sm font-medium text-red-900 mb-2">Danh sách lỗi:</p>
+                    {uploadResults.failed.map((item, index) => (
+                      <div key={index} className="text-xs text-red-800 mb-1">
+                        • {item.studentId} - {item.fullName}: {item.error}
+                      </div>
                     ))}
                   </div>
                 )}
-              </div>
 
-              {selectedStudent && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-800 font-medium mb-1">✓ Đã chọn sinh viên:</p>
-                  <p className="font-medium text-gray-900">{selectedStudent.fullName}</p>
-                  <p className="text-sm text-gray-600">{selectedStudent.email}</p>
-                  {selectedStudent.studentId && (
-                    <p className="text-xs text-gray-500">MSSV: {selectedStudent.studentId}</p>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => setShowAddStudentModal(false)}
+                  fullWidth
+                >
+                  Đóng
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          // Existing form modes (existing/new)
+          <form onSubmit={handleAddStudent} className="space-y-4">
+            {addStudentMode === 'existing' ? (
+              <>
+                {/* Search existing student */}
+                <div className="relative">
+                  <Input
+                    label="Tìm kiếm sinh viên"
+                    type="text"
+                    placeholder="Nhập mã sinh viên, họ tên hoặc email..."
+                    value={studentSearchTerm}
+                    onChange={(e) => handleStudentSearch(e.target.value)}
+                    autoComplete="off"
+                  />
+                  {searchResults.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {searchResults.map((student) => (
+                        <button
+                          key={student.uid}
+                          type="button"
+                          onClick={() => handleSelectStudent(student)}
+                          className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                        >
+                          <p className="font-medium text-gray-900">{student.fullName}</p>
+                          <p className="text-sm text-gray-600">{student.email}</p>
+                          {student.studentId && (
+                            <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-              )}
 
-              <p className="text-xs text-gray-500">
-                💡 Nhập ít nhất 2 ký tự để tìm kiếm sinh viên đã đăng ký trong hệ thống
-              </p>
-            </>
-          ) : (
-            <>
-              {/* Create new student */}
-              <Input
-                label="Mã số sinh viên"
-                type="text"
-                placeholder="Ví dụ: 22520001"
-                value={newStudentData.studentId}
-                onChange={(e) => setNewStudentData({ ...newStudentData, studentId: e.target.value })}
-                required
-              />
+                {selectedStudent && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800 font-medium mb-1">✓ Đã chọn sinh viên:</p>
+                    <p className="font-medium text-gray-900">{selectedStudent.fullName}</p>
+                    <p className="text-sm text-gray-600">{selectedStudent.email}</p>
+                    {selectedStudent.studentId && (
+                      <p className="text-xs text-gray-500">MSSV: {selectedStudent.studentId}</p>
+                    )}
+                  </div>
+                )}
 
-              <Input
-                label="Họ và tên"
-                type="text"
-                placeholder="Ví dụ: Nguyễn Văn A"
-                value={newStudentData.fullName}
-                onChange={(e) => setNewStudentData({ ...newStudentData, fullName: e.target.value })}
-                required
-              />
-
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-                <p className="text-blue-900 font-medium mb-1">ℹ️ Thông tin tài khoản sẽ tạo:</p>
-                <p className="text-blue-800">
-                  <strong>Email:</strong> {newStudentData.studentId || '[MSSV]'}@gm.uit.edu.vn
+                <p className="text-xs text-gray-500">
+                  💡 Nhập ít nhất 2 ký tự để tìm kiếm sinh viên đã đăng ký trong hệ thống
                 </p>
-                <p className="text-blue-800">
-                  <strong>Mật khẩu mặc định:</strong> 11111111
-                </p>
-                <p className="text-xs text-blue-700 mt-2">
-                  💡 Sinh viên có thể đổi mật khẩu sau khi đăng nhập lần đầu
-                </p>
-              </div>
-            </>
-          )}
+              </>
+            ) : (
+              <>
+                {/* Create new student */}
+                <Input
+                  label="Mã số sinh viên"
+                  type="text"
+                  placeholder="Ví dụ: 22520001"
+                  value={newStudentData.studentId}
+                  onChange={(e) => setNewStudentData({ ...newStudentData, studentId: e.target.value })}
+                  required
+                />
 
-          <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => setShowAddStudentModal(false)} fullWidth disabled={addingStudent}>Hủy</Button>
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              loading={addingStudent}
-              disabled={addingStudent || (addStudentMode === 'existing' && !selectedStudent)}
-            >
-              {addStudentMode === 'existing' ? 'Thêm sinh viên' : 'Tạo tài khoản và thêm'}
-            </Button>
-          </div>
-        </form>
+                <Input
+                  label="Họ và tên"
+                  type="text"
+                  placeholder="Ví dụ: Nguyễn Văn A"
+                  value={newStudentData.fullName}
+                  onChange={(e) => setNewStudentData({ ...newStudentData, fullName: e.target.value })}
+                  required
+                />
+
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                  <p className="text-blue-900 font-medium mb-1">ℹ️ Thông tin tài khoản sẽ tạo:</p>
+                  <p className="text-blue-800">
+                    <strong>Email:</strong> {newStudentData.studentId || '[MSSV]'}@gm.uit.edu.vn
+                  </p>
+                  <p className="text-blue-800">
+                    <strong>Mật khẩu mặc định:</strong> 11111111
+                  </p>
+                  <p className="text-xs text-blue-700 mt-2">
+                    💡 Sinh viên có thể đổi mật khẩu sau khi đăng nhập lần đầu
+                  </p>
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setShowAddStudentModal(false)} fullWidth disabled={addingStudent}>Hủy</Button>
+              <Button
+                type="submit"
+                variant="primary"
+                fullWidth
+                loading={addingStudent}
+                disabled={addingStudent || (addStudentMode === 'existing' && !selectedStudent)}
+              >
+                {addStudentMode === 'existing' ? 'Thêm sinh viên' : 'Tạo tài khoản và thêm'}
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* ── Modal: Chi tiết lớp ────────────────────────────────── */}
