@@ -58,10 +58,12 @@ const TeacherClasses = () => {
   const [showManualAttendanceModal, setShowManualAttendanceModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showOverviewModal, setShowOverviewModal] = useState(false);
+  const [showSessionDetailModal, setShowSessionDetailModal] = useState(false);
 
   // ── Selected items ─────────────────────────────────────────────
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
+  const [sessionDetailStudents, setSessionDetailStudents] = useState({ present: [], absent: [] });
   const [classStudents, setClassStudents] = useState([]);
   const [attendanceSessions, setAttendanceSessions] = useState([]);
 
@@ -600,6 +602,30 @@ const TeacherClasses = () => {
       await loadAttendanceSessions(selectedClass.id);
     } else {
       setError(result.error || 'Không thể xóa buổi điểm danh');
+    }
+  };
+
+  // ── Handlers: Session Detail ──────────────────────────────────
+  const handleOpenSessionDetail = async (session) => {
+    setSelectedSession(session);
+    setShowSessionDetailModal(true);
+    setError('');
+
+    try {
+      const result = await getAttendanceDetails(session.id, selectedClass.id);
+
+      if (result.success) {
+        const presentStudents = result.students.filter(s => s.status === 'present');
+        const absentStudents = result.students.filter(s => s.status === 'absent');
+
+        setSessionDetailStudents({
+          present: sortStudentsByStudentId(presentStudents),
+          absent: sortStudentsByStudentId(absentStudents)
+        });
+      }
+    } catch (error) {
+      console.error('Error loading session details:', error);
+      setError('Không thể tải chi tiết buổi điểm danh');
     }
   };
 
@@ -1270,10 +1296,11 @@ const TeacherClasses = () => {
                 <div className="flex gap-2">
                   {attendanceSessions.length > 0 && (
                     <Button
-                      variant="outline"
+                      variant="primary"
                       size="sm"
                       icon={<FileSpreadsheet className="w-4 h-4" />}
                       onClick={handleOpenOverview}
+                      className="bg-green-600 hover:bg-green-700 border-green-600 hover:border-green-700"
                     >
                       Tổng quan
                     </Button>
@@ -1302,8 +1329,8 @@ const TeacherClasses = () => {
                     return (
                       <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                         <div className="flex justify-between items-center">
-                          <div>
-                            <p className="font-medium text-gray-900">{session.sessionNumber}</p>
+                          <div className="flex-1 cursor-pointer" onClick={() => handleOpenSessionDetail(session)}>
+                            <p className="font-medium text-gray-900 hover:text-primary-600 transition-colors">{session.sessionNumber}</p>
                             <p className="text-xs text-gray-500">
                               {session.date && new Date(session.date.seconds * 1000).toLocaleDateString('vi-VN', {
                                 year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -1315,6 +1342,13 @@ const TeacherClasses = () => {
                             </div>
                           </div>
                           <div className="flex gap-1 flex-shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              icon={<Eye className="w-4 h-4" />}
+                              onClick={() => handleOpenSessionDetail(session)}
+                              title="Xem chi tiết"
+                            />
                             <Button
                               variant="outline"
                               size="sm"
@@ -1531,6 +1565,100 @@ const TeacherClasses = () => {
             ) : null}
 
             <Button type="button" variant="outline" onClick={() => setShowQRModal(false)} fullWidth>Đóng</Button>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Modal: Chi tiết buổi điểm danh ─────────────────────── */}
+      <Modal
+        isOpen={showSessionDetailModal}
+        onClose={() => setShowSessionDetailModal(false)}
+        title="Chi tiết buổi điểm danh"
+        size="lg"
+      >
+        {selectedSession && (
+          <div className="space-y-4">
+            <div className="border-b pb-3">
+              <p className="font-semibold text-gray-900 text-lg">{selectedSession.sessionNumber}</p>
+              <p className="text-sm text-gray-500">
+                Lớp: {selectedClass?.classCode} - {selectedClass?.className}
+              </p>
+              <p className="text-xs text-gray-500">
+                {selectedSession.date && new Date(selectedSession.date.seconds * 1000).toLocaleDateString('vi-VN', {
+                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                })}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg text-center">
+                <p className="text-3xl font-bold text-green-700">{sessionDetailStudents.present.length}</p>
+                <p className="text-sm text-green-600 font-medium">Có mặt</p>
+              </div>
+              <div className="p-4 bg-red-50 border-2 border-red-200 rounded-lg text-center">
+                <p className="text-3xl font-bold text-red-700">{sessionDetailStudents.absent.length}</p>
+                <p className="text-sm text-red-600 font-medium">Vắng</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Present students */}
+              <div className="border-2 border-green-200 rounded-lg p-3 bg-green-50">
+                <h4 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+                  <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                  Sinh viên có mặt ({sessionDetailStudents.present.length})
+                </h4>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {sessionDetailStudents.present.length === 0 ? (
+                    <p className="text-sm text-green-700 text-center py-4">Chưa có sinh viên nào</p>
+                  ) : (
+                    sessionDetailStudents.present.map((student) => (
+                      <div key={student.uid} className="p-2 bg-white rounded border border-green-200">
+                        <p className="font-medium text-gray-900 text-sm">{student.fullName}</p>
+                        <p className="text-xs text-gray-600">{student.studentId || 'N/A'}</p>
+                        {student.method && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {student.method === 'face' ? '📸 Nhận diện khuôn mặt' :
+                             student.method === 'qr' ? '📱 QR Code' :
+                             student.method === 'manual' ? '✍️ Thủ công' : ''}
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Absent students */}
+              <div className="border-2 border-red-200 rounded-lg p-3 bg-red-50">
+                <h4 className="font-semibold text-red-900 mb-3 flex items-center gap-2">
+                  <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+                  Sinh viên vắng ({sessionDetailStudents.absent.length})
+                </h4>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {sessionDetailStudents.absent.length === 0 ? (
+                    <p className="text-sm text-red-700 text-center py-4">Không có sinh viên nào vắng</p>
+                  ) : (
+                    sessionDetailStudents.absent.map((student) => (
+                      <div key={student.uid} className="p-2 bg-white rounded border border-red-200">
+                        <p className="font-medium text-gray-900 text-sm">{student.fullName}</p>
+                        <p className="text-xs text-gray-600">{student.studentId || 'N/A'}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => setShowSessionDetailModal(false)}
+              >
+                Đóng
+              </Button>
+            </div>
           </div>
         )}
       </Modal>
