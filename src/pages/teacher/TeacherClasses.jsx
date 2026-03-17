@@ -1079,18 +1079,6 @@ const TeacherClasses = () => {
                   </div>
                 )}
 
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs">
-                  <p className="font-medium text-gray-900 mb-2">📋 Hướng dẫn:</p>
-                  <ul className="list-disc list-inside space-y-1 text-gray-700">
-                    <li><strong>Cột B:</strong> Mã số sinh viên (22520001, 22520002...)</li>
-                    <li><strong>Cột C:</strong> Họ và tên đầy đủ</li>
-                    <li>Dòng đầu tiên sẽ được bỏ qua (header)</li>
-                  </ul>
-                  <p className="mt-2 text-gray-600">
-                    💡 Hệ thống tự động tạo email: <strong>[MSSV]@gm.uit.edu.vn</strong>, mật khẩu: <strong>11111111</strong>
-                  </p>
-                </div>
-
                 <div className="flex gap-3 pt-4">
                   <Button
                     type="button"
@@ -1221,10 +1209,6 @@ const TeacherClasses = () => {
                     )}
                   </div>
                 )}
-
-                <p className="text-xs text-gray-500">
-                  💡 Nhập ít nhất 2 ký tự để tìm kiếm sinh viên đã đăng ký trong hệ thống
-                </p>
               </>
             ) : (
               <>
@@ -1246,19 +1230,6 @@ const TeacherClasses = () => {
                   onChange={(e) => setNewStudentData({ ...newStudentData, fullName: e.target.value })}
                   required
                 />
-
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-                  <p className="text-blue-900 font-medium mb-1">ℹ️ Thông tin tài khoản sẽ tạo:</p>
-                  <p className="text-blue-800">
-                    <strong>Email:</strong> {newStudentData.studentId || '[MSSV]'}@gm.uit.edu.vn
-                  </p>
-                  <p className="text-blue-800">
-                    <strong>Mật khẩu mặc định:</strong> 11111111
-                  </p>
-                  <p className="text-xs text-blue-700 mt-2">
-                    💡 Sinh viên có thể đổi mật khẩu sau khi đăng nhập lần đầu
-                  </p>
-                </div>
               </>
             )}
 
@@ -1300,7 +1271,7 @@ const TeacherClasses = () => {
                       size="sm"
                       icon={<FileSpreadsheet className="w-4 h-4" />}
                       onClick={handleOpenOverview}
-                      className="bg-green-600 hover:bg-green-700 border-green-600 hover:border-green-700"
+                      className="bg-lime-500 hover:bg-lime-600 border-lime-500 hover:border-lime-600"
                     >
                       Tổng quan
                     </Button>
@@ -1432,9 +1403,6 @@ const TeacherClasses = () => {
             onChange={(e) => setSessionName(e.target.value)}
             required
           />
-          <p className="text-xs text-gray-500">
-            Sau khi tạo, bạn có thể chọn <strong>điểm danh thủ công</strong> hoặc <strong>tạo mã QR</strong> cho sinh viên quét.
-          </p>
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setShowCreateAttendanceModal(false)} fullWidth disabled={creatingAttendance}>Hủy</Button>
             <Button type="submit" variant="primary" fullWidth loading={creatingAttendance} disabled={creatingAttendance}>Tạo buổi</Button>
@@ -1460,10 +1428,6 @@ const TeacherClasses = () => {
               </div>
             ) : (
               <>
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                  Tích vào ô để đánh dấu <strong>có mặt</strong>. Bỏ tích để đánh dấu <strong>vắng</strong>.
-                </div>
-
                 <div className="space-y-2 max-h-96 overflow-y-auto border rounded-lg p-3">
                   {classStudents.map((student) => {
                     const isPresent = attendanceRecords[student.uid]?.status === 'present';
