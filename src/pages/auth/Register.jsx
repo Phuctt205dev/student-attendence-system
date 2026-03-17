@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, UserPlus, IdCard, Building } from 'lucide-react';
+import { Mail, Lock, User, UserPlus, Building } from 'lucide-react';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
 import { registerUser } from '../../services/auth.service';
-import { isValidEmail, isValidPassword, isValidStudentId } from '../../utils/validators';
+import { isValidEmail, isValidPassword } from '../../utils/validators';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -15,7 +15,6 @@ const Register = () => {
     password: '',
     confirmPassword: '',
     role: 'student',
-    studentId: '',
     department: ''
   });
   const [errors, setErrors] = useState({});
@@ -58,10 +57,6 @@ const Register = () => {
       newErrors.confirmPassword = 'Mật khẩu xác nhận không khớp';
     }
 
-    if (formData.role === 'student' && formData.studentId && !isValidStudentId(formData.studentId)) {
-      newErrors.studentId = 'Mã sinh viên phải có 7 chữ số';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -79,7 +74,9 @@ const Register = () => {
     try {
       const additionalData = {};
       if (formData.role === 'student') {
-        additionalData.studentId = formData.studentId;
+        // Extract studentId from email (part before @)
+        const emailPrefix = formData.email.split('@')[0];
+        additionalData.studentId = emailPrefix;
         additionalData.department = formData.department;
       } else if (formData.role === 'teacher') {
         additionalData.department = formData.department;
@@ -213,29 +210,16 @@ const Register = () => {
           </div>
 
           {formData.role === 'student' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <Input
-                label="Mã sinh viên"
-                type="text"
-                name="studentId"
-                value={formData.studentId}
-                onChange={handleChange}
-                placeholder="2024001"
-                icon={<IdCard className="w-5 h-5" />}
-                error={errors.studentId}
-                helperText="7 chữ số"
-              />
-
-              <Input
-                label="Khoa"
-                type="text"
-                name="department"
-                value={formData.department}
-                onChange={handleChange}
-                placeholder="Công nghệ thông tin"
-                icon={<Building className="w-5 h-5" />}
-              />
-            </div>
+            <Input
+              label="Khoa"
+              type="text"
+              name="department"
+              value={formData.department}
+              onChange={handleChange}
+              placeholder="Công nghệ thông tin"
+              icon={<Building className="w-5 h-5" />}
+              helperText="Mã sinh viên sẽ được tự động lấy từ email"
+            />
           )}
 
           {(formData.role === 'teacher' || formData.role === 'admin') && (

@@ -5,8 +5,6 @@ import { logoutUser } from '../services/auth.service';
 import {
   LayoutDashboard,
   BookOpen,
-  ClipboardList,
-  Settings,
   LogOut,
   Menu,
   X,
@@ -32,18 +30,6 @@ const StudentLayout = ({ children }) => {
       name: 'Lớp học',
       href: '/student/classes',
       icon: BookOpen
-    },
-    {
-      name: 'Lịch sử điểm danh',
-      href: '/student/attendance',
-      icon: ClipboardList,
-      disabled: true
-    },
-    {
-      name: 'Cài đặt',
-      href: '/student/settings',
-      icon: Settings,
-      disabled: true
     }
   ];
 
