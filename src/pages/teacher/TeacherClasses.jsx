@@ -911,26 +911,28 @@ const TeacherClasses = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {classes.map((classItem) => (
-              <Card key={classItem.id} className="hover:shadow-lg transition-shadow">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-xl text-gray-900 mb-1">{classItem.classCode}</h3>
-                    <p className="text-gray-700 font-medium">{classItem.className}</p>
+              <Card key={classItem.id} className="hover:shadow-lg transition-shadow flex flex-col h-full">
+                <div className="flex-1">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-xl text-gray-900 mb-1">{classItem.classCode}</h3>
+                      <p className="text-gray-700 font-medium">{classItem.className}</p>
+                    </div>
+                    <span className="bg-blue-100 text-blue-800 text-sm font-semibold px-3 py-1 rounded-full">
+                      {classItem.studentCount || 0} SV
+                    </span>
                   </div>
-                  <span className="bg-blue-100 text-blue-800 text-sm font-semibold px-3 py-1 rounded-full">
-                    {classItem.studentCount || 0} SV
-                  </span>
+
+                  {classItem.description && (
+                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{classItem.description}</p>
+                  )}
+
+                  {classItem.schedule && (
+                    <div className="mb-4 p-2 bg-gray-50 rounded text-sm text-gray-700">
+                      📅 {classItem.schedule}
+                    </div>
+                  )}
                 </div>
-
-                {classItem.description && (
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">{classItem.description}</p>
-                )}
-
-                {classItem.schedule && (
-                  <div className="mb-4 p-2 bg-gray-50 rounded text-sm text-gray-700">
-                    📅 {classItem.schedule}
-                  </div>
-                )}
 
                 <div className="flex gap-2 mt-4">
                   <Button
