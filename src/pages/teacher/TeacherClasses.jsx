@@ -33,7 +33,8 @@ import {
   QrCode,
   Upload,
   FileSpreadsheet,
-  FileText
+  FileText,
+  CheckCircle
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -702,6 +703,7 @@ const TeacherClasses = () => {
         `Lớp: ${selectedClass.classCode} - ${selectedClass.className}`,
         '',
         '',
+        '',
         ...Array(overviewData.sessions.length).fill(''),
         ''
       ]);
@@ -711,6 +713,7 @@ const TeacherClasses = () => {
         'STT',
         'MSSV',
         'Họ và tên',
+        'Khuôn mặt',
         ...overviewData.sessions.map((session) => session.sessionNumber),
         'Tổng có mặt'
       ];
@@ -726,6 +729,7 @@ const TeacherClasses = () => {
           index + 1,
           student.studentId || 'N/A',
           student.fullName,
+          student.faceEmbedding && student.faceEmbedding.length > 0 ? 1 : 0,
           ...overviewData.sessions.map(session => {
             const status = overviewData.records[student.uid]?.[session.id];
             return status === 'present' ? 1 : 0;
@@ -743,6 +747,7 @@ const TeacherClasses = () => {
         { wch: 5 },  // STT
         { wch: 12 }, // MSSV
         { wch: 25 }, // Họ và tên
+        { wch: 10 }, // Khuôn mặt
         ...overviewData.sessions.map(() => ({ wch: 8 })), // Buổi 1, 2, 3...
         { wch: 12 }  // Tổng
       ];
@@ -815,8 +820,19 @@ const TeacherClasses = () => {
             if (C === 2) {
               ws[cellAddress].s = leftStyle;
             }
-            // Attendance columns (starting from column D, index 3)
-            else if (C >= 3 && C < 3 + numSessionCols) {
+            // Column D (index 3): Face data - green/red style
+            else if (C === 3) {
+              const cellValue = ws[cellAddress].v;
+              if (cellValue === 1) {
+                ws[cellAddress].s = greenStyle;
+              } else if (cellValue === 0) {
+                ws[cellAddress].s = redStyle;
+              } else {
+                ws[cellAddress].s = centerStyle;
+              }
+            }
+            // Attendance columns (starting from column E, index 4)
+            else if (C >= 4 && C < 4 + numSessionCols) {
               const cellValue = ws[cellAddress].v;
               if (cellValue === 1) {
                 ws[cellAddress].s = greenStyle;
@@ -1375,8 +1391,13 @@ const TeacherClasses = () => {
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {classStudents.map((student) => (
                     <div key={student.uid} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">{student.fullName}</p>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">{student.fullName}</p>
+                          {student.faceEmbedding && student.faceEmbedding.length > 0 && (
+                            <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" title="Đã có dữ liệu khuôn mặt" />
+                          )}
+                        </div>
                         <p className="text-sm text-gray-600">{student.email}</p>
                         {student.studentId && <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>}
                       </div>
@@ -1671,6 +1692,9 @@ const TeacherClasses = () => {
                       <th className="border border-gray-300 px-3 py-2 text-left sticky left-[160px] bg-gray-100 z-20 min-w-[200px] font-semibold text-gray-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                         Họ và tên
                       </th>
+                      <th className="border border-gray-300 px-3 py-2 text-center bg-gray-100 font-semibold text-gray-900 min-w-[100px]">
+                        Khuôn mặt
+                      </th>
                       {overviewData.sessions.map((session) => (
                         <th
                           key={session.id}
@@ -1703,6 +1727,13 @@ const TeacherClasses = () => {
                           </td>
                           <td className="border border-gray-300 px-3 py-2 sticky left-[160px] bg-white text-gray-900 z-10 min-w-[200px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                             {student.fullName}
+                          </td>
+                          <td className={`border border-gray-300 px-3 py-2 text-center font-semibold ${
+                            student.faceEmbedding && student.faceEmbedding.length > 0
+                              ? 'bg-green-100 text-green-900'
+                              : 'bg-red-100 text-red-900'
+                          }`}>
+                            {student.faceEmbedding && student.faceEmbedding.length > 0 ? '1' : '0'}
                           </td>
                           {overviewData.sessions.map(session => {
                             const status = overviewData.records[student.uid]?.[session.id];
