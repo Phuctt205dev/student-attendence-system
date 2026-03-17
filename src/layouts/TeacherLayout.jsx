@@ -5,8 +5,6 @@ import { logoutUser } from '../services/auth.service';
 import {
   LayoutDashboard,
   BookOpen,
-  TrendingUp,
-  Settings,
   LogOut,
   Menu,
   X,
@@ -29,18 +27,6 @@ const TeacherLayout = ({ children }) => {
       name: 'Lớp học',
       href: '/teacher/classes',
       icon: BookOpen
-    },
-    {
-      name: 'Thống kê',
-      href: '/teacher/statistics',
-      icon: TrendingUp,
-      disabled: true
-    },
-    {
-      name: 'Cài đặt',
-      href: '/teacher/settings',
-      icon: Settings,
-      disabled: true
     }
   ];
 
