@@ -4,7 +4,10 @@ import {
   signOut,
   sendPasswordResetEmail,
   updateProfile,
-  onAuthStateChanged
+  onAuthStateChanged,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  verifyBeforeUpdateEmail
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { auth, db, secondaryAuth } from './firebase';
@@ -164,6 +167,115 @@ export const updateUserProfile = async (uid, updates) => {
     return { success: true };
   } catch (error) {
     console.error('Error updating profile:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Reauthenticate user with password before sensitive operations
+export const reauthenticateUser = async (currentPassword) => {
+  try {
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      return { success: false, error: 'No user is currently signed in' };
+    }
+
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error reauthenticating user:', error);
+
+    if (error.code === 'auth/wrong-password') {
+      return { success: false, error: 'Mật khẩu hiện tại không đúng' };
+    } else if (error.code === 'auth/too-many-requests') {
+      return { success: false, error: 'Quá nhiều lần thử. Vui lòng thử lại sau' };
+    }
+
+    return { success: false, error: error.message };
+  }
+};
+
+// Send email verification for email change (requires recent authentication)
+export const sendEmailChangeVerification = async (newEmail, currentPassword) => {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      return { success: false, error: 'No user is currently signed in' };
+    }
+
+    // Step 1: Reauthenticate user
+    const reauthResult = await reauthenticateUser(currentPassword);
+    if (!reauthResult.success) {
+      return reauthResult;
+    }
+
+    // Step 2: Configure action code settings (same as password reset)
+    const actionCodeSettings = {
+      url: window.location.origin + '/#/login',
+      handleCodeInApp: false, // Firebase handles the verification
+    };
+
+    // Step 3: Send verification email to new email address
+    await verifyBeforeUpdateEmail(user, newEmail, actionCodeSettings);
+
+    return {
+      success: true,
+      message: 'Email xác thực đã được gửi đến ' + newEmail,
+      pendingEmail: newEmail
+    };
+  } catch (error) {
+    console.error('Error sending email verification:', error);
+
+    if (error.code === 'auth/email-already-in-use') {
+      return { success: false, error: 'Email này đã được sử dụng bởi tài khoản khác' };
+    } else if (error.code === 'auth/invalid-email') {
+      return { success: false, error: 'Định dạng email không hợp lệ' };
+    } else if (error.code === 'auth/requires-recent-login') {
+      return { success: false, error: 'Vui lòng đăng nhập lại để thực hiện thao tác này' };
+    }
+
+    return { success: false, error: error.message };
+  }
+};
+
+// Sync email from Firebase Auth to Firestore (called after email is verified)
+export const syncEmailToFirestore = async (uid, newEmail) => {
+  try {
+    // Get user role
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    if (!userDoc.exists()) {
+      return { success: false, error: 'User profile not found' };
+    }
+
+    const userData = userDoc.data();
+    const isTeacher = userData.role === 'teacher';
+
+    // Update email in Firestore users collection
+    await setDoc(
+      doc(db, 'users', uid),
+      {
+        email: newEmail,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+
+    // If teacher, also update teachers collection
+    if (isTeacher) {
+      await setDoc(
+        doc(db, 'teachers', uid),
+        {
+          email: newEmail,
+          updatedAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error syncing email to Firestore:', error);
     return { success: false, error: error.message };
   }
 };

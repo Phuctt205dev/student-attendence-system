@@ -10,7 +10,8 @@ import {
   X,
   User,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Settings
 } from 'lucide-react';
 
 const TeacherLayout = ({ children }) => {
@@ -30,6 +31,11 @@ const TeacherLayout = ({ children }) => {
       name: 'Lớp học',
       href: '/teacher/classes',
       icon: BookOpen
+    },
+    {
+      name: 'Hồ sơ',
+      href: '/teacher/profile',
+      icon: Settings
     }
   ];
 
