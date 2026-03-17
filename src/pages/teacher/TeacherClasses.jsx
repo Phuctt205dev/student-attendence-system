@@ -641,9 +641,16 @@ const TeacherClasses = () => {
         });
       });
 
+      // Sort sessions by date (oldest first)
+      const sortedSessions = [...attendanceSessions].sort((a, b) => {
+        const dateA = a.date?.seconds || 0;
+        const dateB = b.date?.seconds || 0;
+        return dateA - dateB; // Ascending order (oldest first)
+      });
+
       setOverviewData({
         students: sortStudentsByStudentId(classStudents),
-        sessions: attendanceSessions,
+        sessions: sortedSessions,
         records: records
       });
     } catch (error) {
@@ -678,7 +685,7 @@ const TeacherClasses = () => {
         'STT',
         'MSSV',
         'Họ và tên',
-        ...overviewData.sessions.map((session, index) => `Buổi ${index + 1}`),
+        ...overviewData.sessions.map((session) => session.sessionNumber),
         'Tổng có mặt'
       ];
       excelData.push(headerRow);
@@ -1570,13 +1577,15 @@ const TeacherClasses = () => {
                       <th className="border border-gray-300 px-3 py-2 text-left sticky left-[160px] bg-gray-100 z-20 min-w-[200px] font-semibold text-gray-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                         Họ và tên
                       </th>
-                      {overviewData.sessions.map((session, index) => (
+                      {overviewData.sessions.map((session) => (
                         <th
                           key={session.id}
                           className="border border-gray-300 px-3 py-2 text-center min-w-[80px] font-semibold text-gray-900"
-                          title={session.sessionNumber}
+                          title={session.date && new Date(session.date.seconds * 1000).toLocaleDateString('vi-VN', {
+                            year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                          })}
                         >
-                          {index + 1}
+                          {session.sessionNumber}
                         </th>
                       ))}
                       <th className="border border-gray-300 px-3 py-2 text-center bg-blue-100 text-blue-900 font-bold min-w-[80px]">
