@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal, Button, Input } from '../common';
-import { Mail, Lock, AlertCircle, Send, CheckCircle } from 'lucide-react';
-import { sendEmailChangeVerification } from '../../services/auth.service';
+import { Mail, Lock, AlertCircle, CheckCircle } from 'lucide-react';
+import { changeEmailDirectly } from '../../services/auth.service';
 
 const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
   const [formData, setFormData] = useState({
@@ -13,26 +13,20 @@ const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [pendingEmail, setPendingEmail] = useState('');
+  const [updatedEmail, setUpdatedEmail] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Reset form when modal closes
   const handleClose = () => {
     setFormData({ newEmail: '', confirmEmail: '', currentPassword: '' });
     setErrors({});
     setSuccess(false);
-    setPendingEmail('');
+    setUpdatedEmail('');
     setErrorMessage('');
     onClose();
   };
 
-  // Validate email format
-  const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  // Validate form
   const validateForm = () => {
     const newErrors = {};
 
@@ -60,43 +54,33 @@ const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
     setErrorMessage('');
 
     try {
-      // Send email verification (does NOT update email immediately)
-      const result = await sendEmailChangeVerification(formData.newEmail, formData.currentPassword);
+      const result = await changeEmailDirectly(formData.newEmail, formData.currentPassword);
 
       if (result.success) {
+        setUpdatedEmail(result.newEmail);
         setSuccess(true);
-        setPendingEmail(result.pendingEmail);
-        // Do NOT auto-close - let user read the instructions
       } else {
         setErrorMessage(result.error);
       }
-    } catch (error) {
+    } catch {
       setErrorMessage('Đã xảy ra lỗi không mong muốn');
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle input change
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    // Clear error for this field when user types
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
     setErrorMessage('');
   };
 
@@ -109,56 +93,24 @@ const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
       closeOnOverlayClick={!loading}
     >
       {success ? (
-        // SUCCESS STATE: Email verification sent
         <div className="text-center py-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-            <Send className="w-8 h-8 text-blue-600" />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+            <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            Email xác thực đã được gửi!
+            Email đã được cập nhật!
           </h3>
-          <p className="text-gray-600 mb-4">
-            Chúng tôi đã gửi email xác thực đến:
+          <p className="text-gray-600 mb-2">Email mới của bạn là:</p>
+          <p className="text-lg font-semibold text-green-600 mb-6">{updatedEmail}</p>
+          <p className="text-sm text-gray-500 mb-6">
+            Vui lòng sử dụng email mới này để đăng nhập lần sau.
           </p>
-          <p className="text-lg font-semibold text-blue-600 mb-6">
-            {pendingEmail}
-          </p>
-
-          {/* Instructions */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left mb-6">
-            <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-              <CheckCircle className="w-5 h-5" />
-              Các bước tiếp theo:
-            </h4>
-            <ol className="text-sm text-blue-800 space-y-2 ml-7 list-decimal">
-              <li>Mở hộp thư đến của email mới ({pendingEmail})</li>
-              <li>Tìm email từ Firebase Authentication</li>
-              <li>Click vào link xác thực trong email</li>
-              <li>Email của bạn sẽ được cập nhật tự động</li>
-              <li>Sử dụng email mới để đăng nhập lần sau</li>
-            </ol>
-          </div>
-
-          {/* Warning */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-left mb-6">
-            <p className="text-sm text-yellow-800">
-              <strong>Lưu ý:</strong> Link xác thực sẽ hết hạn sau 3 ngày. Nếu không nhận được email,
-              hãy kiểm tra thư mục spam hoặc thử lại.
-            </p>
-          </div>
-
-          <Button
-            variant="primary"
-            onClick={handleClose}
-            className="w-full"
-          >
-            Đã hiểu
+          <Button variant="primary" onClick={handleClose} className="w-full">
+            Đóng
           </Button>
         </div>
       ) : (
-        // FORM STATE
         <form onSubmit={handleSubmit}>
-          {/* Current Email Display */}
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Email hiện tại
@@ -166,7 +118,6 @@ const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
             <p className="text-gray-900 font-medium">{currentEmail}</p>
           </div>
 
-          {/* Error Message */}
           {errorMessage && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -174,7 +125,6 @@ const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
             </div>
           )}
 
-          {/* New Email Input */}
           <Input
             label="Email mới"
             type="email"
@@ -189,7 +139,6 @@ const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
             containerClassName="mb-4"
           />
 
-          {/* Confirm Email Input */}
           <Input
             label="Xác nhận email mới"
             type="email"
@@ -204,7 +153,6 @@ const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
             containerClassName="mb-4"
           />
 
-          {/* Current Password Input */}
           <Input
             label="Mật khẩu hiện tại"
             type="password"
@@ -220,32 +168,12 @@ const ChangeEmailModal = ({ isOpen, onClose, currentEmail }) => {
             containerClassName="mb-6"
           />
 
-          {/* Security Notice */}
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Quy trình xác thực:</strong> Chúng tôi sẽ gửi email xác thực đến địa chỉ email mới.
-              Email của bạn sẽ được cập nhật sau khi bạn click vào link xác thực.
-            </p>
-          </div>
-
-          {/* Modal Footer with Buttons */}
           <div className="flex gap-3 justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleClose}
-              disabled={loading}
-            >
+            <Button type="button" variant="secondary" onClick={handleClose} disabled={loading}>
               Hủy
             </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={loading}
-              disabled={loading}
-              icon={<Send className="w-4 h-4" />}
-            >
-              {loading ? 'Đang gửi...' : 'Gửi email xác thực'}
+            <Button type="submit" variant="primary" loading={loading} disabled={loading}>
+              {loading ? 'Đang cập nhật...' : 'Cập nhật Email'}
             </Button>
           </div>
         </form>

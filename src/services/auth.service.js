@@ -7,7 +7,8 @@ import {
   onAuthStateChanged,
   EmailAuthProvider,
   reauthenticateWithCredential,
-  verifyBeforeUpdateEmail
+  verifyBeforeUpdateEmail,
+  updateEmail
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { auth, db, secondaryAuth } from './firebase';
@@ -226,6 +227,42 @@ export const sendEmailChangeVerification = async (newEmail, currentPassword) => 
     };
   } catch (error) {
     console.error('Error sending email verification:', error);
+
+    if (error.code === 'auth/email-already-in-use') {
+      return { success: false, error: 'Email này đã được sử dụng bởi tài khoản khác' };
+    } else if (error.code === 'auth/invalid-email') {
+      return { success: false, error: 'Định dạng email không hợp lệ' };
+    } else if (error.code === 'auth/requires-recent-login') {
+      return { success: false, error: 'Vui lòng đăng nhập lại để thực hiện thao tác này' };
+    }
+
+    return { success: false, error: error.message };
+  }
+};
+
+// Change email directly without verification email
+export const changeEmailDirectly = async (newEmail, currentPassword) => {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      return { success: false, error: 'Không tìm thấy người dùng đang đăng nhập' };
+    }
+
+    // Step 1: Reauthenticate
+    const reauthResult = await reauthenticateUser(currentPassword);
+    if (!reauthResult.success) {
+      return reauthResult;
+    }
+
+    // Step 2: Update email in Firebase Auth
+    await updateEmail(user, newEmail);
+
+    // Step 3: Sync to Firestore
+    await syncEmailToFirestore(user.uid, newEmail);
+
+    return { success: true, newEmail };
+  } catch (error) {
+    console.error('Error changing email:', error);
 
     if (error.code === 'auth/email-already-in-use') {
       return { success: false, error: 'Email này đã được sử dụng bởi tài khoản khác' };
