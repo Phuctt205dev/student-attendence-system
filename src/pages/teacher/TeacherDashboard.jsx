@@ -9,8 +9,7 @@ import {
   Users,
   ClipboardCheck,
   ArrowRight,
-  Calendar,
-  TrendingUp
+  Calendar
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -99,13 +98,6 @@ const TeacherDashboard = () => {
       icon: ClipboardCheck,
       color: 'bg-purple-500',
       onClick: () => navigate('/teacher/classes')
-    },
-    {
-      title: 'Thống kê',
-      description: 'Xem báo cáo và thống kê chi tiết',
-      icon: TrendingUp,
-      color: 'bg-orange-500',
-      onClick: () => alert('Tính năng đang phát triển')
     }
   ];
 
@@ -148,7 +140,7 @@ const TeacherDashboard = () => {
 
             {/* Quick Actions */}
             <Card title="Thao tác nhanh" className="mb-8">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {quickActions.map((action, index) => (
                   <button
                     key={index}
