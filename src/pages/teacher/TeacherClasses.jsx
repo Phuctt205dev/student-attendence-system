@@ -1456,7 +1456,7 @@ const TeacherClasses = () => {
               <div className="flex justify-between items-center mb-3">
                 <h4 className="font-semibold text-gray-900">Danh sách sinh viên ({classStudents.length})</h4>
                 <Button
-                  variant="outline"
+                  variant="primary"
                   size="sm"
                   icon={<UserPlus className="w-4 h-4" />}
                   onClick={() => { setShowClassDetailModal(false); handleOpenAddStudent(selectedClass); }}
