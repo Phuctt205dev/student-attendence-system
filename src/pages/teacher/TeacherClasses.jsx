@@ -1353,7 +1353,7 @@ const TeacherClasses = () => {
                     const absentCount = Math.max(0, classStudents.length - presentCount);
                     return (
                       <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                           <div className="flex-1 cursor-pointer" onClick={() => handleOpenSessionDetail(session)}>
                             <p className="font-medium text-gray-900 hover:text-primary-600 transition-colors">{session.sessionNumber}</p>
                             <p className="text-xs text-gray-500">
@@ -1366,21 +1366,15 @@ const TeacherClasses = () => {
                               <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
                             </div>
                           </div>
-                          <div className="flex gap-1 flex-shrink-0">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              icon={<Eye className="w-4 h-4" />}
-                              onClick={() => handleOpenSessionDetail(session)}
-                              title="Xem chi tiết"
-                            />
+                          <div className="flex gap-2 flex-wrap sm:flex-nowrap sm:items-center sm:justify-end">
                             <Button
                               variant="outline"
                               size="sm"
                               icon={<ClipboardCheck className="w-4 h-4" />}
                               onClick={() => handleOpenManualAttendance(session)}
                             >
-                              Thủ công
+                              <span className="hidden sm:inline">Thủ công</span>
+                              <span className="sm:hidden">TC</span>
                             </Button>
                             <Button
                               variant="primary"
@@ -1388,13 +1382,16 @@ const TeacherClasses = () => {
                               icon={<QrCode className="w-4 h-4" />}
                               onClick={() => handleOpenQR(session)}
                             >
-                              QR
+                              <span className="hidden sm:inline">QR</span>
+                              <span className="sm:hidden">QR</span>
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
                               icon={<Trash2 className="w-4 h-4" />}
+                              className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
                               onClick={() => handleDeleteAttendance(session.id, session.sessionNumber)}
+                              title="Xóa buổi điểm danh"
                             />
                           </div>
                         </div>
