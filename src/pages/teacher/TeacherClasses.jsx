@@ -1322,11 +1322,10 @@ const TeacherClasses = () => {
                 <div className="flex gap-2">
                   {attendanceSessions.length > 0 && (
                     <Button
-                      variant="primary"
+                      variant="success"
                       size="sm"
                       icon={<FileSpreadsheet className="w-4 h-4" />}
                       onClick={handleOpenOverview}
-                      className="bg-lime-500 hover:bg-lime-600 border-lime-500 hover:border-lime-600"
                     >
                       Tổng quan
                     </Button>
