@@ -30,6 +30,7 @@ import {
   UserPlus,
   Trash2,
   Eye,
+  Menu,
   QrCode,
   Upload,
   FileSpreadsheet,
@@ -104,6 +105,7 @@ const TeacherClasses = () => {
   const [attendanceRecords, setAttendanceRecords] = useState({});
   const [savingManual, setSavingManual] = useState(false);
   const [realtimeRecords, setRealtimeRecords] = useState([]);
+  const [openSessionActionsId, setOpenSessionActionsId] = useState(null);
 
   // ── QR state ──────────────────────────────────────────────────
   const [qrImageUrl, setQrImageUrl] = useState('');
@@ -166,6 +168,19 @@ const TeacherClasses = () => {
 
     return () => unsubscribe();
   }, [selectedSession?.id]);
+
+  useEffect(() => {
+    if (!openSessionActionsId) return;
+
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('[data-session-actions-menu]')) {
+        setOpenSessionActionsId(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openSessionActionsId]);
 
   // ── Helpers ────────────────────────────────────────────────────
   const loadAttendanceSessions = async (classId) => {
@@ -1305,7 +1320,15 @@ const TeacherClasses = () => {
       </Modal>
 
       {/* ── Modal: Chi tiết lớp ────────────────────────────────── */}
-      <Modal isOpen={showClassDetailModal} onClose={() => setShowClassDetailModal(false)} title="Chi tiết lớp học" size="lg">
+      <Modal
+        isOpen={showClassDetailModal}
+        onClose={() => {
+          setShowClassDetailModal(false);
+          setOpenSessionActionsId(null);
+        }}
+        title="Chi tiết lớp học"
+        size="lg"
+      >
         {selectedClass && (
           <div className="space-y-4">
             {/* Class info */}
@@ -1366,33 +1389,59 @@ const TeacherClasses = () => {
                               <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
                             </div>
                           </div>
-                          <div className="flex gap-2 flex-wrap sm:flex-nowrap sm:items-center sm:justify-end">
+                          <div className="relative flex justify-end" data-session-actions-menu>
                             <Button
                               variant="outline"
                               size="sm"
-                              icon={<ClipboardCheck className="w-4 h-4" />}
-                              onClick={() => handleOpenManualAttendance(session)}
+                              icon={<Menu className="w-4 h-4" />}
+                              onClick={() => {
+                                setOpenSessionActionsId(prev => (prev === session.id ? null : session.id));
+                              }}
                             >
-                              <span className="hidden sm:inline">Thủ công</span>
-                              <span className="sm:hidden">TC</span>
+                              Thêm
                             </Button>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              icon={<QrCode className="w-4 h-4" />}
-                              onClick={() => handleOpenQR(session)}
-                            >
-                              <span className="hidden sm:inline">QR</span>
-                              <span className="sm:hidden">QR</span>
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              icon={<Trash2 className="w-4 h-4" />}
-                              className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                              onClick={() => handleDeleteAttendance(session.id, session.sessionNumber)}
-                              title="Xóa buổi điểm danh"
-                            />
+
+                            {openSessionActionsId === session.id && (
+                              <div className="absolute right-0 top-full mt-2 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-2">
+                                <div className="flex gap-2 items-center">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    icon={<ClipboardCheck className="w-4 h-4" />}
+                                    onClick={() => {
+                                      handleOpenManualAttendance(session);
+                                      setOpenSessionActionsId(null);
+                                    }}
+                                  >
+                                    Thủ công
+                                  </Button>
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
+                                    icon={<QrCode className="w-4 h-4" />}
+                                    onClick={() => {
+                                      handleOpenQR(session);
+                                      setOpenSessionActionsId(null);
+                                    }}
+                                  >
+                                    QR
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    icon={<Trash2 className="w-4 h-4" />}
+                                    className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                    onClick={() => {
+                                      handleDeleteAttendance(session.id, session.sessionNumber);
+                                      setOpenSessionActionsId(null);
+                                    }}
+                                    title="Xóa buổi điểm danh"
+                                  >
+                                    Xóa
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
