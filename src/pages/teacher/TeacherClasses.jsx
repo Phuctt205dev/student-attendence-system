@@ -1389,7 +1389,7 @@ const TeacherClasses = () => {
                               <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0" data-session-actions-menu>
+                          <div className="relative flex items-center justify-end flex-shrink-0 pl-2" data-session-actions-menu>
                             <Button
                               variant="outline"
                               size="sm"
@@ -1401,7 +1401,8 @@ const TeacherClasses = () => {
                             />
 
                             {openSessionActionsId === session.id && (
-                              <div className="flex gap-2 items-center bg-white border border-gray-200 rounded-lg shadow-sm p-1">
+                              <div className="absolute right-10 top-1/2 -translate-y-1/2 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-1 max-w-[60vw] overflow-x-auto">
+                                <div className="flex gap-1 items-center whitespace-nowrap">
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -1411,7 +1412,8 @@ const TeacherClasses = () => {
                                     setOpenSessionActionsId(null);
                                   }}
                                 >
-                                  Thủ công
+                                  <span className="hidden sm:inline">Thủ công</span>
+                                  <span className="sm:hidden">TC</span>
                                 </Button>
                                 <Button
                                   variant="primary"
@@ -1435,8 +1437,9 @@ const TeacherClasses = () => {
                                   }}
                                   title="Xóa buổi điểm danh"
                                 >
-                                  Xóa
+                                  <span className="hidden sm:inline">Xóa</span>
                                 </Button>
+                              </div>
                               </div>
                             )}
                           </div>
