@@ -1376,7 +1376,7 @@ const TeacherClasses = () => {
                     const absentCount = Math.max(0, classStudents.length - presentCount);
                     return (
                       <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="flex-1 cursor-pointer" onClick={() => handleOpenSessionDetail(session)}>
                             <p className="font-medium text-gray-900 hover:text-primary-600 transition-colors">{session.sessionNumber}</p>
                             <p className="text-xs text-gray-500">
