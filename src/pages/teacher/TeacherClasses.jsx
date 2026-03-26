@@ -91,6 +91,7 @@ const TeacherClasses = () => {
   // ── Excel upload state ─────────────────────────────────────────
   const [excelFile, setExcelFile] = useState(null);
   const [excelData, setExcelData] = useState([]);
+  const [isDragOverExcel, setIsDragOverExcel] = useState(false);
   const [processingExcel, setProcessingExcel] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, currentStudent: '' });
   const [uploadResults, setUploadResults] = useState(null);
@@ -231,6 +232,7 @@ const TeacherClasses = () => {
     // Reset Excel state
     setExcelFile(null);
     setExcelData([]);
+    setIsDragOverExcel(false);
     setUploadResults(null);
     setUploadProgress({ current: 0, total: 0, currentStudent: '' });
     setError('');
@@ -259,8 +261,7 @@ const TeacherClasses = () => {
     setSearchResults([]);
   };
 
-  const handleExcelFileChange = (e) => {
-    const file = e.target.files[0];
+  const processExcelFile = (file) => {
     if (!file) return;
 
     // Validate file type
@@ -314,6 +315,32 @@ const TeacherClasses = () => {
     };
 
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleExcelFileChange = (e) => {
+    const file = e.target.files[0];
+    processExcelFile(file);
+  };
+
+  const handleExcelDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOverExcel) setIsDragOverExcel(true);
+  };
+
+  const handleExcelDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverExcel(false);
+  };
+
+  const handleExcelDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverExcel(false);
+
+    const file = e.dataTransfer?.files?.[0];
+    processExcelFile(file);
   };
 
   const handleProcessExcel = async () => {
@@ -1067,7 +1094,17 @@ const TeacherClasses = () => {
           <div className="space-y-4">
             {!processingExcel && !uploadResults ? (
               <>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <div
+                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                    isDragOverExcel
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-gray-300'
+                  }`}
+                  onDragOver={handleExcelDragOver}
+                  onDragEnter={handleExcelDragOver}
+                  onDragLeave={handleExcelDragLeave}
+                  onDrop={handleExcelDrop}
+                >
                   <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                   <label htmlFor="excel-upload" className="cursor-pointer">
                     <span className="text-primary-600 hover:text-primary-700 font-medium">
@@ -1082,7 +1119,7 @@ const TeacherClasses = () => {
                     />
                   </label>
                   <p className="text-xs text-gray-500 mt-2">
-                    Hỗ trợ file .xlsx và .xls
+                    Kéo thả file vào đây hoặc bấm để chọn file (.xlsx, .xls)
                   </p>
                 </div>
 
