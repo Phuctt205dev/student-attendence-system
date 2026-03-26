@@ -1376,7 +1376,7 @@ const TeacherClasses = () => {
                     const absentCount = Math.max(0, classStudents.length - presentCount);
                     return (
                       <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 cursor-pointer" onClick={() => handleOpenSessionDetail(session)}>
                             <p className="font-medium text-gray-900 hover:text-primary-600 transition-colors">{session.sessionNumber}</p>
                             <p className="text-xs text-gray-500">
@@ -1389,57 +1389,54 @@ const TeacherClasses = () => {
                               <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
                             </div>
                           </div>
-                          <div className="relative flex justify-end" data-session-actions-menu>
+                          <div className="flex items-center gap-2 flex-shrink-0" data-session-actions-menu>
                             <Button
                               variant="outline"
                               size="sm"
-                              icon={<Menu className="w-4 h-4" />}
+                              icon={<Menu className={`w-4 h-4 transition-transform duration-200 ${openSessionActionsId === session.id ? 'rotate-90' : ''}`} />}
+                              className="!px-2"
                               onClick={() => {
                                 setOpenSessionActionsId(prev => (prev === session.id ? null : session.id));
                               }}
-                            >
-                              Thêm
-                            </Button>
+                            />
 
                             {openSessionActionsId === session.id && (
-                              <div className="absolute right-0 top-full mt-2 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-2">
-                                <div className="flex gap-2 items-center">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    icon={<ClipboardCheck className="w-4 h-4" />}
-                                    onClick={() => {
-                                      handleOpenManualAttendance(session);
-                                      setOpenSessionActionsId(null);
-                                    }}
-                                  >
-                                    Thủ công
-                                  </Button>
-                                  <Button
-                                    variant="primary"
-                                    size="sm"
-                                    icon={<QrCode className="w-4 h-4" />}
-                                    onClick={() => {
-                                      handleOpenQR(session);
-                                      setOpenSessionActionsId(null);
-                                    }}
-                                  >
-                                    QR
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    icon={<Trash2 className="w-4 h-4" />}
-                                    className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                    onClick={() => {
-                                      handleDeleteAttendance(session.id, session.sessionNumber);
-                                      setOpenSessionActionsId(null);
-                                    }}
-                                    title="Xóa buổi điểm danh"
-                                  >
-                                    Xóa
-                                  </Button>
-                                </div>
+                              <div className="flex gap-2 items-center bg-white border border-gray-200 rounded-lg shadow-sm p-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  icon={<ClipboardCheck className="w-4 h-4" />}
+                                  onClick={() => {
+                                    handleOpenManualAttendance(session);
+                                    setOpenSessionActionsId(null);
+                                  }}
+                                >
+                                  Thủ công
+                                </Button>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  icon={<QrCode className="w-4 h-4" />}
+                                  onClick={() => {
+                                    handleOpenQR(session);
+                                    setOpenSessionActionsId(null);
+                                  }}
+                                >
+                                  QR
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  icon={<Trash2 className="w-4 h-4" />}
+                                  className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                  onClick={() => {
+                                    handleDeleteAttendance(session.id, session.sessionNumber);
+                                    setOpenSessionActionsId(null);
+                                  }}
+                                  title="Xóa buổi điểm danh"
+                                >
+                                  Xóa
+                                </Button>
                               </div>
                             )}
                           </div>
