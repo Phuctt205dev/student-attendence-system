@@ -2196,6 +2196,7 @@ const TeacherClasses = () => {
         onClose={() => setOverviewTagPopover(null)}
         title="Chi tiết thẻ"
         size="sm"
+        zIndex={60}
       >
         {overviewTagPopover && (() => {
           const tag = classTags.find(t => t.id === overviewTagPopover.tagId);

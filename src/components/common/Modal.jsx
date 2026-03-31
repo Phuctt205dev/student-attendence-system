@@ -11,7 +11,8 @@ export const Modal = ({
   size = 'md',
   closeOnOverlayClick = true,
   showCloseButton = true,
-  className = ''
+  className = '',
+  zIndex = 50
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -54,7 +55,8 @@ export const Modal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
+      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 p-4"
+      style={{ zIndex }}
       onClick={handleOverlayClick}
     >
       <div
