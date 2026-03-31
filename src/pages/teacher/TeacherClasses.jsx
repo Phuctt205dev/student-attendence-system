@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import TeacherLayout from '../../layouts/TeacherLayout';
 import {
@@ -23,6 +23,18 @@ import {
   subscribeToAttendanceRecords
 } from '../../services/attendance.service';
 import {
+  getClassTags,
+  getStudentTags,
+  createTag,
+  updateTag,
+  deleteTag,
+  toggleTagForStudent,
+  assignTagToMultipleStudents,
+  removeTagFromStudent,
+  getTagColor,
+  formatPoints
+} from '../../services/tag.service';
+import {
   BookOpen,
   Users,
   ClipboardCheck,
@@ -35,7 +47,13 @@ import {
   Upload,
   FileSpreadsheet,
   FileText,
-  CheckCircle
+  CheckCircle,
+  Tag,
+  X,
+  Edit2,
+  ChevronDown,
+  ChevronUp,
+  Search
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -115,6 +133,22 @@ const TeacherClasses = () => {
 
   // ── Overview state ────────────────────────────────────────────
   const [overviewData, setOverviewData] = useState({ students: [], sessions: [], records: {} });
+
+  // ── Tag system state ─────────────────────────────────────────
+  const [classTags, setClassTags] = useState([]);
+  const [studentTags, setStudentTags] = useState([]);
+  const [classDetailTab, setClassDetailTab] = useState('overview'); // 'overview' | 'tags'
+  const [showCreateTagModal, setShowCreateTagModal] = useState(false);
+  const [showEditTagModal, setShowEditTagModal] = useState(false);
+  const [editingTag, setEditingTag] = useState(null);
+  const [newTagData, setNewTagData] = useState({ name: '', note: '', points: 0 });
+  const [savingTag, setSavingTag] = useState(false);
+  const [expandedTagId, setExpandedTagId] = useState(null);
+  const [showTagPopover, setShowTagPopover] = useState(null); // studentId or null
+  const [showAddStudentToTagModal, setShowAddStudentToTagModal] = useState(false);
+  const [selectedTagForAddStudent, setSelectedTagForAddStudent] = useState(null);
+  const [tagStudentSearchTerm, setTagStudentSearchTerm] = useState('');
+  const tagPopoverRef = useRef(null);
   const [loadingOverview, setLoadingOverview] = useState(false);
 
   // ── Load classes ───────────────────────────────────────────────
@@ -182,6 +216,20 @@ const TeacherClasses = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openSessionActionsId]);
 
+  // Close tag popover when clicking outside
+  useEffect(() => {
+    if (!showTagPopover) return;
+
+    const handleClickOutside = (event) => {
+      if (tagPopoverRef.current && !tagPopoverRef.current.contains(event.target)) {
+        setShowTagPopover(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showTagPopover]);
+
   // ── Helpers ────────────────────────────────────────────────────
   const loadAttendanceSessions = async (classId) => {
     const result = await getAttendancesByClass(classId);
@@ -229,9 +277,133 @@ const TeacherClasses = () => {
   const handleOpenClassDetail = async (classItem) => {
     setSelectedClass(classItem);
     setShowClassDetailModal(true);
+    setClassDetailTab('overview');
     const studentsResult = await getClassStudents(classItem.id);
     if (studentsResult.success) setClassStudents(sortStudentsByStudentId(studentsResult.students));
     await loadAttendanceSessions(classItem.id);
+    await loadClassTags(classItem.id);
+  };
+
+  // ── Handlers: Tags ───────────────────────────────────────────────
+  const loadClassTags = async (classId) => {
+    const [tagsResult, studentTagsResult] = await Promise.all([
+      getClassTags(classId),
+      getStudentTags(classId)
+    ]);
+    if (tagsResult.success) setClassTags(tagsResult.tags);
+    if (studentTagsResult.success) setStudentTags(studentTagsResult.studentTags);
+  };
+
+  const handleCreateTag = async (e) => {
+    e.preventDefault();
+    if (!newTagData.name.trim() || !selectedClass) return;
+    
+    setSavingTag(true);
+    setError('');
+    
+    const result = await createTag(selectedClass.id, {
+      name: newTagData.name.trim(),
+      note: newTagData.note.trim(),
+      points: newTagData.points,
+      createdBy: userProfile.uid
+    });
+    
+    if (result.success) {
+      await loadClassTags(selectedClass.id);
+      setShowCreateTagModal(false);
+      setNewTagData({ name: '', note: '', points: 0 });
+      setSuccess('Đã tạo thẻ mới');
+      setTimeout(() => setSuccess(''), 3000);
+    } else {
+      setError(result.error || 'Không thể tạo thẻ');
+    }
+    setSavingTag(false);
+  };
+
+  const handleUpdateTag = async (e) => {
+    e.preventDefault();
+    if (!editingTag || !selectedClass) return;
+    
+    setSavingTag(true);
+    setError('');
+    
+    const result = await updateTag(selectedClass.id, editingTag.id, {
+      name: editingTag.name.trim(),
+      note: editingTag.note.trim(),
+      points: editingTag.points
+    });
+    
+    if (result.success) {
+      await loadClassTags(selectedClass.id);
+      setShowEditTagModal(false);
+      setEditingTag(null);
+      setSuccess('Đã cập nhật thẻ');
+      setTimeout(() => setSuccess(''), 3000);
+    } else {
+      setError(result.error || 'Không thể cập nhật thẻ');
+    }
+    setSavingTag(false);
+  };
+
+  const handleDeleteTag = async (tagId, tagName) => {
+    if (!confirm(`Xóa thẻ "${tagName}"? Thao tác này sẽ xóa thẻ khỏi tất cả sinh viên đã gắn.`)) return;
+    
+    const result = await deleteTag(selectedClass.id, tagId);
+    if (result.success) {
+      await loadClassTags(selectedClass.id);
+      setSuccess('Đã xóa thẻ');
+      setTimeout(() => setSuccess(''), 3000);
+    } else {
+      setError(result.error || 'Không thể xóa thẻ');
+    }
+  };
+
+  const handleToggleTagForStudent = async (studentId, tagId) => {
+    const result = await toggleTagForStudent(selectedClass.id, studentId, tagId, userProfile.uid);
+    if (result.success) {
+      await loadClassTags(selectedClass.id);
+    }
+  };
+
+  const handleRemoveTagFromStudent = async (studentId, tagId) => {
+    const result = await removeTagFromStudent(selectedClass.id, studentId, tagId);
+    if (result.success) {
+      await loadClassTags(selectedClass.id);
+    }
+  };
+
+  const handleAddStudentsToTag = async (studentIds) => {
+    if (!selectedTagForAddStudent || studentIds.length === 0) return;
+    
+    const result = await assignTagToMultipleStudents(
+      selectedClass.id, 
+      studentIds, 
+      selectedTagForAddStudent.id, 
+      userProfile.uid
+    );
+    
+    if (result.success) {
+      await loadClassTags(selectedClass.id);
+      setShowAddStudentToTagModal(false);
+      setSelectedTagForAddStudent(null);
+      setTagStudentSearchTerm('');
+      setSuccess(result.message);
+      setTimeout(() => setSuccess(''), 3000);
+    }
+  };
+
+  const getStudentTagsList = (studentId) => {
+    const tagIds = studentTags.filter(st => st.studentId === studentId).map(st => st.tagId);
+    return classTags.filter(tag => tagIds.includes(tag.id));
+  };
+
+  const getTagStudents = (tagId) => {
+    const studentIds = studentTags.filter(st => st.tagId === tagId).map(st => st.studentId);
+    return classStudents.filter(s => studentIds.includes(s.uid));
+  };
+
+  const isStudentHasTag = (studentId, tagId) => {
+    return studentTags.some(st => st.studentId === studentId && st.tagId === tagId);
   };
 
   // ── Handlers: students ─────────────────────────────────────────
@@ -1325,6 +1497,7 @@ const TeacherClasses = () => {
         onClose={() => {
           setShowClassDetailModal(false);
           setOpenSessionActionsId(null);
+          setShowTagPopover(null);
         }}
         title="Chi tiết lớp học"
         size="lg"
@@ -1338,156 +1511,664 @@ const TeacherClasses = () => {
               {selectedClass.schedule && <p className="text-sm text-gray-500 mt-1">Lịch học: {selectedClass.schedule}</p>}
             </div>
 
-            {/* Attendance sessions */}
-            <div className="border-b pb-4">
-              <div className="flex justify-between items-center mb-3">
-                <h4 className="font-semibold text-gray-900">Buổi điểm danh ({attendanceSessions.length})</h4>
-                <div className="flex gap-2">
-                  {attendanceSessions.length > 0 && (
-                    <Button
-                      variant="success"
-                      size="sm"
-                      icon={<FileSpreadsheet className="w-4 h-4" />}
-                      onClick={handleOpenOverview}
-                    >
-                      Tổng quan
-                    </Button>
+            {/* Tab navigation */}
+            <div className="flex border-b">
+              <button
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  classDetailTab === 'overview'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setClassDetailTab('overview')}
+              >
+                <Users className="w-4 h-4 inline mr-2" />
+                Tổng quan
+              </button>
+              <button
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  classDetailTab === 'tags'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setClassDetailTab('tags')}
+              >
+                <Tag className="w-4 h-4 inline mr-2" />
+                Quản lý thẻ ({classTags.length})
+              </button>
+            </div>
+
+            {/* Tab: Overview */}
+            {classDetailTab === 'overview' && (
+              <>
+                {/* Attendance sessions */}
+                <div className="border-b pb-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-semibold text-gray-900">Buổi điểm danh ({attendanceSessions.length})</h4>
+                    <div className="flex gap-2">
+                      {attendanceSessions.length > 0 && (
+                        <Button
+                          variant="success"
+                          size="sm"
+                          icon={<FileSpreadsheet className="w-4 h-4" />}
+                          onClick={handleOpenOverview}
+                        >
+                          Tổng quan
+                        </Button>
+                      )}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        icon={<ClipboardCheck className="w-4 h-4" />}
+                        onClick={handleOpenCreateAttendance}
+                      >
+                        Tạo buổi mới
+                      </Button>
+                    </div>
+                  </div>
+
+                  {attendanceSessions.length === 0 ? (
+                    <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
+                      <ClipboardCheck className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+                      <p className="text-sm">Chưa có buổi điểm danh nào</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {attendanceSessions.map((session) => {
+                        const presentCount = session.presentCount || 0;
+                        const absentCount = Math.max(0, classStudents.length - presentCount);
+                        return (
+                          <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex-1 cursor-pointer" onClick={() => handleOpenSessionDetail(session)}>
+                                <p className="font-medium text-gray-900 hover:text-primary-600 transition-colors">{session.sessionNumber}</p>
+                                <p className="text-xs text-gray-500">
+                                  {session.date && new Date(session.date.seconds * 1000).toLocaleDateString('vi-VN', {
+                                    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                  })}
+                                </p>
+                                <div className="flex gap-3 mt-1 text-xs">
+                                  <span className="text-green-600"><strong>{presentCount}</strong> có mặt</span>
+                                  <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
+                                </div>
+                              </div>
+                              <div className="relative flex items-center justify-end flex-shrink-0 pl-2" data-session-actions-menu>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  icon={<Menu className={`w-4 h-4 transition-transform duration-200 ${openSessionActionsId === session.id ? 'rotate-90' : ''}`} />}
+                                  className="!px-2"
+                                  onClick={() => {
+                                    setOpenSessionActionsId(prev => (prev === session.id ? null : session.id));
+                                  }}
+                                />
+
+                                {openSessionActionsId === session.id && (
+                                  <div className="absolute right-10 top-1/2 -translate-y-1/2 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-1 max-w-[60vw] overflow-x-auto">
+                                    <div className="flex gap-1 items-center whitespace-nowrap">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      icon={<ClipboardCheck className="w-4 h-4" />}
+                                      onClick={() => {
+                                        handleOpenManualAttendance(session);
+                                        setOpenSessionActionsId(null);
+                                      }}
+                                    >
+                                      <span className="hidden sm:inline">Thủ công</span>
+                                      <span className="sm:hidden">TC</span>
+                                    </Button>
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      icon={<QrCode className="w-4 h-4" />}
+                                      onClick={() => {
+                                        handleOpenQR(session);
+                                        setOpenSessionActionsId(null);
+                                      }}
+                                    >
+                                      QR
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      icon={<Trash2 className="w-4 h-4" />}
+                                      className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                      onClick={() => {
+                                        handleDeleteAttendance(session.id, session.sessionNumber);
+                                        setOpenSessionActionsId(null);
+                                      }}
+                                      title="Xóa buổi điểm danh"
+                                    >
+                                      <span className="hidden sm:inline">Xóa</span>
+                                    </Button>
+                                  </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
+                </div>
+
+                {/* Students list with tags */}
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-semibold text-gray-900">Danh sách sinh viên ({classStudents.length})</h4>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={<UserPlus className="w-4 h-4" />}
+                      onClick={() => { setShowClassDetailModal(false); handleOpenAddStudent(selectedClass); }}
+                    >
+                      Thêm SV
+                    </Button>
+                  </div>
+                  {classStudents.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p>Chưa có sinh viên nào trong lớp</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {classStudents.map((student) => {
+                        const studentTagList = getStudentTagsList(student.uid);
+                        return (
+                          <div key={student.uid} className="flex flex-col p-3 bg-gray-50 rounded-lg">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-gray-900">{student.fullName}</p>
+                                  {student.faceEmbedding && student.faceEmbedding.length > 0 && (
+                                    <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" title="Đã có dữ liệu khuôn mặt" />
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-600">{student.email}</p>
+                                {student.studentId && <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>}
+                                
+                                {/* Student tags display */}
+                                {studentTagList.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {studentTagList.map(tag => {
+                                      const colors = getTagColor(tag.points);
+                                      return (
+                                        <span
+                                          key={tag.id}
+                                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text} border ${colors.border}`}
+                                          title={tag.note || tag.name}
+                                        >
+                                          <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`}></span>
+                                          {tag.name}
+                                          {tag.points !== 0 && (
+                                            <span className="opacity-75">({formatPoints(tag.points)})</span>
+                                          )}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-1 items-center">
+                                {/* Tag popover button */}
+                                <div className="relative">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    icon={<Tag className="w-4 h-4" />}
+                                    className="!px-2"
+                                    onClick={() => setShowTagPopover(showTagPopover === student.uid ? null : student.uid)}
+                                    title="Gắn thẻ"
+                                  />
+                                  
+                                  {/* Tag popover */}
+                                  {showTagPopover === student.uid && (
+                                    <div
+                                      ref={tagPopoverRef}
+                                      className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[200px]"
+                                    >
+                                      <p className="text-xs font-medium text-gray-500 mb-2 px-1">Gắn thẻ cho {student.fullName}</p>
+                                      {classTags.length === 0 ? (
+                                        <p className="text-xs text-gray-400 px-1">Chưa có thẻ nào</p>
+                                      ) : (
+                                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                                          {classTags.map(tag => {
+                                            const isAssigned = isStudentHasTag(student.uid, tag.id);
+                                            const colors = getTagColor(tag.points);
+                                            return (
+                                              <button
+                                                key={tag.id}
+                                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-sm transition-colors ${
+                                                  isAssigned ? 'bg-gray-100' : 'hover:bg-gray-50'
+                                                }`}
+                                                onClick={() => handleToggleTagForStudent(student.uid, tag.id)}
+                                              >
+                                                <span className={`w-3 h-3 rounded-full ${colors.dot} flex-shrink-0`}></span>
+                                                <span className="flex-1 truncate">{tag.name}</span>
+                                                {tag.points !== 0 && (
+                                                  <span className="text-xs text-gray-500">{formatPoints(tag.points)}</span>
+                                                )}
+                                                {isAssigned && (
+                                                  <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                                )}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                      <div className="border-t mt-2 pt-2">
+                                        <button
+                                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-sm text-primary-600 hover:bg-primary-50"
+                                          onClick={() => {
+                                            setShowTagPopover(null);
+                                            setShowCreateTagModal(true);
+                                          }}
+                                        >
+                                          <Plus className="w-4 h-4" />
+                                          Tạo thẻ mới
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <Button variant="outline" size="sm" icon={<Trash2 className="w-4 h-4" />} onClick={() => handleRemoveStudent(student.uid)}>Xóa</Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Tab: Tags Management */}
+            {classDetailTab === 'tags' && (
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="font-semibold text-gray-900">Danh sách thẻ</h4>
                   <Button
                     variant="primary"
                     size="sm"
-                    icon={<ClipboardCheck className="w-4 h-4" />}
-                    onClick={handleOpenCreateAttendance}
+                    icon={<Plus className="w-4 h-4" />}
+                    onClick={() => {
+                      setNewTagData({ name: '', note: '', points: 0 });
+                      setShowCreateTagModal(true);
+                    }}
                   >
-                    Tạo buổi mới
+                    Tạo thẻ mới
                   </Button>
                 </div>
-              </div>
 
-              {attendanceSessions.length === 0 ? (
-                <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
-                  <ClipboardCheck className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm">Chưa có buổi điểm danh nào</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {attendanceSessions.map((session) => {
-                    const presentCount = session.presentCount || 0;
-                    const absentCount = Math.max(0, classStudents.length - presentCount);
-                    return (
-                      <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex-1 cursor-pointer" onClick={() => handleOpenSessionDetail(session)}>
-                            <p className="font-medium text-gray-900 hover:text-primary-600 transition-colors">{session.sessionNumber}</p>
-                            <p className="text-xs text-gray-500">
-                              {session.date && new Date(session.date.seconds * 1000).toLocaleDateString('vi-VN', {
-                                year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                              })}
-                            </p>
-                            <div className="flex gap-3 mt-1 text-xs">
-                              <span className="text-green-600"><strong>{presentCount}</strong> có mặt</span>
-                              <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
+                {classTags.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+                    <Tag className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                    <p>Chưa có thẻ nào</p>
+                    <p className="text-sm mt-1">Tạo thẻ để đánh dấu sinh viên</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {classTags.map(tag => {
+                      const colors = getTagColor(tag.points);
+                      const tagStudents = getTagStudents(tag.id);
+                      const isExpanded = expandedTagId === tag.id;
+                      
+                      return (
+                        <div key={tag.id} className={`border rounded-lg overflow-hidden ${colors.border}`}>
+                          {/* Tag header */}
+                          <div className={`p-3 ${colors.bg}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className={`w-3 h-3 rounded-full ${colors.dot}`}></span>
+                                <span className={`font-medium ${colors.text}`}>{tag.name}</span>
+                                <span className={`text-sm ${colors.text} opacity-75`}>({formatPoints(tag.points)})</span>
+                                <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded-full">
+                                  {tagStudents.length} SV
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  icon={<Edit2 className="w-4 h-4" />}
+                                  className="!px-2"
+                                  onClick={() => {
+                                    setEditingTag({ ...tag });
+                                    setShowEditTagModal(true);
+                                  }}
+                                  title="Sửa thẻ"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  icon={<Trash2 className="w-4 h-4 text-red-500" />}
+                                  className="!px-2"
+                                  onClick={() => handleDeleteTag(tag.id, tag.name)}
+                                  title="Xóa thẻ"
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  icon={isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                  className="!px-2"
+                                  onClick={() => setExpandedTagId(isExpanded ? null : tag.id)}
+                                  title={isExpanded ? 'Thu gọn' : 'Mở rộng'}
+                                />
+                              </div>
                             </div>
-                          </div>
-                          <div className="relative flex items-center justify-end flex-shrink-0 pl-2" data-session-actions-menu>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              icon={<Menu className={`w-4 h-4 transition-transform duration-200 ${openSessionActionsId === session.id ? 'rotate-90' : ''}`} />}
-                              className="!px-2"
-                              onClick={() => {
-                                setOpenSessionActionsId(prev => (prev === session.id ? null : session.id));
-                              }}
-                            />
-
-                            {openSessionActionsId === session.id && (
-                              <div className="absolute right-10 top-1/2 -translate-y-1/2 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-1 max-w-[60vw] overflow-x-auto">
-                                <div className="flex gap-1 items-center whitespace-nowrap">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  icon={<ClipboardCheck className="w-4 h-4" />}
-                                  onClick={() => {
-                                    handleOpenManualAttendance(session);
-                                    setOpenSessionActionsId(null);
-                                  }}
-                                >
-                                  <span className="hidden sm:inline">Thủ công</span>
-                                  <span className="sm:hidden">TC</span>
-                                </Button>
-                                <Button
-                                  variant="primary"
-                                  size="sm"
-                                  icon={<QrCode className="w-4 h-4" />}
-                                  onClick={() => {
-                                    handleOpenQR(session);
-                                    setOpenSessionActionsId(null);
-                                  }}
-                                >
-                                  QR
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  icon={<Trash2 className="w-4 h-4" />}
-                                  className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                  onClick={() => {
-                                    handleDeleteAttendance(session.id, session.sessionNumber);
-                                    setOpenSessionActionsId(null);
-                                  }}
-                                  title="Xóa buổi điểm danh"
-                                >
-                                  <span className="hidden sm:inline">Xóa</span>
-                                </Button>
-                              </div>
-                              </div>
+                            {tag.note && (
+                              <p className="text-sm text-gray-600 mt-1 ml-5">{tag.note}</p>
                             )}
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Students list */}
-            <div>
-              <div className="flex justify-between items-center mb-3">
-                <h4 className="font-semibold text-gray-900">Danh sách sinh viên ({classStudents.length})</h4>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={<UserPlus className="w-4 h-4" />}
-                  onClick={() => { setShowClassDetailModal(false); handleOpenAddStudent(selectedClass); }}
-                >
-                  Thêm SV
-                </Button>
-              </div>
-              {classStudents.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Users className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                  <p>Chưa có sinh viên nào trong lớp</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {classStudents.map((student) => (
-                    <div key={student.uid} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-gray-900">{student.fullName}</p>
-                          {student.faceEmbedding && student.faceEmbedding.length > 0 && (
-                            <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" title="Đã có dữ liệu khuôn mặt" />
+                          
+                          {/* Expanded content - student list */}
+                          {isExpanded && (
+                            <div className="p-3 bg-white border-t">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-medium text-gray-700">Sinh viên được gắn thẻ</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  icon={<UserPlus className="w-4 h-4" />}
+                                  onClick={() => {
+                                    setSelectedTagForAddStudent(tag);
+                                    setTagStudentSearchTerm('');
+                                    setShowAddStudentToTagModal(true);
+                                  }}
+                                >
+                                  Thêm SV
+                                </Button>
+                              </div>
+                              
+                              {tagStudents.length === 0 ? (
+                                <p className="text-sm text-gray-400 text-center py-4">Chưa có sinh viên nào</p>
+                              ) : (
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                  {tagStudents.map(student => (
+                                    <div key={student.uid} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                                      <div>
+                                        <p className="text-sm font-medium text-gray-900">{student.fullName}</p>
+                                        {student.studentId && (
+                                          <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>
+                                        )}
+                                      </div>
+                                      <button
+                                        className="text-red-500 hover:text-red-700 p-1"
+                                        onClick={() => handleRemoveTagFromStudent(student.uid, tag.id)}
+                                        title="Xóa khỏi thẻ"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600">{student.email}</p>
-                        {student.studentId && <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>}
-                      </div>
-                      <Button variant="outline" size="sm" icon={<Trash2 className="w-4 h-4" />} onClick={() => handleRemoveStudent(student.uid)}>Xóa</Button>
-                    </div>
-                  ))}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Modal: Tạo thẻ mới ──────────────────────────────────── */}
+      <Modal
+        isOpen={showCreateTagModal}
+        onClose={() => setShowCreateTagModal(false)}
+        title="Tạo thẻ mới"
+        size="md"
+      >
+        <form onSubmit={handleCreateTag} className="space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+          
+          <Input
+            label="Tên thẻ"
+            type="text"
+            placeholder="Ví dụ: Vắng không phép, Phát biểu tích cực..."
+            value={newTagData.name}
+            onChange={(e) => setNewTagData({ ...newTagData, name: e.target.value })}
+            required
+          />
+          
+          <Input
+            label="Ghi chú (tùy chọn)"
+            type="text"
+            placeholder="Mô tả thêm về thẻ này..."
+            value={newTagData.note}
+            onChange={(e) => setNewTagData({ ...newTagData, note: e.target.value })}
+          />
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Điểm cộng/trừ
+            </label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="w-10 h-10 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-50 text-xl font-bold"
+                onClick={() => setNewTagData({ ...newTagData, points: newTagData.points - 0.5 })}
+              >
+                −
+              </button>
+              <div className="flex-1 text-center">
+                <span className={`text-2xl font-bold ${
+                  newTagData.points > 0 ? 'text-green-600' : newTagData.points < 0 ? 'text-red-600' : 'text-yellow-600'
+                }`}>
+                  {newTagData.points > 0 ? '+' : ''}{newTagData.points}
+                </span>
+                <p className="text-xs text-gray-500 mt-1">
+                  {newTagData.points > 0 ? '🟢 Cộng điểm' : newTagData.points < 0 ? '🔴 Trừ điểm' : '🟡 Trung lập'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="w-10 h-10 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-50 text-xl font-bold"
+                onClick={() => setNewTagData({ ...newTagData, points: newTagData.points + 0.5 })}
+              >
+                +
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowCreateTagModal(false)}
+              fullWidth
+              disabled={savingTag}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              loading={savingTag}
+              disabled={savingTag || !newTagData.name.trim()}
+            >
+              Tạo thẻ
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── Modal: Sửa thẻ ──────────────────────────────────────── */}
+      <Modal
+        isOpen={showEditTagModal}
+        onClose={() => {
+          setShowEditTagModal(false);
+          setEditingTag(null);
+        }}
+        title="Sửa thẻ"
+        size="md"
+      >
+        {editingTag && (
+          <form onSubmit={handleUpdateTag} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+            
+            <Input
+              label="Tên thẻ"
+              type="text"
+              placeholder="Ví dụ: Vắng không phép, Phát biểu tích cực..."
+              value={editingTag.name}
+              onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })}
+              required
+            />
+            
+            <Input
+              label="Ghi chú (tùy chọn)"
+              type="text"
+              placeholder="Mô tả thêm về thẻ này..."
+              value={editingTag.note}
+              onChange={(e) => setEditingTag({ ...editingTag, note: e.target.value })}
+            />
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Điểm cộng/trừ
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="w-10 h-10 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-50 text-xl font-bold"
+                  onClick={() => setEditingTag({ ...editingTag, points: editingTag.points - 0.5 })}
+                >
+                  −
+                </button>
+                <div className="flex-1 text-center">
+                  <span className={`text-2xl font-bold ${
+                    editingTag.points > 0 ? 'text-green-600' : editingTag.points < 0 ? 'text-red-600' : 'text-yellow-600'
+                  }`}>
+                    {editingTag.points > 0 ? '+' : ''}{editingTag.points}
+                  </span>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {editingTag.points > 0 ? '🟢 Cộng điểm' : editingTag.points < 0 ? '🔴 Trừ điểm' : '🟡 Trung lập'}
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  className="w-10 h-10 rounded-lg border border-gray-300 flex items-center justify-center hover:bg-gray-50 text-xl font-bold"
+                  onClick={() => setEditingTag({ ...editingTag, points: editingTag.points + 0.5 })}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowEditTagModal(false);
+                  setEditingTag(null);
+                }}
+                fullWidth
+                disabled={savingTag}
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                fullWidth
+                loading={savingTag}
+                disabled={savingTag || !editingTag.name.trim()}
+              >
+                Lưu thay đổi
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* ── Modal: Thêm sinh viên vào thẻ ──────────────────────── */}
+      <Modal
+        isOpen={showAddStudentToTagModal}
+        onClose={() => {
+          setShowAddStudentToTagModal(false);
+          setSelectedTagForAddStudent(null);
+          setTagStudentSearchTerm('');
+        }}
+        title={`Thêm sinh viên vào thẻ "${selectedTagForAddStudent?.name || ''}"`}
+        size="md"
+      >
+        {selectedTagForAddStudent && (
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Tìm theo tên hoặc MSSV..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                value={tagStudentSearchTerm}
+                onChange={(e) => setTagStudentSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              {classStudents
+                .filter(student => {
+                  // Filter out students already assigned to this tag
+                  if (isStudentHasTag(student.uid, selectedTagForAddStudent.id)) return false;
+                  // Filter by search term
+                  if (!tagStudentSearchTerm) return true;
+                  const term = tagStudentSearchTerm.toLowerCase();
+                  return (
+                    student.fullName.toLowerCase().includes(term) ||
+                    (student.studentId && student.studentId.toLowerCase().includes(term))
+                  );
+                })
+                .map(student => (
+                  <button
+                    key={student.uid}
+                    className="w-full flex items-center justify-between p-2 rounded hover:bg-gray-50 text-left"
+                    onClick={() => handleAddStudentsToTag([student.uid])}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{student.fullName}</p>
+                      {student.studentId && (
+                        <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>
+                      )}
+                    </div>
+                    <Plus className="w-4 h-4 text-gray-400" />
+                  </button>
+                ))}
+              
+              {classStudents.filter(s => !isStudentHasTag(s.uid, selectedTagForAddStudent.id)).length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">
+                  Tất cả sinh viên đã được gắn thẻ này
+                </p>
               )}
+            </div>
+            
+            <div className="flex justify-end pt-2 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAddStudentToTagModal(false);
+                  setSelectedTagForAddStudent(null);
+                  setTagStudentSearchTerm('');
+                }}
+              >
+                Đóng
+              </Button>
             </div>
           </div>
         )}
