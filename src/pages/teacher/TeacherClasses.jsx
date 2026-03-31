@@ -150,6 +150,8 @@ const TeacherClasses = () => {
   const [tagStudentSearchTerm, setTagStudentSearchTerm] = useState('');
   const tagPopoverRef = useRef(null);
   const [loadingOverview, setLoadingOverview] = useState(false);
+  const [overviewTagPopover, setOverviewTagPopover] = useState(null); // { tagId, studentId } or null
+  const overviewTagPopoverRef = useRef(null);
 
   // ── Load classes ───────────────────────────────────────────────
   const loadClasses = async () => {
@@ -229,6 +231,20 @@ const TeacherClasses = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showTagPopover]);
+
+  // Close overview tag popover when clicking outside
+  useEffect(() => {
+    if (!overviewTagPopover) return;
+
+    const handleClickOutside = (event) => {
+      if (overviewTagPopoverRef.current && !overviewTagPopoverRef.current.contains(event.target)) {
+        setOverviewTagPopover(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [overviewTagPopover]);
 
   // ── Helpers ────────────────────────────────────────────────────
   const loadAttendanceSessions = async (classId) => {
@@ -2489,7 +2505,70 @@ const TeacherClasses = () => {
                             {student.studentId || 'N/A'}
                           </td>
                           <td className="border border-gray-300 px-3 py-2 sticky left-[160px] bg-white text-gray-900 z-10 min-w-[200px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                            {student.fullName}
+                            <div className="flex items-center gap-1.5">
+                              <span>{student.fullName}</span>
+                              {/* Tag dots */}
+                              {getStudentTagsList(student.uid).map(tag => {
+                                const colors = getTagColor(tag.points);
+                                const isPopoverOpen = overviewTagPopover?.tagId === tag.id && overviewTagPopover?.studentId === student.uid;
+                                return (
+                                  <div key={tag.id} className="relative inline-block">
+                                    <button
+                                      className={`w-5 h-5 rounded-full ${colors.dot} flex items-center justify-center text-white text-[9px] font-bold hover:scale-110 transition-transform`}
+                                      title={tag.name}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOverviewTagPopover(isPopoverOpen ? null : { tagId: tag.id, studentId: student.uid });
+                                      }}
+                                    >
+                                      {tag.points !== 0 && (tag.points > 0 ? '+' : '−')}
+                                    </button>
+                                    
+                                    {/* Tag detail popover */}
+                                    {isPopoverOpen && (
+                                      <div
+                                        ref={overviewTagPopoverRef}
+                                        className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl p-3 min-w-[220px] max-w-[280px]"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <div className={`flex items-center gap-2 pb-2 border-b ${colors.text}`}>
+                                          <span className={`w-3 h-3 rounded-full ${colors.dot}`}></span>
+                                          <span className="font-semibold">{tag.name}</span>
+                                          {tag.points !== 0 && (
+                                            <span className="text-sm">({formatPoints(tag.points)})</span>
+                                          )}
+                                        </div>
+                                        {tag.note && (
+                                          <p className="text-xs text-gray-500 mt-2 italic">{tag.note}</p>
+                                        )}
+                                        <div className="mt-2">
+                                          <p className="text-xs font-medium text-gray-700 mb-1">
+                                            Sinh viên được gắn thẻ ({getTagStudents(tag.id).length}):
+                                          </p>
+                                          <div className="max-h-32 overflow-y-auto space-y-1">
+                                            {getTagStudents(tag.id).map(s => (
+                                              <div key={s.uid} className="text-xs text-gray-600 flex items-center gap-1">
+                                                <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`}></span>
+                                                <span className={s.uid === student.uid ? 'font-semibold' : ''}>
+                                                  {s.fullName}
+                                                  {s.studentId && ` (${s.studentId})`}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                        <button
+                                          className="mt-2 text-xs text-gray-400 hover:text-gray-600"
+                                          onClick={() => setOverviewTagPopover(null)}
+                                        >
+                                          Đóng
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </td>
                           <td className={`border border-gray-300 px-3 py-2 text-center font-semibold ${
                             student.faceEmbedding && student.faceEmbedding.length > 0
