@@ -150,8 +150,7 @@ const TeacherClasses = () => {
   const [tagStudentSearchTerm, setTagStudentSearchTerm] = useState('');
   const tagPopoverRef = useRef(null);
   const [loadingOverview, setLoadingOverview] = useState(false);
-  const [overviewTagPopover, setOverviewTagPopover] = useState(null); // { tagId, studentId } or null
-  const overviewTagPopoverRef = useRef(null);
+  const [highlightedStudentInTag, setHighlightedStudentInTag] = useState(null); // studentId to highlight in tag list
 
   // ── Load classes ───────────────────────────────────────────────
   const loadClasses = async () => {
@@ -231,20 +230,6 @@ const TeacherClasses = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showTagPopover]);
-
-  // Close overview tag popover when clicking outside
-  useEffect(() => {
-    if (!overviewTagPopover) return;
-
-    const handleClickOutside = (event) => {
-      if (overviewTagPopoverRef.current && !overviewTagPopoverRef.current.contains(event.target)) {
-        setOverviewTagPopover(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [overviewTagPopover]);
 
   // ── Helpers ────────────────────────────────────────────────────
   const loadAttendanceSessions = async (classId) => {
@@ -420,6 +405,17 @@ const TeacherClasses = () => {
 
   const isStudentHasTag = (studentId, tagId) => {
     return studentTags.some(st => st.studentId === studentId && st.tagId === tagId);
+  };
+
+  // Navigate from overview to tag management with specific tag expanded
+  const handleViewTagFromOverview = (tagId, studentId) => {
+    setShowOverviewModal(false);
+    setShowClassDetailModal(true);
+    setClassDetailTab('tags');
+    setExpandedTagId(tagId);
+    setHighlightedStudentInTag(studentId);
+    // Clear highlight after 3 seconds
+    setTimeout(() => setHighlightedStudentInTag(null), 3000);
   };
 
   // ── Handlers: students ─────────────────────────────────────────
@@ -1902,23 +1898,35 @@ const TeacherClasses = () => {
                                 <p className="text-sm text-gray-400 text-center py-4">Chưa có sinh viên nào</p>
                               ) : (
                                 <div className="space-y-1 max-h-40 overflow-y-auto">
-                                  {tagStudents.map(student => (
-                                    <div key={student.uid} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                                      <div>
-                                        <p className="text-sm font-medium text-gray-900">{student.fullName}</p>
-                                        {student.studentId && (
-                                          <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>
-                                        )}
-                                      </div>
-                                      <button
-                                        className="text-red-500 hover:text-red-700 p-1"
-                                        onClick={() => handleRemoveTagFromStudent(student.uid, tag.id)}
-                                        title="Xóa khỏi thẻ"
+                                  {tagStudents.map(student => {
+                                    const isHighlighted = highlightedStudentInTag === student.uid;
+                                    return (
+                                      <div 
+                                        key={student.uid} 
+                                        className={`flex justify-between items-center p-2 rounded transition-all duration-300 ${
+                                          isHighlighted 
+                                            ? `${colors.bg} ring-2 ${colors.border} ring-offset-1` 
+                                            : 'bg-gray-50'
+                                        }`}
                                       >
-                                        <X className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  ))}
+                                        <div>
+                                          <p className={`text-sm font-medium ${isHighlighted ? colors.text : 'text-gray-900'}`}>
+                                            {student.fullName}
+                                          </p>
+                                          {student.studentId && (
+                                            <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>
+                                          )}
+                                        </div>
+                                        <button
+                                          className="text-red-500 hover:text-red-700 p-1"
+                                          onClick={() => handleRemoveTagFromStudent(student.uid, tag.id)}
+                                          title="Xóa khỏi thẻ"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -2188,80 +2196,6 @@ const TeacherClasses = () => {
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* ── Modal: Chi tiết thẻ (từ Tổng quan) ─────────────────────── */}
-      <Modal
-        isOpen={overviewTagPopover !== null}
-        onClose={() => setOverviewTagPopover(null)}
-        title="Chi tiết thẻ"
-        size="sm"
-        zIndex={60}
-      >
-        {overviewTagPopover && (() => {
-          const tag = classTags.find(t => t.id === overviewTagPopover.tagId);
-          if (!tag) return null;
-          const colors = getTagColor(tag.points);
-          const tagStudentsList = getTagStudents(tag.id);
-          
-          return (
-            <div className="space-y-4">
-              {/* Tag header */}
-              <div className={`flex items-center gap-3 p-3 rounded-lg ${colors.bg}`}>
-                <span className={`w-6 h-6 rounded-full ${colors.dot} flex items-center justify-center text-white text-sm font-bold`}>
-                  {tag.points !== 0 && (tag.points > 0 ? '+' : '−')}
-                </span>
-                <div>
-                  <p className={`font-semibold ${colors.text}`}>{tag.name}</p>
-                  {tag.points !== 0 && (
-                    <p className={`text-sm ${colors.text} opacity-75`}>{formatPoints(tag.points)}</p>
-                  )}
-                </div>
-              </div>
-              
-              {/* Note */}
-              {tag.note && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs font-medium text-gray-500 mb-1">Ghi chú:</p>
-                  <p className="text-sm text-gray-700">{tag.note}</p>
-                </div>
-              )}
-              
-              {/* Students list */}
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  Sinh viên được gắn thẻ ({tagStudentsList.length}):
-                </p>
-                {tagStudentsList.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">Chưa có sinh viên nào</p>
-                ) : (
-                  <div className="max-h-48 overflow-y-auto space-y-1 border rounded-lg p-2">
-                    {tagStudentsList.map((s, idx) => (
-                      <div 
-                        key={s.uid} 
-                        className={`flex items-center gap-2 p-2 rounded ${
-                          s.uid === overviewTagPopover.studentId ? `${colors.bg}` : 'hover:bg-gray-50'
-                        }`}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${colors.dot}`}></span>
-                        <span className="text-sm text-gray-900">{idx + 1}. {s.fullName}</span>
-                        {s.studentId && (
-                          <span className="text-xs text-gray-500">({s.studentId})</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex justify-end pt-2 border-t">
-                <Button variant="outline" onClick={() => setOverviewTagPopover(null)}>
-                  Đóng
-                </Button>
-              </div>
-            </div>
-          );
-        })()}
       </Modal>
 
       {/* ── Modal: Tạo buổi điểm danh ──────────────────────────── */}
@@ -2584,15 +2518,14 @@ const TeacherClasses = () => {
                               {/* Tag dots */}
                               {getStudentTagsList(student.uid).map(tag => {
                                 const colors = getTagColor(tag.points);
-                                const isPopoverOpen = overviewTagPopover?.tagId === tag.id && overviewTagPopover?.studentId === student.uid;
                                 return (
                                   <div key={tag.id} className="relative inline-flex">
                                     <button
                                       className={`w-5 h-5 rounded-full ${colors.dot} flex items-center justify-center text-white text-[9px] font-bold hover:scale-110 transition-transform`}
-                                      title={tag.name}
+                                      title={`${tag.name} - Click để xem chi tiết`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setOverviewTagPopover(isPopoverOpen ? null : { tagId: tag.id, studentId: student.uid });
+                                        handleViewTagFromOverview(tag.id, student.uid);
                                       }}
                                     >
                                       {tag.points !== 0 && (tag.points > 0 ? '+' : '−')}
