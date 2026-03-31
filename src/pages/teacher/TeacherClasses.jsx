@@ -32,7 +32,8 @@ import {
   assignTagToMultipleStudents,
   removeTagFromStudent,
   getTagColor,
-  formatPoints
+  formatPoints,
+  TAG_COLOR_PRESETS
 } from '../../services/tag.service';
 import {
   BookOpen,
@@ -141,7 +142,7 @@ const TeacherClasses = () => {
   const [showCreateTagModal, setShowCreateTagModal] = useState(false);
   const [showEditTagModal, setShowEditTagModal] = useState(false);
   const [editingTag, setEditingTag] = useState(null);
-  const [newTagData, setNewTagData] = useState({ name: '', note: '', points: 0 });
+  const [newTagData, setNewTagData] = useState({ name: '', note: '', points: 0, color: 'auto' });
   const [savingTag, setSavingTag] = useState(false);
   const [expandedTagId, setExpandedTagId] = useState(null);
   const [showTagPopover, setShowTagPopover] = useState(null); // studentId or null
@@ -306,13 +307,14 @@ const TeacherClasses = () => {
       name: newTagData.name.trim(),
       note: newTagData.note.trim(),
       points: newTagData.points,
+      color: newTagData.color === 'auto' ? null : newTagData.color,
       createdBy: userProfile.uid
     });
     
     if (result.success) {
       await loadClassTags(selectedClass.id);
       setShowCreateTagModal(false);
-      setNewTagData({ name: '', note: '', points: 0 });
+      setNewTagData({ name: '', note: '', points: 0, color: 'auto' });
       setSuccess('Đã tạo thẻ mới');
       setTimeout(() => setSuccess(''), 3000);
     } else {
@@ -331,7 +333,8 @@ const TeacherClasses = () => {
     const result = await updateTag(selectedClass.id, editingTag.id, {
       name: editingTag.name.trim(),
       note: editingTag.note.trim(),
-      points: editingTag.points
+      points: editingTag.points,
+      color: editingTag.color === 'auto' ? null : editingTag.color
     });
     
     if (result.success) {
@@ -1704,7 +1707,7 @@ const TeacherClasses = () => {
                                 {studentTagList.length > 0 && (
                                   <div className="flex flex-wrap gap-1 mt-2">
                                     {studentTagList.map(tag => {
-                                      const colors = getTagColor(tag.points);
+                                      const colors = getTagColor(tag.points, tag.color);
                                       return (
                                         <span
                                           key={tag.id}
@@ -1747,7 +1750,7 @@ const TeacherClasses = () => {
                                         <div className="space-y-1 max-h-40 overflow-y-auto">
                                           {classTags.map(tag => {
                                             const isAssigned = isStudentHasTag(student.uid, tag.id);
-                                            const colors = getTagColor(tag.points);
+                                            const colors = getTagColor(tag.points, tag.color);
                                             return (
                                               <button
                                                 key={tag.id}
@@ -1806,7 +1809,7 @@ const TeacherClasses = () => {
                     size="sm"
                     icon={<Plus className="w-4 h-4" />}
                     onClick={() => {
-                      setNewTagData({ name: '', note: '', points: 0 });
+                      setNewTagData({ name: '', note: '', points: 0, color: 'auto' });
                       setShowCreateTagModal(true);
                     }}
                   >
@@ -1823,7 +1826,7 @@ const TeacherClasses = () => {
                 ) : (
                   <div className="space-y-3">
                     {classTags.map(tag => {
-                      const colors = getTagColor(tag.points);
+                      const colors = getTagColor(tag.points, tag.color);
                       const tagStudents = getTagStudents(tag.id);
                       const isExpanded = expandedTagId === tag.id;
                       
@@ -1847,7 +1850,7 @@ const TeacherClasses = () => {
                                   icon={<Edit2 className="w-4 h-4" />}
                                   className="!px-2"
                                   onClick={() => {
-                                    setEditingTag({ ...tag });
+                                    setEditingTag({ ...tag, color: tag.color || 'auto' });
                                     setShowEditTagModal(true);
                                   }}
                                   title="Sửa thẻ"
@@ -2004,6 +2007,46 @@ const TeacherClasses = () => {
               </button>
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Màu thẻ
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {TAG_COLOR_PRESETS.map((preset) => {
+                const isSelected = newTagData.color === preset.id;
+                const previewColor = preset.colors 
+                  ? preset.colors 
+                  : getTagColor(newTagData.points);
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setNewTagData({ ...newTagData, color: preset.id })}
+                    className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all ${
+                      isSelected 
+                        ? 'border-blue-500 bg-blue-50' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    title={preset.name}
+                  >
+                    <span className={`w-5 h-5 rounded-full ${previewColor.dot}`}></span>
+                    <span className="text-sm text-gray-700">{preset.name}</span>
+                    {isSelected && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              "Tự động" sẽ chọn màu dựa vào điểm: xanh (cộng), đỏ (trừ), vàng (0)
+            </p>
+          </div>
           
           <div className="flex gap-3 pt-4">
             <Button
@@ -2093,6 +2136,46 @@ const TeacherClasses = () => {
                   +
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Màu thẻ
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {TAG_COLOR_PRESETS.map((preset) => {
+                  const isSelected = (editingTag.color || 'auto') === preset.id;
+                  const previewColor = preset.colors 
+                    ? preset.colors 
+                    : getTagColor(editingTag.points);
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setEditingTag({ ...editingTag, color: preset.id })}
+                      className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all ${
+                        isSelected 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      title={preset.name}
+                    >
+                      <span className={`w-5 h-5 rounded-full ${previewColor.dot}`}></span>
+                      <span className="text-sm text-gray-700">{preset.name}</span>
+                      {isSelected && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                "Tự động" sẽ chọn màu dựa vào điểm: xanh (cộng), đỏ (trừ), vàng (0)
+              </p>
             </div>
             
             <div className="flex gap-3 pt-4">
@@ -2517,7 +2600,7 @@ const TeacherClasses = () => {
                               <span>{student.fullName}</span>
                               {/* Tag dots */}
                               {getStudentTagsList(student.uid).map(tag => {
-                                const colors = getTagColor(tag.points);
+                                const colors = getTagColor(tag.points, tag.color);
                                 return (
                                   <div key={tag.id} className="relative inline-flex">
                                     <button
