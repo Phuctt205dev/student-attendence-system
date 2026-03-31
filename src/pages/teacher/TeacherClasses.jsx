@@ -417,6 +417,15 @@ const TeacherClasses = () => {
     setClassDetailTab('tags');
     setExpandedTagId(tagId);
     setHighlightedStudentInTag(studentId);
+    
+    // Scroll to the tag element after modal renders
+    setTimeout(() => {
+      const tagElement = document.getElementById(`tag-item-${tagId}`);
+      if (tagElement) {
+        tagElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    
     // Clear highlight after 3 seconds
     setTimeout(() => setHighlightedStudentInTag(null), 3000);
   };
@@ -1831,7 +1840,11 @@ const TeacherClasses = () => {
                       const isExpanded = expandedTagId === tag.id;
                       
                       return (
-                        <div key={tag.id} className={`border rounded-lg overflow-hidden ${colors.border}`}>
+                        <div 
+                          key={tag.id} 
+                          id={`tag-item-${tag.id}`}
+                          className={`border rounded-lg overflow-hidden ${colors.border}`}
+                        >
                           {/* Tag header */}
                           <div className={`p-3 ${colors.bg}`}>
                             <div className="flex items-center justify-between">
