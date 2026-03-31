@@ -422,8 +422,16 @@ const TeacherClasses = () => {
     setTimeout(() => {
       const tagElement = document.getElementById(`tag-item-${tagId}`);
       if (tagElement) {
-        tagElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        tagElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
+      
+      // Then scroll to the student inside the tag after expansion
+      setTimeout(() => {
+        const studentElement = document.getElementById(`tag-student-${tagId}-${studentId}`);
+        if (studentElement) {
+          studentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 200);
     }, 100);
     
     // Clear highlight after 3 seconds
@@ -1918,7 +1926,8 @@ const TeacherClasses = () => {
                                     const isHighlighted = highlightedStudentInTag === student.uid;
                                     return (
                                       <div 
-                                        key={student.uid} 
+                                        key={student.uid}
+                                        id={`tag-student-${tag.id}-${student.uid}`}
                                         className={`flex justify-between items-center p-2 rounded transition-all duration-300 ${
                                           isHighlighted 
                                             ? `${colors.bg} ring-2 ${colors.border} ring-offset-1` 
