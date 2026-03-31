@@ -90,6 +90,24 @@ service cloud.firestore {
         allow read, create, update, delete: if signedIn() &&
           classDoc(classId).data.teacherId == request.auth.uid;
       }
+
+      // =========================
+      // TAGS SUBCOLLECTION
+      // Web dùng: classes/{classId}/tags/{tagId}
+      // =========================
+      match /tags/{tagId} {
+        // Chỉ teacher owner của class mới được đọc/ghi tags
+        allow read, create, update, delete: if isClassOwner(classId);
+      }
+
+      // =========================
+      // STUDENT TAGS SUBCOLLECTION
+      // Web dùng: classes/{classId}/studentTags/{docId}
+      // =========================
+      match /studentTags/{docId} {
+        // Chỉ teacher owner của class mới được đọc/ghi student tags
+        allow read, create, update, delete: if isClassOwner(classId);
+      }
     }
 
     // =========================

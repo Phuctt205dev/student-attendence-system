@@ -1745,7 +1745,7 @@ const TeacherClasses = () => {
                                                 onClick={() => handleToggleTagForStudent(student.uid, tag.id)}
                                               >
                                                 <span className={`w-3 h-3 rounded-full ${colors.dot} flex-shrink-0`}></span>
-                                                <span className="flex-1 truncate">{tag.name}</span>
+                                                <span className={`flex-1 truncate ${colors.text}`}>{tag.name}</span>
                                                 {tag.points !== 0 && (
                                                   <span className="text-xs text-gray-500">{formatPoints(tag.points)}</span>
                                                 )}
