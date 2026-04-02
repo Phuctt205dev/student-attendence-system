@@ -84,7 +84,7 @@ const TeacherClasses = () => {
   // ── Selected items ─────────────────────────────────────────────
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
-  const [sessionDetailStudents, setSessionDetailStudents] = useState({ present: [], absent: [] });
+  const [sessionDetailStudents, setSessionDetailStudents] = useState({ present: [], late: [], absent: [] });
   const [classStudents, setClassStudents] = useState([]);
   const [attendanceSessions, setAttendanceSessions] = useState([]);
 
@@ -863,10 +863,12 @@ const TeacherClasses = () => {
 
       if (result.success) {
         const presentStudents = result.students.filter(s => s.status === 'present');
+        const lateStudents = result.students.filter(s => s.status === 'late');
         const absentStudents = result.students.filter(s => s.status === 'absent');
 
         setSessionDetailStudents({
           present: sortStudentsByStudentId(presentStudents),
+          late: sortStudentsByStudentId(lateStudents),
           absent: sortStudentsByStudentId(absentStudents)
         });
       }
@@ -970,6 +972,9 @@ const TeacherClasses = () => {
         const presentCount = overviewData.sessions.filter(
           session => overviewData.records[student.uid]?.[session.id] === 'present'
         ).length;
+        const lateCount = overviewData.sessions.filter(
+          session => overviewData.records[student.uid]?.[session.id] === 'late'
+        ).length;
 
         const row = [
           index + 1,
@@ -978,9 +983,9 @@ const TeacherClasses = () => {
           student.faceEmbedding && student.faceEmbedding.length > 0 ? 1 : 0,
           ...overviewData.sessions.map(session => {
             const status = overviewData.records[student.uid]?.[session.id];
-            return status === 'present' ? 1 : 0;
+            return status === 'present' ? 1 : status === 'late' ? 'T' : 0;
           }),
-          `${presentCount}/${overviewData.sessions.length}`
+          `${presentCount + lateCount}/${overviewData.sessions.length}`
         ];
         excelData.push(row);
       });
@@ -1607,7 +1612,8 @@ const TeacherClasses = () => {
                     <div className="space-y-2 max-h-64 overflow-y-auto">
                       {attendanceSessions.map((session) => {
                         const presentCount = session.presentCount || 0;
-                        const absentCount = Math.max(0, classStudents.length - presentCount);
+                        const lateCount = session.lateCount || 0;
+                        const absentCount = Math.max(0, classStudents.length - presentCount - lateCount);
                         return (
                           <div key={session.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                             <div className="flex items-center justify-between gap-3">
@@ -1620,6 +1626,7 @@ const TeacherClasses = () => {
                                 </p>
                                 <div className="flex gap-3 mt-1 text-xs">
                                   <span className="text-green-600"><strong>{presentCount}</strong> có mặt</span>
+                                  {lateCount > 0 && <span className="text-yellow-600"><strong>{lateCount}</strong> trễ</span>}
                                   <span className="text-red-600"><strong>{absentCount}</strong> vắng</span>
                                 </div>
                               </div>
@@ -2345,24 +2352,19 @@ const TeacherClasses = () => {
               <>
                 <div className="space-y-2 max-h-96 overflow-y-auto border rounded-lg p-3">
                   {classStudents.map((student) => {
-                    const isPresent = attendanceRecords[student.uid]?.status === 'present';
+                    const currentStatus = attendanceRecords[student.uid]?.status || 'absent';
                     const method = attendanceRecords[student.uid]?.method;
                     const isFaceRecognition = method === 'face';
 
                     return (
                       <div
                         key={student.uid}
-                        className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors cursor-pointer ${
-                          isPresent ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'
+                        className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
+                          currentStatus === 'present' ? 'bg-green-50 border-green-300' :
+                          currentStatus === 'late' ? 'bg-yellow-50 border-yellow-300' :
+                          'bg-gray-50 border-gray-200'
                         }`}
-                        onClick={() => handleToggleAttendance(student.uid, isPresent ? 'absent' : 'present')}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isPresent}
-                          onChange={() => {}}
-                          className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 pointer-events-none"
-                        />
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <p className="font-medium text-gray-900">{student.fullName}</p>
@@ -2375,9 +2377,41 @@ const TeacherClasses = () => {
                           <p className="text-sm text-gray-600">{student.email}</p>
                           {student.studentId && <p className="text-xs text-gray-500">MSSV: {student.studentId}</p>}
                         </div>
-                        <span className={`text-sm font-semibold px-3 py-1 rounded ${isPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {isPresent ? 'Có mặt' : 'Vắng'}
-                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAttendance(student.uid, 'present')}
+                            className={`text-sm font-semibold px-3 py-1 rounded transition-all ${
+                              currentStatus === 'present' 
+                                ? 'bg-green-500 text-white border-2 border-green-600' 
+                                : 'bg-green-100 text-green-800 hover:bg-green-200'
+                            }`}
+                          >
+                            Có mặt
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAttendance(student.uid, 'late')}
+                            className={`text-sm font-semibold px-3 py-1 rounded transition-all ${
+                              currentStatus === 'late'
+                                ? 'bg-yellow-500 text-white border-2 border-yellow-600'
+                                : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                            }`}
+                          >
+                            Trễ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAttendance(student.uid, 'absent')}
+                            className={`text-sm font-semibold px-3 py-1 rounded transition-all ${
+                              currentStatus === 'absent'
+                                ? 'bg-red-500 text-white border-2 border-red-600'
+                                : 'bg-red-100 text-red-800 hover:bg-red-200'
+                            }`}
+                          >
+                            Vắng
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -2469,10 +2503,14 @@ const TeacherClasses = () => {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg text-center">
                 <p className="text-3xl font-bold text-green-700">{sessionDetailStudents.present.length}</p>
                 <p className="text-sm text-green-600 font-medium">Có mặt</p>
+              </div>
+              <div className="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-lg text-center">
+                <p className="text-3xl font-bold text-yellow-700">{sessionDetailStudents.late.length}</p>
+                <p className="text-sm text-yellow-600 font-medium">Trễ</p>
               </div>
               <div className="p-4 bg-red-50 border-2 border-red-200 rounded-lg text-center">
                 <p className="text-3xl font-bold text-red-700">{sessionDetailStudents.absent.length}</p>
@@ -2480,7 +2518,7 @@ const TeacherClasses = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Present students */}
               <div className="border-2 border-green-200 rounded-lg p-3 bg-green-50">
                 <h4 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
@@ -2495,6 +2533,54 @@ const TeacherClasses = () => {
                       <div key={student.uid} className="p-2 bg-white rounded border border-green-200">
                         <p className="font-medium text-gray-900 text-sm">{student.fullName}</p>
                         <p className="text-xs text-gray-600">{student.studentId || 'N/A'}</p>
+                        {student.timestamp && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            ⏰ {new Date(student.timestamp.seconds * 1000).toLocaleTimeString('vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        )}
+                        {student.method && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {student.method === 'face' ? '📸 Nhận diện khuôn mặt' :
+                             student.method === 'qr' ? '📱 QR Code' :
+                             student.method === 'manual' ? '✍️ Thủ công' : ''}
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Late students */}
+              <div className="border-2 border-yellow-200 rounded-lg p-3 bg-yellow-50">
+                <h4 className="font-semibold text-yellow-900 mb-3 flex items-center gap-2">
+                  <span className="w-3 h-3 bg-yellow-500 rounded-full"></span>
+                  Sinh viên trễ ({sessionDetailStudents.late.length})
+                </h4>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {sessionDetailStudents.late.length === 0 ? (
+                    <p className="text-sm text-yellow-700 text-center py-4">Không có sinh viên nào trễ</p>
+                  ) : (
+                    sessionDetailStudents.late.map((student) => (
+                      <div key={student.uid} className="p-2 bg-white rounded border border-yellow-200">
+                        <p className="font-medium text-gray-900 text-sm">{student.fullName}</p>
+                        <p className="text-xs text-gray-600">{student.studentId || 'N/A'}</p>
+                        {student.timestamp && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            ⏰ {new Date(student.timestamp.seconds * 1000).toLocaleTimeString('vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        )}
+                        {student.lateMinutes && student.lateMinutes > 0 && (
+                          <p className="text-xs text-yellow-700 font-semibold mt-1">
+                            🕐 Trễ {student.lateMinutes} phút
+                          </p>
+                        )}
                         {student.method && (
                           <p className="text-xs text-gray-500 mt-1">
                             {student.method === 'face' ? '📸 Nhận diện khuôn mặt' :
@@ -2608,6 +2694,9 @@ const TeacherClasses = () => {
                       const presentCount = overviewData.sessions.filter(
                         session => overviewData.records[student.uid]?.[session.id] === 'present'
                       ).length;
+                      const lateCount = overviewData.sessions.filter(
+                        session => overviewData.records[student.uid]?.[session.id] === 'late'
+                      ).length;
 
                       return (
                         <tr key={student.uid} className="hover:bg-gray-50">
@@ -2650,19 +2739,22 @@ const TeacherClasses = () => {
                           {overviewData.sessions.map(session => {
                             const status = overviewData.records[student.uid]?.[session.id];
                             const isPresent = status === 'present';
+                            const isLate = status === 'late';
                             return (
                               <td
                                 key={session.id}
                                 className={`border border-gray-300 px-3 py-2 text-center font-semibold ${
-                                  isPresent ? 'bg-green-100 text-green-900' : 'bg-red-100 text-red-900'
+                                  isPresent ? 'bg-green-100 text-green-900' : 
+                                  isLate ? 'bg-yellow-100 text-yellow-900' :
+                                  'bg-red-100 text-red-900'
                                 }`}
                               >
-                                {isPresent ? '1' : '0'}
+                                {isPresent ? '1' : isLate ? 'T' : '0'}
                               </td>
                             );
                           })}
                           <td className="border border-gray-300 px-3 py-2 text-center font-bold bg-blue-100 text-blue-900">
-                            {presentCount}/{overviewData.sessions.length}
+                            {presentCount + lateCount}/{overviewData.sessions.length}
                           </td>
                         </tr>
                       );

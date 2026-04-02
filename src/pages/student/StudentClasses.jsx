@@ -320,7 +320,7 @@ const StudentClasses = () => {
                   <TrendingUp className="w-5 h-5" />
                   Thống kê điểm danh
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="bg-blue-50 p-3 rounded-lg">
                     <p className="text-sm text-gray-600">Tổng buổi</p>
                     <p className="text-2xl font-bold text-blue-600">
@@ -331,6 +331,12 @@ const StudentClasses = () => {
                     <p className="text-sm text-gray-600">Có mặt</p>
                     <p className="text-2xl font-bold text-green-600">
                       {attendanceStats.present}
+                    </p>
+                  </div>
+                  <div className="bg-yellow-50 p-3 rounded-lg">
+                    <p className="text-sm text-gray-600">Trễ</p>
+                    <p className="text-2xl font-bold text-yellow-600">
+                      {attendanceStats.late || 0}
                     </p>
                   </div>
                   <div className="bg-red-50 p-3 rounded-lg">

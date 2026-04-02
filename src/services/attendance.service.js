@@ -35,6 +35,9 @@ export const createAttendanceSession = async (classId, sessionData) => {
       sessionNumber: sessionData.sessionNumber,
       totalStudents: 0, // Sẽ được cập nhật khi có điểm danh
       presentCount: 0,  // Sẽ được cập nhật khi có điểm danh
+      lateCount: 0,     // Số sinh viên trễ
+      sessionStartTime: serverTimestamp(), // Thời gian bắt đầu buổi điểm danh
+      lateThreshold: 15, // Ngưỡng tính trễ (phút)
       createdAt: serverTimestamp()
     });
 
@@ -60,12 +63,14 @@ export const getAttendancesByClass = async (classId) => {
       // Đếm số records từ subcollection
       const recordsSnapshot = await getDocs(collection(db, 'attendanceSessions', sessionDoc.id, 'records'));
       const presentCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'PRESENT').length;
+      const lateCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'LATE').length;
 
       return {
         id: sessionDoc.id,
         ...sessionData,
         recordCount: recordsSnapshot.size,
-        presentCount
+        presentCount,
+        lateCount
       };
     }));
 
@@ -118,23 +123,36 @@ export const markAttendance = async (sessionId, studentData) => {
       return { success: false, error: 'Student already checked in' };
     }
 
+    const sessionInfo = sessionDoc.data();
+    const sessionStartTime = sessionInfo.sessionStartTime?.toDate() || sessionInfo.date?.toDate();
+    const lateThreshold = sessionInfo.lateThreshold || 15;
+    const checkInTime = new Date();
+    
+    // Tính số phút chênh lệch
+    const timeDiffMinutes = Math.floor((checkInTime - sessionStartTime) / (1000 * 60));
+    const isLate = timeDiffMinutes > lateThreshold;
+    const status = isLate ? 'LATE' : (studentData.status || 'PRESENT');
+
     // Thêm record vào subcollection
     await setDoc(doc(db, 'attendanceSessions', sessionId, 'records', studentData.studentId), {
       studentId: studentData.studentId,
       studentName: studentData.studentName,
       studentCode: studentData.studentCode || '',
-      status: studentData.status || 'PRESENT',
+      status: status,
       timestamp: serverTimestamp(),
+      lateMinutes: isLate ? timeDiffMinutes : 0,
       method: studentData.method || 'face', // 'face' cho nhận diện khuôn mặt, 'qr' cho QR code
       confidence: studentData.confidence || null // Độ chính xác của nhận diện khuôn mặt
     });
 
-    // Cập nhật presentCount trong session
+    // Cập nhật presentCount và lateCount trong session
     const recordsSnapshot = await getDocs(collection(db, 'attendanceSessions', sessionId, 'records'));
     const presentCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'PRESENT').length;
+    const lateCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'LATE').length;
 
     await updateDoc(doc(db, 'attendanceSessions', sessionId), {
       presentCount,
+      lateCount,
       totalStudents: recordsSnapshot.size
     });
 
@@ -160,21 +178,24 @@ export const batchUpdateManualAttendance = async (sessionId, studentRecords) => 
         studentId,
         studentName,
         studentCode: studentCode || '',
-        status: status === 'present' ? 'PRESENT' : 'ABSENT',
+        status: status === 'present' ? 'PRESENT' : status === 'late' ? 'LATE' : 'ABSENT',
         timestamp: serverTimestamp(),
         method: 'manual',
-        note: note || ''
+        note: note || '',
+        lateMinutes: status === 'late' ? 0 : 0 // Cho manual, không tính phút trễ
       }, { merge: true });
     });
 
     await Promise.all(promises);
 
-    // Cập nhật presentCount trong session
+    // Cập nhật presentCount và lateCount trong session
     const recordsSnapshot = await getDocs(collection(db, 'attendanceSessions', sessionId, 'records'));
     const presentCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'PRESENT').length;
+    const lateCount = recordsSnapshot.docs.filter(doc => doc.data().status === 'LATE').length;
 
     await updateDoc(doc(db, 'attendanceSessions', sessionId), {
       presentCount,
+      lateCount,
       totalStudents: recordsSnapshot.size
     });
 
@@ -268,6 +289,7 @@ export const getStudentAttendanceStats = async (studentId, classId) => {
 
     const sessionsSnapshot = await getDocs(q);
     let present = 0;
+    let late = 0;
     let absent = 0;
     let total = 0;
 
@@ -275,8 +297,15 @@ export const getStudentAttendanceStats = async (studentId, classId) => {
       total++;
       const recordDoc = await getDoc(doc(db, 'attendanceSessions', sessionDoc.id, 'records', studentId));
 
-      if (recordDoc.exists() && recordDoc.data().status === 'PRESENT') {
-        present++;
+      if (recordDoc.exists()) {
+        const status = recordDoc.data().status;
+        if (status === 'PRESENT') {
+          present++;
+        } else if (status === 'LATE') {
+          late++;
+        } else {
+          absent++;
+        }
       } else {
         absent++;
       }
@@ -287,8 +316,9 @@ export const getStudentAttendanceStats = async (studentId, classId) => {
       stats: {
         total,
         present,
+        late,
         absent,
-        attendanceRate: total > 0 ? ((present / total) * 100).toFixed(1) : 0
+        attendanceRate: total > 0 ? (((present + late) / total) * 100).toFixed(1) : 0
       }
     };
   } catch (error) {
@@ -357,12 +387,29 @@ export const getAttendanceDetails = async (attendanceId, classId) => {
       // Kiểm tra attendance record
       const recordDoc = await getDoc(doc(db, 'attendanceSessions', attendanceId, 'records', studentDoc.id));
 
+      let status = 'absent';
+      let lateMinutes = 0;
+      
+      if (recordDoc.exists()) {
+        const recordStatus = recordDoc.data().status;
+        if (recordStatus === 'PRESENT') {
+          status = 'present';
+        } else if (recordStatus === 'LATE') {
+          status = 'late';
+          lateMinutes = recordDoc.data().lateMinutes || 0;
+        } else {
+          status = 'absent';
+        }
+      }
+
       return {
         uid: studentDoc.id,
         fullName: studentData.name,
         email: studentData.email,
         studentId: studentData.studentCode,
-        status: recordDoc.exists() ? (recordDoc.data().status === 'PRESENT' ? 'present' : 'absent') : 'absent',
+        status: status,
+        timestamp: recordDoc.exists() ? recordDoc.data().timestamp : null,
+        lateMinutes: lateMinutes,
         checkInTime: recordDoc.exists() ? recordDoc.data().timestamp : null,
         method: recordDoc.exists() ? recordDoc.data().method : null
       };
