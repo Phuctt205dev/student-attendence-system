@@ -80,6 +80,7 @@ const TeacherClasses = () => {
   const [showQRModal, setShowQRModal] = useState(false);
   const [showOverviewModal, setShowOverviewModal] = useState(false);
   const [showSessionDetailModal, setShowSessionDetailModal] = useState(false);
+  const [showEditLateThresholdModal, setShowEditLateThresholdModal] = useState(false);
 
   // ── Selected items ─────────────────────────────────────────────
   const [selectedClass, setSelectedClass] = useState(null);
@@ -118,6 +119,9 @@ const TeacherClasses = () => {
 
   // ── Create attendance session form ─────────────────────────────
   const [sessionName, setSessionName] = useState('');
+  const [lateThreshold, setLateThreshold] = useState(15); // Ngưỡng tính trễ (phút)
+  const [editingLateThreshold, setEditingLateThreshold] = useState(15); // Cho modal edit
+  const [updatingLateThreshold, setUpdatingLateThreshold] = useState(false);
   const [creatingAttendance, setCreatingAttendance] = useState(false);
 
   // ── Manual attendance state ────────────────────────────────────
@@ -714,6 +718,7 @@ const TeacherClasses = () => {
   // ── Handlers: attendance ───────────────────────────────────────
   const handleOpenCreateAttendance = () => {
     setSessionName('');
+    setLateThreshold(15); // Reset về mặc định
     setError('');
     setShowCreateAttendanceModal(true);
   };
@@ -727,14 +732,21 @@ const TeacherClasses = () => {
       setCreatingAttendance(false);
       return;
     }
+    if (lateThreshold < 0 || lateThreshold > 120) {
+      setError('Thời gian trễ phải từ 0 đến 120 phút');
+      setCreatingAttendance(false);
+      return;
+    }
     const result = await createAttendanceSession(selectedClass.id, {
       sessionNumber: sessionName,
+      lateThreshold: lateThreshold, // Truyền thời gian ngưỡng trễ
       createdBy: userProfile.uid
     });
     if (result.success) {
       setSuccess(`Tạo buổi "${sessionName}" thành công!`);
       setShowCreateAttendanceModal(false);
       setSessionName('');
+      setLateThreshold(15);
       await loadAttendanceSessions(selectedClass.id);
     } else {
       setError(result.error || 'Không thể tạo buổi điểm danh');
@@ -875,6 +887,46 @@ const TeacherClasses = () => {
     } catch (error) {
       console.error('Error loading session details:', error);
       setError('Không thể tải chi tiết buổi điểm danh');
+    }
+  };
+
+  const handleOpenEditLateThreshold = () => {
+    setEditingLateThreshold(selectedSession.lateThreshold || 15);
+    setShowEditLateThresholdModal(true);
+    setError('');
+  };
+
+  const handleUpdateLateThreshold = async () => {
+    if (editingLateThreshold < 0 || editingLateThreshold > 120) {
+      setError('Thời gian trễ phải từ 0 đến 120 phút');
+      return;
+    }
+
+    setUpdatingLateThreshold(true);
+    setError('');
+
+    try {
+      const { updateDoc, doc } = await import('firebase/firestore');
+      const { db } = await import('../../services/firebase');
+      
+      await updateDoc(doc(db, 'attendanceSessions', selectedSession.id), {
+        lateThreshold: editingLateThreshold
+      });
+
+      // Cập nhật local state
+      setSelectedSession(prev => ({
+        ...prev,
+        lateThreshold: editingLateThreshold
+      }));
+
+      setSuccess(`Đã cập nhật ngưỡng trễ thành ${editingLateThreshold} phút`);
+      setShowEditLateThresholdModal(false);
+      await loadAttendanceSessions(selectedClass.id);
+    } catch (error) {
+      console.error('Error updating late threshold:', error);
+      setError('Không thể cập nhật ngưỡng trễ');
+    } finally {
+      setUpdatingLateThreshold(false);
     }
   };
 
@@ -2325,6 +2377,26 @@ const TeacherClasses = () => {
             onChange={(e) => setSessionName(e.target.value)}
             required
           />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Thời gian tính trễ (phút)
+            </label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min="0"
+                max="120"
+                value={lateThreshold}
+                onChange={(e) => setLateThreshold(parseInt(e.target.value) || 0)}
+                required
+                className="flex-1"
+              />
+              <span className="text-sm text-gray-500 whitespace-nowrap">phút</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Sinh viên điểm danh sau <strong>{lateThreshold}</strong> phút kể từ khi mở buổi sẽ bị tính trễ
+            </p>
+          </div>
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setShowCreateAttendanceModal(false)} fullWidth disabled={creatingAttendance}>Hủy</Button>
             <Button type="submit" variant="primary" fullWidth loading={creatingAttendance} disabled={creatingAttendance}>Tạo buổi</Button>
@@ -2501,6 +2573,22 @@ const TeacherClasses = () => {
                   weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
                 })}
               </p>
+              {selectedSession.lateThreshold !== undefined && (
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-yellow-50 border border-yellow-200 rounded-full">
+                    <span className="text-xs text-yellow-700">
+                      ⏱️ Ngưỡng trễ: <strong>{selectedSession.lateThreshold}</strong> phút
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenEditLateThreshold}
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    Chỉnh sửa
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-4 mb-4">
@@ -2626,6 +2714,68 @@ const TeacherClasses = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ── Modal: Chỉnh sửa ngưỡng trễ ─────────────────────────── */}
+      <Modal
+        isOpen={showEditLateThresholdModal}
+        onClose={() => setShowEditLateThresholdModal(false)}
+        title="Chỉnh sửa ngưỡng trễ"
+        size="md"
+      >
+        <div className="space-y-4">
+          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-sm text-red-600">{error}</p></div>}
+          
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-sm text-blue-800">
+              <strong>Lưu ý:</strong> Thay đổi ngưỡng trễ chỉ ảnh hưởng đến các lần điểm danh mới sau khi cập nhật. 
+              Các bản ghi điểm danh cũ không bị thay đổi.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Thời gian tính trễ (phút)
+            </label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min="0"
+                max="120"
+                value={editingLateThreshold}
+                onChange={(e) => setEditingLateThreshold(parseInt(e.target.value) || 0)}
+                required
+                className="flex-1"
+              />
+              <span className="text-sm text-gray-500 whitespace-nowrap">phút</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Sinh viên điểm danh sau <strong>{editingLateThreshold}</strong> phút kể từ khi mở buổi sẽ bị tính trễ
+            </p>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setShowEditLateThresholdModal(false)} 
+              fullWidth 
+              disabled={updatingLateThreshold}
+            >
+              Hủy
+            </Button>
+            <Button 
+              type="button" 
+              variant="primary" 
+              onClick={handleUpdateLateThreshold} 
+              fullWidth 
+              loading={updatingLateThreshold}
+              disabled={updatingLateThreshold}
+            >
+              Cập nhật
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* ── Modal: Tổng quan điểm danh ─────────────────────────── */}

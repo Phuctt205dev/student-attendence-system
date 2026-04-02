@@ -37,7 +37,7 @@ export const createAttendanceSession = async (classId, sessionData) => {
       presentCount: 0,  // Sẽ được cập nhật khi có điểm danh
       lateCount: 0,     // Số sinh viên trễ
       sessionStartTime: serverTimestamp(), // Thời gian bắt đầu buổi điểm danh
-      lateThreshold: 15, // Ngưỡng tính trễ (phút)
+      lateThreshold: sessionData.lateThreshold || 15, // Ngưỡng tính trễ (phút), mặc định 15
       createdAt: serverTimestamp()
     });
 
