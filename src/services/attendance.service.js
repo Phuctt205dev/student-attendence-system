@@ -131,7 +131,9 @@ export const markAttendance = async (sessionId, studentData) => {
     // Tính số phút chênh lệch
     const timeDiffMinutes = Math.floor((checkInTime - sessionStartTime) / (1000 * 60));
     const isLate = timeDiffMinutes > lateThreshold;
-    const status = isLate ? 'LATE' : (studentData.status || 'PRESENT');
+    
+    // Logic kiểm tra trễ - KHÔNG cho phép override từ client
+    const status = isLate ? 'LATE' : 'PRESENT';
 
     // Thêm record vào subcollection
     await setDoc(doc(db, 'attendanceSessions', sessionId, 'records', studentData.studentId), {
