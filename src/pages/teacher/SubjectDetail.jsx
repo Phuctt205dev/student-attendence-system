@@ -418,19 +418,26 @@ const SubjectDetail = () => {
 
         return `
           <div class="question">
-            <div class="question-title">Cau ${index + 1}. ${escapeHtml(question.questionText)}</div>
+            <div class="question-title">Câu ${index + 1}: ${escapeHtml(question.questionText)}</div>
             <ul class="options">${options}</ul>
-            <div class="answer">Dap an: ${escapeHtml(question.correctAnswer || '')}</div>
           </div>
         `;
       })
       .join('');
 
-    const omrItems = questions
-      .map((_, index) => {
-        return `
+    const chunkSize = 10;
+    const totalQuestions = questions.length;
+    const columns = Math.ceil(totalQuestions / chunkSize) || 1;
+
+    const buildOmrColumn = (columnIndex) => {
+      const start = columnIndex * chunkSize;
+      const end = Math.min(start + chunkSize, totalQuestions);
+      const rows = [];
+
+      for (let i = start; i < end; i += 1) {
+        rows.push(`
           <div class="omr-row">
-            <div class="omr-number">${index + 1}</div>
+            <div class="omr-number">${i + 1}</div>
             <div class="omr-bubbles">
               <span class="bubble">A</span>
               <span class="bubble">B</span>
@@ -438,44 +445,50 @@ const SubjectDetail = () => {
               <span class="bubble">D</span>
             </div>
           </div>
-        `;
-      })
+        `);
+      }
+
+      return `<div class="omr-column">${rows.join('')}</div>`;
+    };
+
+    const omrColumns = Array.from({ length: columns })
+      .map((_, index) => buildOmrColumn(index))
       .join('');
 
-    const durationLabel = examData?.durationMinutes ? `${examData.durationMinutes} phut` : '';
+    const durationLabel = examData?.durationMinutes ? `${examData.durationMinutes} phút` : '';
 
     return `
       <section class="page">
         <div class="header">
           <div class="header-left">
-            <div class="school">TRUONG DAI HOC CONG NGHE THONG TIN</div>
+            <div class="school">TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN</div>
             <div class="faculty">KHOA ${escapeHtml(facultyName || '')}</div>
             <div class="line"></div>
             <div class="invigilators">
-              <div class="invigilator">Giam thi 1</div>
-              <div class="invigilator">Giam thi 2</div>
+              <div class="invigilator">Giám thị 1</div>
+              <div class="invigilator">Giám thị 2</div>
             </div>
           </div>
           <div class="header-center">
-            <div class="exam-title">DE THI CUOI HOC KY ... (20.. - 20..)</div>
-            <div class="subject">Mon hoc: ${escapeHtml(subjectName || '')}</div>
-            <div class="duration">Thoi gian lam bai: ${escapeHtml(durationLabel)}</div>
+            <div class="exam-title">ĐỀ THI CUỐI HỌC KỲ ... (20.. - 20..)</div>
+            <div class="subject">Môn học: ${escapeHtml(subjectName || '')}</div>
+            <div class="duration">Thời gian làm bài: ${escapeHtml(durationLabel)}</div>
             <div class="student-fields">
-              <div>Ho, ten SV: ............................................................</div>
-              <div>Ma SV: .....................................................................</div>
-              <div>STT: ........................................................................</div>
-              <div class="note">(Thi sinh khong duoc su dung tai lieu)</div>
+              <div>Họ, tên SV: ........................................................................</div>
+              <div>Mã SV: ...........................................................................</div>
+              <div>STT: ............................................................................</div>
+              <div class="note">(Thí sinh không được sử dụng tài liệu)</div>
             </div>
           </div>
           <div class="header-right">
             <div class="code-box">
-              <div class="code-label">Ma de thi</div>
+              <div class="code-label">Mã đề thi</div>
               <div class="code-value">${escapeHtml(codeLabel || '')}</div>
             </div>
           </div>
         </div>
 
-        <div class="section-title">A. TRAC NGHIEM</div>
+        <div class="section-title">A. TRẮC NGHIỆM</div>
         <div class="divider"></div>
 
         <div class="content">
@@ -483,14 +496,66 @@ const SubjectDetail = () => {
         </div>
 
         <div class="omr-section">
-          <div class="omr-header">
-            <div>Diem (so):</div>
-            <div>Diem (chu):</div>
-            <div>Giam khao 1</div>
-            <div>Giam khao 2</div>
-            <div>So phach</div>
+          <div class="omr-score">
+            <div>Điểm (số):</div>
+            <div>Điểm (chữ):</div>
+            <div>Giám khảo 1</div>
+            <div>Giám khảo 2</div>
+            <div>Số phách</div>
           </div>
-          <div class="omr-grid">${omrItems}</div>
+
+          <div class="omr-sheet">
+            <div class="omr-id-block">
+              <div class="omr-title">MÃ ĐỀ</div>
+              <div class="omr-cells">
+                <span class="square"></span>
+                <span class="square"></span>
+                <span class="square"></span>
+              </div>
+              <div class="omr-digits">
+                ${Array.from({ length: 10 }).map((_, idx) => `
+                  <div class="digit-row">
+                    <span class="digit-label">${idx}</span>
+                    <span class="bubble"></span>
+                    <span class="bubble"></span>
+                    <span class="bubble"></span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="omr-id-block">
+              <div class="omr-title">SỐ BÁO DANH</div>
+              <div class="omr-cells">
+                ${Array.from({ length: 6 }).map(() => '<span class="square"></span>').join('')}
+              </div>
+              <div class="omr-digits">
+                ${Array.from({ length: 10 }).map((_, idx) => `
+                  <div class="digit-row">
+                    <span class="digit-label">${idx}</span>
+                    ${Array.from({ length: 6 }).map(() => '<span class="bubble"></span>').join('')}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="omr-answers">
+              <div class="omr-title">ĐÁP ÁN TRẮC NGHIỆM</div>
+              <div class="omr-columns">${omrColumns}</div>
+            </div>
+          </div>
+
+          <div class="omr-notes">
+            <div class="note-title">Thí sinh lưu ý:</div>
+            <ul>
+              <li>Giữ cho phiếu phẳng, không bôi bẩn, làm rách, không tẩy xóa, để máy chấm.</li>
+              <li>Tô kín, tô đậm các ô tròn tương ứng với Mã đề thi, Số báo danh và đáp án đúng cho phần trắc nghiệm.</li>
+              <li>Không được ghi, tô, vẽ lên các ô vuông đen, để máy định vị chính xác.</li>
+              <li><strong>Chỉ chọn một đáp án</strong> (Không bôi mờ các đáp án khác để máy chấm chính xác).</li>
+              <li>Số báo danh: 6 chữ số - phiên bản rút gọn của MSSV. Ví dụ: 18520560 → 180560.</li>
+              <li>Mã đề: 3 chữ số - ghi và tô đúng và đủ.</li>
+            </ul>
+          </div>
         </div>
       </section>
     `;
@@ -528,7 +593,7 @@ const SubjectDetail = () => {
             .page { min-height: 297mm; box-sizing: border-box; page-break-after: always; }
             .header { display: grid; grid-template-columns: 1.2fr 1.6fr 0.8fr; gap: 16px; align-items: start; }
             .school { font-weight: 700; text-transform: uppercase; font-size: 14px; }
-            .faculty { font-size: 12px; margin-top: 4px; }
+            .faculty { font-size: 12px; margin-top: 4px; text-transform: uppercase; }
             .line { height: 1px; background: #222; margin: 8px 0; }
             .invigilators { border: 1px solid #111; display: grid; grid-template-columns: 1fr 1fr; text-align: center; font-size: 12px; }
             .invigilator { padding: 12px 6px; border-right: 1px solid #111; }
@@ -548,16 +613,30 @@ const SubjectDetail = () => {
             .question-title { font-weight: 700; margin-bottom: 4px; }
             .options { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
             .opt-label { font-weight: 700; margin-right: 6px; }
-            .answer { margin-top: 4px; font-style: italic; font-size: 12px; }
             .omr-section { margin-top: 20px; border-top: 1px solid #111; padding-top: 12px; }
-            .omr-header { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 11px; text-align: center; border: 1px solid #111; }
-            .omr-header > div { padding: 6px 4px; border-right: 1px solid #111; }
-            .omr-header > div:last-child { border-right: none; }
-            .omr-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 16px; margin-top: 12px; font-size: 11px; }
-            .omr-row { display: flex; align-items: center; gap: 8px; }
-            .omr-number { width: 20px; text-align: right; font-weight: 700; }
-            .omr-bubbles { display: grid; grid-template-columns: repeat(4, 22px); gap: 6px; }
-            .bubble { width: 22px; height: 22px; border: 1px solid #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+            .omr-score { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 11px; text-align: center; border: 1px solid #111; }
+            .omr-score > div { padding: 6px 4px; border-right: 1px solid #111; }
+            .omr-score > div:last-child { border-right: none; }
+            .omr-sheet { display: grid; grid-template-columns: 0.8fr 1fr 2.2fr; gap: 12px; border: 1px solid #111; padding: 8px; margin-top: 12px; }
+            .omr-title { text-align: center; font-weight: 700; font-size: 11px; margin-bottom: 6px; }
+            .omr-id-block { border-right: 1px solid #111; padding-right: 8px; }
+            .omr-id-block:last-child { border-right: none; padding-right: 0; }
+            .omr-cells { display: grid; grid-template-columns: repeat(6, 18px); gap: 4px; justify-content: center; margin-bottom: 6px; }
+            .square { width: 18px; height: 18px; border: 1px solid #111; }
+            .omr-digits { font-size: 10px; }
+            .digit-row { display: grid; grid-template-columns: 18px repeat(6, 18px); gap: 4px; align-items: center; margin-bottom: 2px; }
+            .digit-label { text-align: right; padding-right: 2px; font-weight: 700; }
+            .omr-answers { padding-left: 8px; }
+            .omr-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 12px; }
+            .omr-column { display: flex; flex-direction: column; gap: 4px; }
+            .omr-row { display: flex; align-items: center; gap: 6px; }
+            .omr-number { width: 20px; text-align: right; font-weight: 700; font-size: 10px; }
+            .omr-bubbles { display: grid; grid-template-columns: repeat(4, 18px); gap: 4px; }
+            .bubble { width: 18px; height: 18px; border: 1px solid #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; }
+            .omr-notes { margin-top: 10px; font-size: 11px; }
+            .note-title { font-weight: 700; margin-bottom: 4px; }
+            .omr-notes ul { margin: 0; padding-left: 16px; }
+            .omr-notes li { margin-bottom: 4px; }
           </style>
         </head>
         <body>
