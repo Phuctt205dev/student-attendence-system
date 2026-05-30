@@ -406,7 +406,7 @@ const SubjectDetail = () => {
       .replace(/'/g, '&#039;');
   };
 
-  const buildExamHtml = ({ examData, questions, subjectName, facultyName, codeLabel }) => {
+  const buildExamHtml = ({ examData, questions, subjectName, facultyName, codeLabel, omrImage }) => {
     const questionHtml = questions
       .map((question, index) => {
         const options = ['A', 'B', 'C', 'D']
@@ -423,36 +423,6 @@ const SubjectDetail = () => {
           </div>
         `;
       })
-      .join('');
-
-    const chunkSize = 10;
-    const totalQuestions = questions.length;
-    const columns = Math.ceil(totalQuestions / chunkSize) || 1;
-
-    const buildOmrColumn = (columnIndex) => {
-      const start = columnIndex * chunkSize;
-      const end = Math.min(start + chunkSize, totalQuestions);
-      const rows = [];
-
-      for (let i = start; i < end; i += 1) {
-        rows.push(`
-          <div class="omr-row">
-            <div class="omr-number">${i + 1}</div>
-            <div class="omr-bubbles">
-              <span class="bubble">A</span>
-              <span class="bubble">B</span>
-              <span class="bubble">C</span>
-              <span class="bubble">D</span>
-            </div>
-          </div>
-        `);
-      }
-
-      return `<div class="omr-column">${rows.join('')}</div>`;
-    };
-
-    const omrColumns = Array.from({ length: columns })
-      .map((_, index) => buildOmrColumn(index))
       .join('');
 
     const durationLabel = examData?.durationMinutes ? `${examData.durationMinutes} phút` : '';
@@ -494,74 +464,25 @@ const SubjectDetail = () => {
         <div class="content">
           ${questionHtml}
         </div>
-
         <div class="omr-section">
-          <div class="omr-score">
-            <div>Điểm (số):</div>
-            <div>Điểm (chữ):</div>
-            <div>Giám khảo 1</div>
-            <div>Giám khảo 2</div>
-            <div>Số phách</div>
-          </div>
-
-          <div class="omr-sheet">
-            <div class="omr-id-block">
-              <div class="omr-title">MÃ ĐỀ</div>
-              <div class="omr-cells">
-                <span class="square"></span>
-                <span class="square"></span>
-                <span class="square"></span>
-              </div>
-              <div class="omr-digits">
-                ${Array.from({ length: 10 }).map((_, idx) => `
-                  <div class="digit-row">
-                    <span class="digit-label">${idx}</span>
-                    <span class="bubble"></span>
-                    <span class="bubble"></span>
-                    <span class="bubble"></span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-
-            <div class="omr-id-block">
-              <div class="omr-title">SỐ BÁO DANH</div>
-              <div class="omr-cells">
-                ${Array.from({ length: 6 }).map(() => '<span class="square"></span>').join('')}
-              </div>
-              <div class="omr-digits">
-                ${Array.from({ length: 10 }).map((_, idx) => `
-                  <div class="digit-row">
-                    <span class="digit-label">${idx}</span>
-                    ${Array.from({ length: 6 }).map(() => '<span class="bubble"></span>').join('')}
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-
-            <div class="omr-answers">
-              <div class="omr-title">ĐÁP ÁN TRẮC NGHIỆM</div>
-              <div class="omr-columns">${omrColumns}</div>
-            </div>
-          </div>
-
-          <div class="omr-notes">
-            <div class="note-title">Thí sinh lưu ý:</div>
-            <ul>
-              <li>Giữ cho phiếu phẳng, không bôi bẩn, làm rách, không tẩy xóa, để máy chấm.</li>
-              <li>Tô kín, tô đậm các ô tròn tương ứng với Mã đề thi, Số báo danh và đáp án đúng cho phần trắc nghiệm.</li>
-              <li>Không được ghi, tô, vẽ lên các ô vuông đen, để máy định vị chính xác.</li>
-              <li><strong>Chỉ chọn một đáp án</strong> (Không bôi mờ các đáp án khác để máy chấm chính xác).</li>
-              <li>Số báo danh: 6 chữ số - phiên bản rút gọn của MSSV. Ví dụ: 18520560 → 180560.</li>
-              <li>Mã đề: 3 chữ số - ghi và tô đúng và đủ.</li>
-            </ul>
-          </div>
+          <img class="omr-image" src="${omrImage}" alt="Phiếu trả lời trắc nghiệm" />
         </div>
       </section>
     `;
   };
 
-  const handleExportPdf = async () => {
+  const getOmrImageDataUrl = async () => {
+    const response = await fetch('/omr-template.png');
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Không thể đọc ảnh OMR'));
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const handleExportDoc = async () => {
     if (!pdfExam) return;
     setPdfLoading(true);
     setError('');
@@ -576,6 +497,15 @@ const SubjectDetail = () => {
     const questions = result.data.questions || [];
     const subjectName = subject?.name || '';
     const baseCode = pdfCodeBase || pdfExam.id.slice(0, 6).toUpperCase();
+
+    let omrImage = '';
+    try {
+      omrImage = await getOmrImageDataUrl();
+    } catch (imageError) {
+      setError(imageError.message || 'Không thể tải ảnh OMR');
+      setPdfLoading(false);
+      return;
+    }
 
     const seedA = hashToSeed(`${pdfExam.id}-A`);
     const seedB = hashToSeed(`${pdfExam.id}-B`);
@@ -613,30 +543,8 @@ const SubjectDetail = () => {
             .question-title { font-weight: 700; margin-bottom: 4px; }
             .options { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
             .opt-label { font-weight: 700; margin-right: 6px; }
-            .omr-section { margin-top: 20px; border-top: 1px solid #111; padding-top: 12px; }
-            .omr-score { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 11px; text-align: center; border: 1px solid #111; }
-            .omr-score > div { padding: 6px 4px; border-right: 1px solid #111; }
-            .omr-score > div:last-child { border-right: none; }
-            .omr-sheet { display: grid; grid-template-columns: 0.8fr 1fr 2.2fr; gap: 12px; border: 1px solid #111; padding: 8px; margin-top: 12px; }
-            .omr-title { text-align: center; font-weight: 700; font-size: 11px; margin-bottom: 6px; }
-            .omr-id-block { border-right: 1px solid #111; padding-right: 8px; }
-            .omr-id-block:last-child { border-right: none; padding-right: 0; }
-            .omr-cells { display: grid; grid-template-columns: repeat(6, 18px); gap: 4px; justify-content: center; margin-bottom: 6px; }
-            .square { width: 18px; height: 18px; border: 1px solid #111; }
-            .omr-digits { font-size: 10px; }
-            .digit-row { display: grid; grid-template-columns: 18px repeat(6, 18px); gap: 4px; align-items: center; margin-bottom: 2px; }
-            .digit-label { text-align: right; padding-right: 2px; font-weight: 700; }
-            .omr-answers { padding-left: 8px; }
-            .omr-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 12px; }
-            .omr-column { display: flex; flex-direction: column; gap: 4px; }
-            .omr-row { display: flex; align-items: center; gap: 6px; }
-            .omr-number { width: 20px; text-align: right; font-weight: 700; font-size: 10px; }
-            .omr-bubbles { display: grid; grid-template-columns: repeat(4, 18px); gap: 4px; }
-            .bubble { width: 18px; height: 18px; border: 1px solid #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; }
-            .omr-notes { margin-top: 10px; font-size: 11px; }
-            .note-title { font-weight: 700; margin-bottom: 4px; }
-            .omr-notes ul { margin: 0; padding-left: 16px; }
-            .omr-notes li { margin-bottom: 4px; }
+            .omr-section { margin-top: 18px; }
+            .omr-image { width: 100%; height: auto; border: 1px solid #111; }
           </style>
         </head>
         <body>
@@ -645,29 +553,30 @@ const SubjectDetail = () => {
             questions: versionA,
             subjectName,
             facultyName: pdfFaculty,
-            codeLabel: `${baseCode}-A`
+            codeLabel: `${baseCode}-A`,
+            omrImage
           })}
           ${buildExamHtml({
             examData: result.data,
             questions: versionB,
             subjectName,
             facultyName: pdfFaculty,
-            codeLabel: `${baseCode}-B`
+            codeLabel: `${baseCode}-B`,
+            omrImage
           })}
         </body>
       </html>
     `;
 
-    const win = window.open('', '_blank', 'width=900,height=1200');
-    if (win) {
-      win.document.open();
-      win.document.write(html);
-      win.document.close();
-      win.focus();
-      setTimeout(() => {
-        win.print();
-      }, 500);
-    }
+    const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `de-thi-${baseCode}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
     setPdfLoading(false);
     setPdfExam(null);
