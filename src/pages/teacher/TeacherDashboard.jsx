@@ -109,11 +109,11 @@ const TeacherDashboard = () => {
       onClick: () => navigate('/teacher/question-bank')
     },
     {
-      title: 'Bài thi',
-      description: 'Tạo bài thi tự động từ ngân hàng câu hỏi',
+      title: 'Môn học',
+      description: 'Quản lý môn học và tạo bài thi theo chủ đề',
       icon: ClipboardList,
       color: 'bg-orange-500',
-      onClick: () => navigate('/teacher/exams')
+      onClick: () => navigate('/teacher/subjects')
     }
   ];
 

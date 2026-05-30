@@ -80,15 +80,15 @@ const StudentExams = () => {
   const handleStartExam = async (exam) => {
     // Check if exam is currently active
     const now = new Date();
-    const startTime = exam.startTime?.toDate?.() || new Date(exam.startTime);
-    const endTime = exam.endTime?.toDate?.() || new Date(exam.endTime);
+    const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
+    const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
 
-    if (isBefore(now, startTime)) {
+    if (startTime && isBefore(now, startTime)) {
       setError('Exam has not started yet');
       return;
     }
 
-    if (isAfter(now, endTime)) {
+    if (endTime && isAfter(now, endTime)) {
       setError('Exam has ended');
       return;
     }
@@ -111,8 +111,8 @@ const StudentExams = () => {
 
   const getExamStatus = (exam) => {
     const now = new Date();
-    const startTime = exam.startTime?.toDate?.() || new Date(exam.startTime);
-    const endTime = exam.endTime?.toDate?.() || new Date(exam.endTime);
+    const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
+    const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
 
     if (exam.attempt) {
       if (exam.attempt.status === 'in-progress') {
@@ -123,15 +123,19 @@ const StudentExams = () => {
       }
     }
 
-    if (isBefore(now, startTime)) {
+    if (startTime && isBefore(now, startTime)) {
       return { status: 'upcoming', label: 'Upcoming', color: 'text-gray-600' };
     }
 
-    if (isBefore(now, endTime)) {
+    if (endTime && isBefore(now, endTime)) {
       return { status: 'active', label: 'Active', color: 'text-green-600' };
     }
 
-    return { status: 'closed', label: 'Closed', color: 'text-gray-600' };
+    if (endTime && isAfter(now, endTime)) {
+      return { status: 'closed', label: 'Closed', color: 'text-gray-600' };
+    }
+
+    return { status: 'active', label: 'Active', color: 'text-green-600' };
   };
 
   // Group exams by status
@@ -145,8 +149,8 @@ const StudentExams = () => {
 
   const ExamCard = ({ exam }) => {
     const examStatus = getExamStatus(exam);
-    const startTime = exam.startTime?.toDate?.() || new Date(exam.startTime);
-    const endTime = exam.endTime?.toDate?.() || new Date(exam.endTime);
+    const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
+    const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
     const score = exam.attempt?.score;
     const totalScore = exam.attempt?.totalScore;
     const percentage = score && totalScore ? ((score / totalScore) * 100).toFixed(1) : null;
@@ -186,12 +190,16 @@ const StudentExams = () => {
             </div>
 
             <div className="text-xs text-gray-500 space-y-1">
-              <div>
-                Starts: {format(startTime, 'MMM dd, yyyy HH:mm')}
-              </div>
-              <div>
-                Ends: {format(endTime, 'MMM dd, yyyy HH:mm')}
-              </div>
+              {startTime && (
+                <div>
+                  Starts: {format(startTime, 'MMM dd, yyyy HH:mm')}
+                </div>
+              )}
+              {endTime && (
+                <div>
+                  Ends: {format(endTime, 'MMM dd, yyyy HH:mm')}
+                </div>
+              )}
             </div>
 
             {exam.attempt?.status === 'graded' && score !== undefined && (

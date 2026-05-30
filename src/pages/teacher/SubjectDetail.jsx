@@ -12,10 +12,10 @@ import {
   updateQuestion,
   deleteQuestion
 } from '../../services/subject.service';
-import { getExamsBySubject } from '../../services/exam.service';
+import { getExamsBySubject, setExamVisibility, setExamSchedule } from '../../services/exam.service';
 import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Eye, FileText } from 'lucide-react';
+import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Eye, FileText, Lock, Unlock, Calendar } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -54,6 +54,10 @@ const SubjectDetail = () => {
   const [exams, setExams] = useState([]);
   const [examsLoading, setExamsLoading] = useState(false);
   const [classMap, setClassMap] = useState({});
+  const [scheduleExam, setScheduleExam] = useState(null);
+  const [scheduleStart, setScheduleStart] = useState('');
+  const [scheduleEnd, setScheduleEnd] = useState('');
+  const [scheduleError, setScheduleError] = useState('');
 
   useEffect(() => {
     if (subjectId) {
@@ -283,24 +287,82 @@ const SubjectDetail = () => {
     setClassMap(nextMap);
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (visibility) => {
     const styles = {
-      draft: 'bg-gray-100 text-gray-800',
-      published: 'bg-blue-100 text-blue-800',
-      closed: 'bg-gray-500 text-white'
+      private: 'bg-gray-100 text-gray-800',
+      public: 'bg-blue-100 text-blue-800'
     };
 
     const labels = {
-      draft: 'Nháp',
-      published: 'Đã phát hành',
-      closed: 'Đã đóng'
+      private: 'Private',
+      public: 'Public'
     };
 
+    const nextVisibility = visibility || 'private';
+
     return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${styles[status] || styles.draft}`}>
-        {labels[status] || 'Nháp'}
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${styles[nextVisibility] || styles.private}`}>
+        {labels[nextVisibility] || 'Private'}
       </span>
     );
+  };
+
+  const toLocalInputValue = (dateValue) => {
+    if (!dateValue) return '';
+    const date = dateValue?.toDate?.() || new Date(dateValue);
+    const offset = date.getTimezoneOffset();
+    const localDate = new Date(date.getTime() - offset * 60000);
+    return localDate.toISOString().slice(0, 16);
+  };
+
+  const openScheduleModal = (exam) => {
+    setScheduleExam(exam);
+    setScheduleStart(toLocalInputValue(exam.startTime));
+    setScheduleEnd(toLocalInputValue(exam.endTime));
+    setScheduleError('');
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!scheduleExam) return;
+
+    const startDate = scheduleStart ? new Date(scheduleStart) : null;
+    const endDate = scheduleEnd ? new Date(scheduleEnd) : null;
+
+    if (startDate && endDate && endDate <= startDate) {
+      setScheduleError('Thời gian kết thúc phải sau thời gian bắt đầu');
+      return;
+    }
+
+    const result = await setExamSchedule(scheduleExam.id, startDate, endDate);
+    if (result.success) {
+      setScheduleExam(null);
+      setScheduleStart('');
+      setScheduleEnd('');
+      setScheduleError('');
+      loadSubjectExams();
+    } else {
+      setScheduleError(result.error || 'Không thể lưu lịch thi');
+    }
+  };
+
+  const handleToggleVisibility = async (exam) => {
+    const nextVisibility = exam.visibility === 'public' ? 'private' : 'public';
+    const now = new Date();
+    const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
+
+    if (nextVisibility === 'public' && endTime && endTime <= now) {
+      setError('Không thể mở bài thi vì thời gian kết thúc đã qua');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    const result = await setExamVisibility(exam.id, nextVisibility);
+    if (result.success) {
+      loadSubjectExams();
+    } else {
+      setError(result.error || 'Không thể cập nhật trạng thái');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   return (
@@ -441,12 +503,6 @@ const SubjectDetail = () => {
           <div className="mb-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">Bài thi</h2>
-              <Button
-                variant="outline"
-                onClick={() => navigate('/teacher/exams')}
-              >
-                Xem tất cả
-              </Button>
             </div>
 
             {examsLoading ? (
@@ -470,6 +526,7 @@ const SubjectDetail = () => {
 
                   const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
                   const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
+                  const isLocked = endTime && new Date() > endTime;
 
                   return (
                     <Card key={exam.id} className="hover:shadow-lg transition-shadow">
@@ -477,7 +534,12 @@ const SubjectDetail = () => {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-lg font-semibold text-gray-900">{exam.title}</h3>
-                            {getStatusBadge(exam.status)}
+                            {getStatusBadge(exam.visibility)}
+                            {isLocked && (
+                              <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-200 text-gray-700">
+                                Đã khóa
+                              </span>
+                            )}
                           </div>
 
                           {exam.description && (
@@ -515,6 +577,25 @@ const SubjectDetail = () => {
                               })}
                             </div>
                           </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={exam.visibility === 'public' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                            onClick={() => handleToggleVisibility(exam)}
+                          >
+                            {exam.visibility === 'public' ? 'Khóa' : 'Mở'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Calendar className="w-4 h-4" />}
+                            onClick={() => openScheduleModal(exam)}
+                          >
+                            Đặt thời gian
+                          </Button>
                         </div>
                       </div>
                     </Card>
@@ -698,6 +779,65 @@ const SubjectDetail = () => {
               }}
             />
           )}
+        </Modal>
+
+        {/* Schedule Modal */}
+        <Modal
+          isOpen={!!scheduleExam}
+          onClose={() => {
+            setScheduleExam(null);
+            setScheduleStart('');
+            setScheduleEnd('');
+            setScheduleError('');
+          }}
+          title="Thiết lập thời gian"
+          size="sm"
+        >
+          <div className="space-y-4">
+            {scheduleError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {scheduleError}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Bắt đầu
+              </label>
+              <input
+                type="datetime-local"
+                value={scheduleStart}
+                onChange={(event) => setScheduleStart(event.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Kết thúc
+              </label>
+              <input
+                type="datetime-local"
+                value={scheduleEnd}
+                onChange={(event) => setScheduleEnd(event.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setScheduleExam(null);
+                  setScheduleStart('');
+                  setScheduleEnd('');
+                  setScheduleError('');
+                }}
+              >
+                Hủy
+              </Button>
+              <Button variant="primary" onClick={handleSaveSchedule}>
+                Lưu
+              </Button>
+            </div>
+          </div>
         </Modal>
       </div>
     </TeacherLayout>

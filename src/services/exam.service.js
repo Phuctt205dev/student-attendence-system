@@ -20,6 +20,24 @@ import {
   calculatePassingScore
 } from './subject.service';
 
+const normalizeExamVisibility = (exam) => {
+  if (exam.visibility) {
+    return exam.visibility;
+  }
+
+  if (exam.status === 'published' || exam.status === 'closed') {
+    return 'public';
+  }
+
+  return 'private';
+};
+
+const isExamExpired = (exam) => {
+  const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
+  if (!endTime) return false;
+  return new Date() > endTime;
+};
+
 // Create exam with topic-based question selection
 export const createExam = async (examData) => {
   try {
@@ -96,7 +114,7 @@ export const createExam = async (examData) => {
       totalQuestions: selectedQuestions.length,
       totalPoints,
       passingScore,
-      status: 'draft',
+      visibility: 'private',
       startTime: null,
       endTime: null,
       createdAt: serverTimestamp(),
@@ -132,8 +150,9 @@ export const updateExam = async (examId, examData) => {
       return { success: false, error: 'Exam not found' };
     }
 
-    if (exam.data().status === 'published') {
-      return { success: false, error: 'Cannot edit published exam' };
+    const visibility = normalizeExamVisibility(exam.data());
+    if (visibility === 'public') {
+      return { success: false, error: 'Cannot edit public exam' };
     }
 
     const updateData = {
@@ -156,7 +175,7 @@ export const updateExam = async (examId, examData) => {
 export const publishExam = async (examId, startTime, endTime) => {
   try {
     await updateDoc(doc(db, 'exams', examId), {
-      status: 'published',
+      visibility: 'public',
       startTime,
       endTime,
       publishedAt: serverTimestamp(),
@@ -174,7 +193,7 @@ export const publishExam = async (examId, startTime, endTime) => {
 export const closeExam = async (examId) => {
   try {
     await updateDoc(doc(db, 'exams', examId), {
-      status: 'closed',
+      visibility: 'private',
       updatedAt: serverTimestamp()
     });
 
@@ -194,8 +213,9 @@ export const deleteExam = async (examId) => {
       return { success: false, error: 'Exam not found' };
     }
 
-    if (exam.data().status !== 'draft') {
-      return { success: false, error: 'Can only delete draft exams' };
+    const visibility = normalizeExamVisibility(exam.data());
+    if (visibility !== 'private') {
+      return { success: false, error: 'Can only delete private exams' };
     }
 
     const q = query(
@@ -248,7 +268,8 @@ export const getTeacherExams = async (teacherId) => {
     const querySnapshot = await getDocs(q);
     const exams = querySnapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
+      visibility: normalizeExamVisibility(doc.data())
     }));
 
     return { success: true, data: exams };
@@ -270,9 +291,10 @@ export const getExamsByClass = async (classId) => {
     const exams = querySnapshot.docs
       .map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        visibility: normalizeExamVisibility(doc.data())
       }))
-      .filter((exam) => exam.status === 'published' || exam.status === 'closed')
+      .filter((exam) => exam.visibility === 'public' && !isExamExpired(exam))
       .sort((a, b) => {
         const aTime = a.createdAt?.seconds || 0;
         const bTime = b.createdAt?.seconds || 0;
@@ -297,7 +319,8 @@ export const getExamsBySubject = async (subjectId, teacherId) => {
     const querySnapshot = await getDocs(q);
     let exams = querySnapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
+      visibility: normalizeExamVisibility(doc.data())
     }));
 
     if (teacherId) {
@@ -313,6 +336,37 @@ export const getExamsBySubject = async (subjectId, teacherId) => {
     return { success: true, data: exams };
   } catch (error) {
     console.error('Error getting subject exams:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Set visibility (public/private)
+export const setExamVisibility = async (examId, visibility) => {
+  try {
+    await updateDoc(doc(db, 'exams', examId), {
+      visibility,
+      updatedAt: serverTimestamp()
+    });
+
+    return { success: true, data: { id: examId, visibility } };
+  } catch (error) {
+    console.error('Error setting exam visibility:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Set exam schedule
+export const setExamSchedule = async (examId, startTime, endTime) => {
+  try {
+    await updateDoc(doc(db, 'exams', examId), {
+      startTime: startTime || null,
+      endTime: endTime || null,
+      updatedAt: serverTimestamp()
+    });
+
+    return { success: true, data: { id: examId } };
+  } catch (error) {
+    console.error('Error setting exam schedule:', error);
     return { success: false, error: error.message };
   }
 };

@@ -20,7 +20,6 @@ import StudentClasses from './pages/student/StudentClasses';
 import TeacherQuestionBank from './pages/teacher/TeacherQuestionBank';
 import TeacherSubjects from './pages/teacher/TeacherSubjects';
 import SubjectDetail from './pages/teacher/SubjectDetail';
-import TeacherExams from './pages/teacher/TeacherExams';
 import StudentExams from './pages/student/StudentExams';
 
 function App() {
@@ -106,17 +105,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/teacher/exams"
-            element={
-              <ProtectedRoute>
-                <RoleBasedRoute allowedRoles={['teacher', 'admin']}>
-                  <TeacherExams />
-                </RoleBasedRoute>
-              </ProtectedRoute>
-            }
-          />
-
           {/* Protected routes - Student */}
           <Route
             path="/student"
