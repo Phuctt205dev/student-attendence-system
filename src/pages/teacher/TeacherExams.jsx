@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useForm } from 'react-hook-form';
 import TeacherLayout from '../../layouts/TeacherLayout';
 import {
   getTeacherExams,
@@ -463,7 +464,5 @@ const PublishExamForm = ({ exam, onSubmit, onCancel }) => {
     </form>
   );
 };
-
-import { useForm } from 'react-hook-form';
 
 export default TeacherExams;

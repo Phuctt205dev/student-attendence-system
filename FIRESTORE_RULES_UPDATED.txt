@@ -1,0 +1,315 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function classDoc(classId) {
+      return get(/databases/$(database)/documents/classes/$(classId));
+    }
+
+    function isClassOwner(classId) {
+      return signedIn() &&
+        classDoc(classId).data.teacherId == request.auth.uid;
+    }
+
+    function sessionDoc(sessionId) {
+      return get(/databases/$(database)/documents/attendanceSessions/$(sessionId));
+    }
+
+    function isSessionOwner(sessionId) {
+      return signedIn() &&
+        sessionDoc(sessionId).data.teacherId == request.auth.uid;
+    }
+
+    function questionDoc(questionId) {
+      return get(/databases/$(database)/documents/questions/$(questionId));
+    }
+
+    function isQuestionOwner(questionId) {
+      return signedIn() &&
+        questionDoc(questionId).data.createdBy == request.auth.uid;
+    }
+
+    function examDoc(examId) {
+      return get(/databases/$(database)/documents/exams/$(examId));
+    }
+
+    function isExamOwner(examId) {
+      return signedIn() &&
+        examDoc(examId).data.teacherId == request.auth.uid;
+    }
+
+    function isStudentInClass(classId) {
+      return signedIn() &&
+        request.auth.uid in classDoc(classId).data.students;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return signedIn() && userRole() == 'admin';
+    }
+
+    function isTeacher() {
+      return signedIn() && (userRole() == 'teacher' || isAdmin());
+    }
+
+    function isStudent() {
+      return signedIn() && userRole() == 'student';
+    }
+
+    // =========================
+    // USERS (Web App)
+    // App web lưu user profile tại: users/{uid}
+    // =========================
+    match /users/{uid} {
+      // Cho phép authenticated users đọc thông tin user khác (để show student list, teacher info)
+      allow read: if signedIn();
+
+      // Cho phép tạo student profile (for teachers adding students)
+      allow create: if signedIn() && (
+        // User tự tạo profile của mình
+        isSelf(uid) ||
+        // HOẶC: Cho phép tạo student profile (role == 'student')
+        request.resource.data.role == 'student'
+      );
+
+      // Chỉ cho phép user tự chỉnh sửa/xóa profile của mình
+      allow update, delete: if isSelf(uid);
+    }
+
+    // =========================
+    // TEACHERS (Mobile App)
+    // App mobile đọc tại: teachers/{uid}
+    // =========================
+    match /teachers/{uid} {
+      allow read, write: if isSelf(uid);
+    }
+
+    // =========================
+    // TEACHER FACE PROFILES
+    // Lưu khuôn mặt của giáo viên - dùng chung cho tất cả lớp
+    // =========================
+    match /teacherFaceProfiles/{uid} {
+      // Chỉ giáo viên tự mình được đọc/ghi khuôn mặt của mình
+      allow read, write: if isSelf(uid);
+    }
+
+    // =========================
+    // CLASSES
+    // App query lớp theo teacherId hoặc student enrollment
+    // =========================
+    match /classes/{classId} {
+      // Đọc lớp:
+      // - Teacher có thể đọc lớp của mình
+      // - Student có thể đọc lớp mà mình được enroll
+      // - Cho phép query khi filter theo teacherId hoặc students array
+      allow read: if signedIn() && (
+        // Đọc document cụ thể: kiểm tra ownership
+        resource.data.teacherId == request.auth.uid ||
+        request.auth.uid in resource.data.students
+      );
+
+      // Cho phép list/query classes
+      allow list: if signedIn();
+
+      // Tạo lớp: teacherId phải là UID đang đăng nhập
+      allow create: if signedIn() &&
+        request.resource.data.teacherId == request.auth.uid;
+
+      // Sửa/xóa lớp: chỉ chủ lớp
+      allow update, delete: if signedIn() &&
+        resource.data.teacherId == request.auth.uid;
+
+      // =========================
+      // STUDENTS SUBCOLLECTION
+      // App dùng: classes/{classId}/students/{studentId}
+      // =========================
+      match /students/{studentId} {
+        allow read, create, update, delete: if signedIn() &&
+          classDoc(classId).data.teacherId == request.auth.uid;
+      }
+
+      // =========================
+      // TAGS SUBCOLLECTION
+      // Web dùng: classes/{classId}/tags/{tagId}
+      // =========================
+      match /tags/{tagId} {
+        // Chỉ teacher owner của class mới được đọc/ghi tags
+        allow read, create, update, delete: if isClassOwner(classId);
+      }
+
+      // =========================
+      // STUDENT TAGS SUBCOLLECTION
+      // Web dùng: classes/{classId}/studentTags/{docId}
+      // =========================
+      match /studentTags/{docId} {
+        // Chỉ teacher owner của class mới được đọc/ghi student tags
+        allow read, create, update, delete: if isClassOwner(classId);
+      }
+    }
+
+    // =========================
+    // TEACHER FACE PROFILES
+    // App dùng: teacherFaceProfiles/{teacherId}
+    // Lưu khuôn mặt của giáo viên để nhận diện trong điểm danh
+    // =========================
+    match /teacherFaceProfiles/{teacherId} {
+      // Cho phép giáo viên đọc/ghi khuôn mặt của chính họ
+      allow read, write: if signedIn() && request.auth.uid == teacherId;
+    }
+
+    // =========================
+    // ATTENDANCE SESSIONS
+    // App dùng: attendanceSessions/{sessionId}
+    // =========================
+    match /attendanceSessions/{sessionId} {
+      // Đọc session: chỉ giáo viên tạo session đó
+      allow read: if signedIn() &&
+        resource.data.teacherId == request.auth.uid;
+
+      // Cho phép list/query sessions
+      allow list: if signedIn();
+
+      // Tạo session: teacherId phải là user hiện tại
+      allow create: if signedIn() &&
+        request.resource.data.teacherId == request.auth.uid;
+
+      // Cập nhật/xóa session: chỉ chủ session
+      allow update, delete: if signedIn() &&
+        resource.data.teacherId == request.auth.uid;
+
+      // =========================
+      // RECORDS SUBCOLLECTION
+      // App dùng: attendanceSessions/{sessionId}/records/{studentId}
+      // =========================
+      match /records/{studentId} {
+        allow read, create, update, delete: if signedIn() &&
+          sessionDoc(sessionId).data.teacherId == request.auth.uid;
+      }
+    }
+
+    // =========================
+    // QUESTIONS (Phase 2)
+    // Web dùng: questions/{questionId}
+    // Lưu ngân hàng câu hỏi của giáo viên
+    // =========================
+    match /questions/{questionId} {
+      // Đọc:
+      // - Teacher có thể đọc câu hỏi của chính mình
+      // - Admin có thể đọc tất cả
+      // - Student không được đọc trực tiếp (phải thông qua exam)
+      allow read: if signedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Cho phép list/query để lấy toàn bộ questions của teacher
+      allow list: if isTeacher();
+
+      // Tạo câu hỏi: createdBy phải là user hiện tại
+      allow create: if isTeacher() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.isActive == true;
+
+      // Cập nhật câu hỏi: chỉ owner (soft update)
+      allow update: if signedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Xóa câu hỏi: chỉ owner hoặc admin (soft delete qua isActive)
+      allow delete: if signedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // =========================
+    // EXAMS (Phase 2)
+    // Web dùng: exams/{examId}
+    // Lưu bài thi được tạo từ ngân hàng câu hỏi
+    // =========================
+    match /exams/{examId} {
+      // Đọc:
+      // - Teacher có thể đọc bài thi của chính mình (trạng thái gì cũng được)
+      // - Admin có thể đọc tất cả
+      // - Student có thể đọc bài thi được assign cho lớp mình
+      allow read: if signedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin() ||
+        (isStudent() && (
+          // Student trong bất kỳ classId nào của bài thi
+          exists(/databases/$(database)/documents/classes/{classId}/students/$(request.auth.uid)) &&
+          classId in resource.data.classIds
+        ))
+      );
+
+      // Cho phép list/query exams
+      allow list: if signedIn();
+
+      // Tạo bài thi: teacherId phải là user hiện tại, status = draft
+      allow create: if isTeacher() &&
+        request.resource.data.teacherId == request.auth.uid &&
+        request.resource.data.status == 'draft';
+
+      // Cập nhật bài thi: chỉ owner có thể update
+      allow update: if signedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Xóa bài thi: chỉ owner hoặc admin, chỉ khi draft
+      allow delete: if signedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      ) && resource.data.status == 'draft';
+    }
+
+    // =========================
+    // EXAM ATTEMPTS (Phase 2)
+    // Web dùng: examAttempts/{attemptId}
+    // Lưu kết quả khi sinh viên làm bài thi
+    // =========================
+    match /examAttempts/{attemptId} {
+      // Đọc:
+      // - Student có thể đọc attempts của chính mình
+      // - Teacher có thể đọc attempts của bài thi của mình
+      // - Admin có thể đọc tất cả
+      allow read: if signedIn() && (
+        resource.data.studentId == request.auth.uid ||
+        examDoc(resource.data.examId).data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Cho phép list/query attempts
+      allow list: if signedIn();
+
+      // Tạo attempt: studentId phải là user hiện tại, status = in-progress
+      allow create: if isStudent() &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.status == 'in-progress';
+
+      // Cập nhật attempt: student tự mình cập nhật (save answers)
+      // Không cho phép student cập nhật score/status trực tiếp
+      allow update: if signedIn() && (
+        (resource.data.studentId == request.auth.uid &&
+         request.resource.data.studentId == resource.data.studentId &&
+         request.resource.data.examId == resource.data.examId) ||
+        isAdmin()
+      );
+
+      // Không cho phép xóa attempts
+      allow delete: if false;
+    }
+  }
+}
