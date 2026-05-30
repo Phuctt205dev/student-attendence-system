@@ -26,19 +26,13 @@ import { format, formatDistanceToNow } from 'date-fns';
 import {
   Document,
   Packer,
-  Section,
   Table,
   TableRow,
   TableCell,
   Paragraph,
-  Text,
   AlignmentType,
   VerticalAlign,
   BorderStyle,
-  Image,
-  PageBreak,
-  UnderlineType,
-  HeadingLevel
 } from 'docx';
 
 const SubjectDetail = () => {
@@ -423,7 +417,7 @@ const SubjectDetail = () => {
       .replace(/'/g, '&#039;');
   };
 
-  const buildExamDocx = async ({ examData, questions, subjectName, facultyName, codeLabel, omrImageBuffer }) => {
+  const buildExamDocxChildren = ({ examData, questions, subjectName, facultyName, codeLabel }) => {
     // Build question paragraphs
     const questionParagraphs = [];
     
@@ -572,93 +566,47 @@ const SubjectDetail = () => {
       width: { size: 100, type: 'pct' },
     });
 
-    // Answer grid for OMR section
-    const omrAnswerGridRows = [];
-    for (let row = 0; row < 10; row++) {
-      const cells = [
-        new TableCell({
-          children: [new Paragraph(`${row}`)],
-          borders: { top: { style: BorderStyle.SINGLE }, bottom: { style: BorderStyle.SINGLE }, left: { style: BorderStyle.SINGLE }, right: { style: BorderStyle.SINGLE } },
-          width: { size: 10, type: 'pct' },
-          verticalAlign: VerticalAlign.CENTER,
-        }),
-      ];
-      for (let col = 0; col < 4; col++) {
-        cells.push(
-          new TableCell({
-            children: [new Paragraph('○')],
-            borders: { top: { style: BorderStyle.SINGLE }, bottom: { style: BorderStyle.SINGLE }, left: { style: BorderStyle.SINGLE }, right: { style: BorderStyle.SINGLE } },
-            width: { size: 22.5, type: 'pct' },
-            verticalAlign: VerticalAlign.CENTER,
-            alignment: AlignmentType.CENTER,
-          })
-        );
-      }
-      omrAnswerGridRows.push(new TableRow({ cells }));
-    }
-
-    // Sections array
-    const sections = [
-      new Section({
-        children: [
-          headerTable,
-          new Paragraph({ text: '', spacing: { after: 200 } }),
-          studentInfoTable,
-          new Paragraph({ text: '', spacing: { after: 200 } }),
-          new Paragraph({
-            text: 'A. TRẮC NGHIỆM',
-            bold: true,
-            size: 26,
-            spacing: { after: 100 },
-          }),
-          new Paragraph({
-            text: '_'.repeat(100),
-            spacing: { after: 200 },
-          }),
-          ...questionParagraphs,
-          new Paragraph({ text: '', spacing: { after: 300 } }),
-          // OMR Image if available
-          ...(omrImageBuffer
-            ? [
-                new Paragraph({
-                  children: [
-                    new Image({
-                      data: omrImageBuffer,
-                      transformation: {
-                        width: 600,
-                        height: 400,
-                      },
-                    }),
-                  ],
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 200, after: 200 },
-                }),
-              ]
-            : []),
-          new Paragraph({ text: '', spacing: { after: 200 } }),
-          new Paragraph({
-            text: 'Thí sinh lưu ý:',
-            bold: true,
-            spacing: { after: 100 },
-          }),
-          new Paragraph({
-            text: '• Giữ cho phiếu phẳng, không bôi bẩn, làm rách, không lấy xóa.',
-            spacing: { after: 100 },
-          }),
-          new Paragraph({
-            text: '• Tô đen hoàn toàn vào các ô vuông, dùng bút chì HB.',
-            spacing: { after: 100 },
-          }),
-          new Paragraph({
-            text: '• Không được ghi chú và các ô vuông khác ngoài phần trả lời.',
-            spacing: { after: 100 },
-          }),
-        ],
-        pageBreakBefore: false,
+    return [
+      headerTable,
+      new Paragraph({ text: '', spacing: { after: 200 } }),
+      studentInfoTable,
+      new Paragraph({ text: '', spacing: { after: 200 } }),
+      new Paragraph({
+        text: 'A. TRẮC NGHIỆM',
+        bold: true,
+        size: 26,
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        text: '_'.repeat(100),
+        spacing: { after: 200 },
+      }),
+      ...questionParagraphs,
+      new Paragraph({ text: '', spacing: { after: 300 } }),
+      new Paragraph({
+        text: '[Phiếu trả lời trắc nghiệm - OMR sẽ được thêm vào đây]',
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 200, after: 200 },
+      }),
+      new Paragraph({ text: '', spacing: { after: 200 } }),
+      new Paragraph({
+        text: 'Thí sinh lưu ý:',
+        bold: true,
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        text: '• Giữ cho phiếu phẳng, không bôi bẩn, làm rách, không lấy xóa.',
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        text: '• Tô đen hoàn toàn vào các ô vuông, dùng bút chì HB.',
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        text: '• Không được ghi chú và các ô vuông khác ngoài phần trả lời.',
+        spacing: { after: 100 },
       }),
     ];
-
-    return new Document({ sections });
   };
 
   const getOmrImageBuffer = async () => {
@@ -716,28 +664,42 @@ const SubjectDetail = () => {
       const versionA = shuffleWithSeed(questions, seedA);
       const versionB = shuffleWithSeed(questions, seedB);
 
-      // Build version A
-      const docA = await buildExamDocx({
+      // Build version A children
+      const childrenA = buildExamDocxChildren({
         examData: result.data,
         questions: versionA,
         subjectName,
         facultyName: pdfFaculty,
         codeLabel: `${baseCode}-A`,
-        omrImageBuffer,
       });
 
-      // Build version B
-      const docB = await buildExamDocx({
+      // Build version B children
+      const childrenB = buildExamDocxChildren({
         examData: result.data,
         questions: versionB,
         subjectName,
         facultyName: pdfFaculty,
         codeLabel: `${baseCode}-B`,
-        omrImageBuffer,
       });
 
-      // For simplicity, export version A and B separately or combine them
-      // Here we'll generate and download both
+      // Create documents
+      const docA = new Document({
+        sections: [
+          {
+            children: childrenA,
+          },
+        ],
+      });
+
+      const docB = new Document({
+        sections: [
+          {
+            children: childrenB,
+          },
+        ],
+      });
+
+      // Download version A
       const blobA = await Packer.toBlob(docA);
       const urlA = URL.createObjectURL(blobA);
       const linkA = document.createElement('a');
@@ -751,6 +713,7 @@ const SubjectDetail = () => {
       // Small delay before second download
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      // Download version B
       const blobB = await Packer.toBlob(docB);
       const urlB = URL.createObjectURL(blobB);
       const linkB = document.createElement('a');
