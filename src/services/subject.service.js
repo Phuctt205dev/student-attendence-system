@@ -68,10 +68,10 @@ export const getTeacherSubjects = async (teacherId) => {
 
 export const getSubjectById = async (subjectId) => {
   try {
-    const doc = await getDoc(doc(db, 'subjects', subjectId));
+    const docSnap = await getDoc(doc(db, 'subjects', subjectId));
 
-    if (doc.exists()) {
-      return { success: true, data: { id: doc.id, ...doc.data() } };
+    if (docSnap.exists()) {
+      return { success: true, data: { id: docSnap.id, ...docSnap.data() } };
     } else {
       return { success: false, error: 'Subject not found' };
     }

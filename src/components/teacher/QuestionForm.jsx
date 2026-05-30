@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import Button from '../common/Button';
 import { AlertCircle } from 'lucide-react';
 
-const QuestionForm = ({ initialData, subjectId, topicId, onSuccess, onCancel, lastQuestionPoints = 1 }) => {
+const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1, loading = false }) => {
   const { register, handleSubmit, formState: { errors }, watch } = useForm({
     defaultValues: {
       questionText: initialData?.questionText || '',
@@ -17,12 +17,10 @@ const QuestionForm = ({ initialData, subjectId, topicId, onSuccess, onCancel, la
   });
 
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const correctAnswer = watch('correctAnswer');
 
-  const onSubmit = async (data) => {
+  const onSubmitForm = async (data) => {
     try {
-      setLoading(true);
       setError('');
 
       const questionData = {
@@ -34,37 +32,22 @@ const QuestionForm = ({ initialData, subjectId, topicId, onSuccess, onCancel, la
           D: data.optionD
         },
         correctAnswer: data.correctAnswer,
-        points: parseInt(data.points) || 1,
-        createdBy: localStorage.getItem('uid') // Get from auth context if available
+        points: parseInt(data.points) || 1
       };
 
-      let result;
-      if (initialData) {
-        result = await updateQuestion(subjectId, topicId, initialData.id, questionData);
-      } else {
-        result = await createQuestion(subjectId, topicId, questionData);
-      }
-
-      if (result.success) {
-        // Pass back the current question's points so it becomes default for next question
-        if (onSuccess) {
-          onSuccess(parseInt(data.points));
+      if (onSubmit) {
+        const result = await onSubmit(questionData);
+        if (!result || !result.success) {
+          setError(result?.error || 'Error saving question');
         }
-      } else {
-        setError(result.error || 'Failed to save question');
       }
     } catch (err) {
       setError(err.message || 'Error saving question');
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Import functions inside component to avoid circular dependencies
-  const { createQuestion, updateQuestion } = require('../../services/subject.service');
-
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-6">
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -164,7 +147,7 @@ const QuestionForm = ({ initialData, subjectId, topicId, onSuccess, onCancel, la
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-3 pt-6 border-t">
-        <Button variant="outline" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel} disabled={loading}>
           Cancel
         </Button>
         <Button variant="primary" type="submit" disabled={loading}>

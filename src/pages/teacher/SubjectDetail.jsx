@@ -6,14 +6,20 @@ import {
   getSubjectTopics,
   createTopic,
   updateTopic,
-  deleteTopic
+  deleteTopic,
+  getTopicQuestions,
+  createQuestion,
+  updateQuestion,
+  deleteQuestion
 } from '../../services/subject.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
+import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Eye, FileText } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import TopicForm from '../../components/teacher/TopicForm';
+import QuestionForm from '../../components/teacher/QuestionForm';
+import ExamCreationModal from '../../components/teacher/ExamCreationModal';
 
 const SubjectDetail = () => {
   const { userProfile } = useAuth();
@@ -29,6 +35,18 @@ const SubjectDetail = () => {
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [editingTopic, setEditingTopic] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [showQuestionsModal, setShowQuestionsModal] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+
+  const [showQuestionModal, setShowQuestionModal] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState(null);
+  const [lastQuestionPoints, setLastQuestionPoints] = useState(1);
+
+  const [showExamModal, setShowExamModal] = useState(false);
+  const [examTopicContext, setExamTopicContext] = useState(null);
 
   useEffect(() => {
     if (subjectId) {
@@ -108,6 +126,99 @@ const SubjectDetail = () => {
     } else {
       setError(result.error || 'Failed to delete topic');
     }
+  };
+
+  const handleViewQuestions = async (topic) => {
+    setSelectedTopic(topic);
+    setQuestionsLoading(true);
+
+    const result = await getTopicQuestions(subjectId, topic.id);
+    if (result.success) {
+      setQuestions(result.data);
+    } else {
+      setError(result.error || 'Failed to load questions');
+    }
+
+    setQuestionsLoading(false);
+    setShowQuestionsModal(true);
+  };
+
+  const handleOpenCreateQuestionModal = () => {
+    setEditingQuestion(null);
+    setShowQuestionModal(true);
+  };
+
+  const handleOpenEditQuestionModal = (question) => {
+    setEditingQuestion(question);
+    setShowQuestionModal(true);
+  };
+
+  const handleSubmitQuestion = async (data) => {
+    try {
+      setSubmitting(true);
+      let result;
+
+      if (editingQuestion) {
+        result = await updateQuestion(subjectId, selectedTopic.id, editingQuestion.id, data);
+      } else {
+        result = await createQuestion(subjectId, selectedTopic.id, {
+          ...data,
+          createdBy: userProfile?.uid
+        });
+      }
+
+      if (result.success) {
+        setSuccess(editingQuestion ? 'Question updated!' : 'Question created!');
+        setLastQuestionPoints(data.points || 1);
+        setShowQuestionModal(false);
+        setEditingQuestion(null);
+
+        // Reload questions
+        const questionsResult = await getTopicQuestions(subjectId, selectedTopic.id);
+        if (questionsResult.success) {
+          setQuestions(questionsResult.data);
+        }
+
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(result.error || 'Error saving question');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId) => {
+    if (!window.confirm('Are you sure you want to delete this question?')) return;
+
+    const result = await deleteQuestion(subjectId, selectedTopic.id, questionId);
+    if (result.success) {
+      setSuccess('Question deleted!');
+
+      // Reload questions
+      const questionsResult = await getTopicQuestions(subjectId, selectedTopic.id);
+      if (questionsResult.success) {
+        setQuestions(questionsResult.data);
+      }
+
+      setTimeout(() => setSuccess(''), 3000);
+    } else {
+      setError(result.error || 'Failed to delete question');
+    }
+  };
+
+  const handleOpenExamModal = (topic) => {
+    setExamTopicContext(topic);
+    setShowExamModal(true);
+  };
+
+  const handleExamCreated = (examData) => {
+    setSuccess('Bài thi được tạo thành công!');
+    setShowExamModal(false);
+    setExamTopicContext(null);
+    setTimeout(() => setSuccess(''), 3000);
   };
 
   return (
@@ -198,7 +309,22 @@ const SubjectDetail = () => {
                         </div>
                       </div>
 
-                      <div className="flex gap-2 ml-4">
+                      <div className="flex gap-2 ml-4 items-center">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon={<FileText className="w-3 h-3" />}
+                          onClick={() => handleOpenExamModal(topic)}
+                        >
+                          Tạo bài thi
+                        </Button>
+                        <button
+                          onClick={() => handleViewQuestions(topic)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="View questions"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleOpenEditTopicModal(topic)}
                           className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -239,6 +365,157 @@ const SubjectDetail = () => {
             }}
             loading={submitting}
           />
+        </Modal>
+
+        {/* Questions Modal */}
+        <Modal
+          isOpen={showQuestionsModal}
+          onClose={() => {
+            setShowQuestionsModal(false);
+            setSelectedTopic(null);
+            setQuestions([]);
+            setEditingQuestion(null);
+          }}
+          title={selectedTopic ? `${selectedTopic.name} - Câu hỏi` : 'Câu hỏi'}
+          size="lg"
+        >
+          {questionsLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" />
+            </div>
+          ) : questions.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-600 mb-4">Chưa có câu hỏi nào</p>
+              <Button
+                variant="primary"
+                icon={<Plus className="w-4 h-4" />}
+                onClick={handleOpenCreateQuestionModal}
+              >
+                Thêm câu hỏi
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {questions.map((question) => (
+                  <Card key={question.id} className="p-3">
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{question.questionText}</p>
+                        <div className="mt-2 space-y-1 text-xs text-gray-600">
+                          <div>
+                            <span className="font-semibold">A:</span> {question.options?.A}
+                          </div>
+                          <div>
+                            <span className="font-semibold">B:</span> {question.options?.B}
+                          </div>
+                          <div>
+                            <span className="font-semibold">C:</span> {question.options?.C}
+                          </div>
+                          <div>
+                            <span className="font-semibold">D:</span> {question.options?.D}
+                          </div>
+                        </div>
+                        <div className="mt-2 flex gap-3 text-xs text-gray-600">
+                          <span>
+                            <span className="font-semibold">Đáp án:</span> {question.correctAnswer}
+                          </span>
+                          <span>
+                            <span className="font-semibold">Điểm:</span> {question.points}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleOpenEditQuestionModal(question)}
+                          className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteQuestion(question.id)}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="border-t pt-3 flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowQuestionsModal(false);
+                    setSelectedTopic(null);
+                    setQuestions([]);
+                    setEditingQuestion(null);
+                  }}
+                >
+                  Đóng
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={handleOpenCreateQuestionModal}
+                >
+                  Thêm câu hỏi
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+
+        {/* Question Modal */}
+        <Modal
+          isOpen={showQuestionModal}
+          onClose={() => {
+            setShowQuestionModal(false);
+            setEditingQuestion(null);
+          }}
+          title={editingQuestion ? 'Chỉnh sửa câu hỏi' : 'Tạo câu hỏi'}
+          size="md"
+        >
+          {selectedTopic && (
+            <QuestionForm
+              initialData={editingQuestion}
+              lastQuestionPoints={lastQuestionPoints}
+              onSubmit={handleSubmitQuestion}
+              onCancel={() => {
+                setShowQuestionModal(false);
+                setEditingQuestion(null);
+              }}
+              loading={submitting}
+            />
+          )}
+        </Modal>
+
+        {/* Exam Creation Modal */}
+        <Modal
+          isOpen={showExamModal}
+          onClose={() => {
+            setShowExamModal(false);
+            setExamTopicContext(null);
+          }}
+          title={`Tạo bài thi - ${examTopicContext?.name}`}
+          size="md"
+        >
+          {examTopicContext && subject && (
+            <ExamCreationModal
+              subject={subject}
+              topic={examTopicContext}
+              availableQuestionCount={examTopicContext.questionCount || 0}
+              teacherId={userProfile?.uid}
+              onSuccess={handleExamCreated}
+              onCancel={() => {
+                setShowExamModal(false);
+                setExamTopicContext(null);
+              }}
+            />
+          )}
         </Modal>
       </div>
     </TeacherLayout>
