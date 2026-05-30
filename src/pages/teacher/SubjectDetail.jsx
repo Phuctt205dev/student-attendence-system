@@ -12,7 +12,7 @@ import {
   updateQuestion,
   deleteQuestion
 } from '../../services/subject.service';
-import { getExamsBySubject, setExamVisibility, setExamSchedule } from '../../services/exam.service';
+import { getExamWithQuestions, getExamsBySubject, setExamVisibility, setExamSchedule } from '../../services/exam.service';
 import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
 import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Eye, FileText, Lock, Unlock, Calendar } from 'lucide-react';
@@ -58,6 +58,11 @@ const SubjectDetail = () => {
   const [scheduleStart, setScheduleStart] = useState('');
   const [scheduleEnd, setScheduleEnd] = useState('');
   const [scheduleError, setScheduleError] = useState('');
+
+  const [pdfExam, setPdfExam] = useState(null);
+  const [pdfFaculty, setPdfFaculty] = useState('');
+  const [pdfCodeBase, setPdfCodeBase] = useState('');
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
     if (subjectId) {
@@ -365,6 +370,230 @@ const SubjectDetail = () => {
     }
   };
 
+  const hashToSeed = (value) => {
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+      hash = (hash << 5) - hash + value.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash) || 1;
+  };
+
+  const createSeededRandom = (seed) => {
+    let state = seed;
+    return () => {
+      state = (state * 9301 + 49297) % 233280;
+      return state / 233280;
+    };
+  };
+
+  const shuffleWithSeed = (items, seedValue) => {
+    const result = [...items];
+    const rand = createSeededRandom(seedValue);
+    for (let i = result.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rand() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  };
+
+  const escapeHtml = (value) => {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  const buildExamHtml = ({ examData, questions, subjectName, facultyName, codeLabel }) => {
+    const questionHtml = questions
+      .map((question, index) => {
+        const options = ['A', 'B', 'C', 'D']
+          .filter((key) => question.options?.[key] !== undefined)
+          .map((key) => (
+            `<li><span class="opt-label">${key}.</span> ${escapeHtml(question.options?.[key])}</li>`
+          ))
+          .join('');
+
+        return `
+          <div class="question">
+            <div class="question-title">Cau ${index + 1}. ${escapeHtml(question.questionText)}</div>
+            <ul class="options">${options}</ul>
+            <div class="answer">Dap an: ${escapeHtml(question.correctAnswer || '')}</div>
+          </div>
+        `;
+      })
+      .join('');
+
+    const omrItems = questions
+      .map((_, index) => {
+        return `
+          <div class="omr-row">
+            <div class="omr-number">${index + 1}</div>
+            <div class="omr-bubbles">
+              <span class="bubble">A</span>
+              <span class="bubble">B</span>
+              <span class="bubble">C</span>
+              <span class="bubble">D</span>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    const durationLabel = examData?.durationMinutes ? `${examData.durationMinutes} phut` : '';
+
+    return `
+      <section class="page">
+        <div class="header">
+          <div class="header-left">
+            <div class="school">TRUONG DAI HOC CONG NGHE THONG TIN</div>
+            <div class="faculty">KHOA ${escapeHtml(facultyName || '')}</div>
+            <div class="line"></div>
+            <div class="invigilators">
+              <div class="invigilator">Giam thi 1</div>
+              <div class="invigilator">Giam thi 2</div>
+            </div>
+          </div>
+          <div class="header-center">
+            <div class="exam-title">DE THI CUOI HOC KY ... (20.. - 20..)</div>
+            <div class="subject">Mon hoc: ${escapeHtml(subjectName || '')}</div>
+            <div class="duration">Thoi gian lam bai: ${escapeHtml(durationLabel)}</div>
+            <div class="student-fields">
+              <div>Ho, ten SV: ............................................................</div>
+              <div>Ma SV: .....................................................................</div>
+              <div>STT: ........................................................................</div>
+              <div class="note">(Thi sinh khong duoc su dung tai lieu)</div>
+            </div>
+          </div>
+          <div class="header-right">
+            <div class="code-box">
+              <div class="code-label">Ma de thi</div>
+              <div class="code-value">${escapeHtml(codeLabel || '')}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">A. TRAC NGHIEM</div>
+        <div class="divider"></div>
+
+        <div class="content">
+          ${questionHtml}
+        </div>
+
+        <div class="omr-section">
+          <div class="omr-header">
+            <div>Diem (so):</div>
+            <div>Diem (chu):</div>
+            <div>Giam khao 1</div>
+            <div>Giam khao 2</div>
+            <div>So phach</div>
+          </div>
+          <div class="omr-grid">${omrItems}</div>
+        </div>
+      </section>
+    `;
+  };
+
+  const handleExportPdf = async () => {
+    if (!pdfExam) return;
+    setPdfLoading(true);
+    setError('');
+
+    const result = await getExamWithQuestions(pdfExam.id);
+    if (!result.success) {
+      setError(result.error || 'Khong the tai bai thi');
+      setPdfLoading(false);
+      return;
+    }
+
+    const questions = result.data.questions || [];
+    const subjectName = subject?.name || '';
+    const baseCode = pdfCodeBase || pdfExam.id.slice(0, 6).toUpperCase();
+
+    const seedA = hashToSeed(`${pdfExam.id}-A`);
+    const seedB = hashToSeed(`${pdfExam.id}-B`);
+    const versionA = shuffleWithSeed(questions, seedA);
+    const versionB = shuffleWithSeed(questions, seedB);
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Exam PDF</title>
+          <style>
+            @page { size: A4; margin: 12mm; }
+            body { margin: 0; font-family: "Times New Roman", serif; color: #111; }
+            .page { min-height: 297mm; box-sizing: border-box; page-break-after: always; }
+            .header { display: grid; grid-template-columns: 1.2fr 1.6fr 0.8fr; gap: 16px; align-items: start; }
+            .school { font-weight: 700; text-transform: uppercase; font-size: 14px; }
+            .faculty { font-size: 12px; margin-top: 4px; }
+            .line { height: 1px; background: #222; margin: 8px 0; }
+            .invigilators { border: 1px solid #111; display: grid; grid-template-columns: 1fr 1fr; text-align: center; font-size: 12px; }
+            .invigilator { padding: 12px 6px; border-right: 1px solid #111; }
+            .invigilator:last-child { border-right: none; }
+            .exam-title { font-weight: 700; text-align: center; text-transform: uppercase; font-size: 16px; }
+            .subject, .duration { text-align: center; font-size: 12px; margin-top: 4px; }
+            .student-fields { margin-top: 10px; font-size: 12px; line-height: 1.6; }
+            .note { font-style: italic; }
+            .header-right { display: flex; justify-content: flex-end; }
+            .code-box { border: 1px solid #111; width: 120px; height: 120px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 12px; }
+            .code-label { text-transform: uppercase; margin-bottom: 6px; }
+            .code-value { font-weight: 700; font-size: 18px; }
+            .section-title { margin-top: 16px; font-weight: 700; font-size: 13px; }
+            .divider { border-bottom: 1px dashed #111; margin: 8px 0 16px; }
+            .content { font-size: 13px; line-height: 1.5; }
+            .question { margin-bottom: 12px; }
+            .question-title { font-weight: 700; margin-bottom: 4px; }
+            .options { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
+            .opt-label { font-weight: 700; margin-right: 6px; }
+            .answer { margin-top: 4px; font-style: italic; font-size: 12px; }
+            .omr-section { margin-top: 20px; border-top: 1px solid #111; padding-top: 12px; }
+            .omr-header { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 11px; text-align: center; border: 1px solid #111; }
+            .omr-header > div { padding: 6px 4px; border-right: 1px solid #111; }
+            .omr-header > div:last-child { border-right: none; }
+            .omr-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 16px; margin-top: 12px; font-size: 11px; }
+            .omr-row { display: flex; align-items: center; gap: 8px; }
+            .omr-number { width: 20px; text-align: right; font-weight: 700; }
+            .omr-bubbles { display: grid; grid-template-columns: repeat(4, 22px); gap: 6px; }
+            .bubble { width: 22px; height: 22px; border: 1px solid #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+          </style>
+        </head>
+        <body>
+          ${buildExamHtml({
+            examData: result.data,
+            questions: versionA,
+            subjectName,
+            facultyName: pdfFaculty,
+            codeLabel: `${baseCode}-A`
+          })}
+          ${buildExamHtml({
+            examData: result.data,
+            questions: versionB,
+            subjectName,
+            facultyName: pdfFaculty,
+            codeLabel: `${baseCode}-B`
+          })}
+        </body>
+      </html>
+    `;
+
+    const win = window.open('', '_blank', 'width=900,height=1200');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => {
+        win.print();
+      }, 500);
+    }
+
+    setPdfLoading(false);
+    setPdfExam(null);
+  };
+
   return (
     <TeacherLayout>
       <div className="min-h-screen bg-gray-50">
@@ -595,6 +824,17 @@ const SubjectDetail = () => {
                             onClick={() => openScheduleModal(exam)}
                           >
                             Đặt thời gian
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              setPdfExam(exam);
+                              setPdfCodeBase('');
+                              setPdfFaculty('');
+                            }}
+                          >
+                            Xuất PDF
                           </Button>
                         </div>
                       </div>
@@ -835,6 +1075,61 @@ const SubjectDetail = () => {
               </Button>
               <Button variant="primary" onClick={handleSaveSchedule}>
                 Lưu
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* PDF Export Modal */}
+        <Modal
+          isOpen={!!pdfExam}
+          onClose={() => {
+            setPdfExam(null);
+            setPdfFaculty('');
+            setPdfCodeBase('');
+          }}
+          title="Xuat PDF bai thi"
+          size="sm"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Khoa
+              </label>
+              <input
+                type="text"
+                value={pdfFaculty}
+                onChange={(event) => setPdfFaculty(event.target.value)}
+                placeholder="Mang may tinh & Truyen thong"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Ma de (co ban)
+              </label>
+              <input
+                type="text"
+                value={pdfCodeBase}
+                onChange={(event) => setPdfCodeBase(event.target.value)}
+                placeholder="VD: 123456"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">He thong se tu tao 2 ma de: A va B.</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPdfExam(null);
+                  setPdfFaculty('');
+                  setPdfCodeBase('');
+                }}
+              >
+                Huy
+              </Button>
+              <Button variant="primary" onClick={handleExportPdf} disabled={pdfLoading}>
+                {pdfLoading ? 'Dang tao...' : 'Tao PDF'}
               </Button>
             </div>
           </div>
