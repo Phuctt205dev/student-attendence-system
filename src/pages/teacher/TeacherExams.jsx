@@ -75,7 +75,7 @@ const TeacherExams = () => {
     try {
       const result = await getClassesByTeacher(userProfile.uid);
       if (result.success) {
-        setClasses(result.data);
+        setClasses(result.classes || []);
       } else {
         console.error('Failed to load classes:', result.error);
         setError(result.error);

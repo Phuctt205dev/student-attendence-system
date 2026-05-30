@@ -12,6 +12,8 @@ import {
   updateQuestion,
   deleteQuestion
 } from '../../services/subject.service';
+import { getExamsBySubject } from '../../services/exam.service';
+import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
 import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Eye, FileText } from 'lucide-react';
 import Card from '../../components/common/Card';
@@ -20,6 +22,7 @@ import Modal from '../../components/common/Modal';
 import TopicForm from '../../components/teacher/TopicForm';
 import QuestionForm from '../../components/teacher/QuestionForm';
 import ExamCreationModal from '../../components/teacher/ExamCreationModal';
+import { format, formatDistanceToNow } from 'date-fns';
 
 const SubjectDetail = () => {
   const { userProfile } = useAuth();
@@ -48,11 +51,22 @@ const SubjectDetail = () => {
   const [showExamModal, setShowExamModal] = useState(false);
   const [selectedTopicIds, setSelectedTopicIds] = useState([]);
 
+  const [exams, setExams] = useState([]);
+  const [examsLoading, setExamsLoading] = useState(false);
+  const [classMap, setClassMap] = useState({});
+
   useEffect(() => {
     if (subjectId) {
       loadSubjectAndTopics();
     }
   }, [subjectId]);
+
+  useEffect(() => {
+    if (subjectId && userProfile?.uid) {
+      loadSubjectExams();
+      loadTeacherClasses();
+    }
+  }, [subjectId, userProfile?.uid]);
 
   const loadSubjectAndTopics = async () => {
     setLoading(true);
@@ -242,7 +256,51 @@ const SubjectDetail = () => {
     setSuccess('Bài thi được tạo thành công!');
     setShowExamModal(false);
     setSelectedTopicIds([]);
+    loadSubjectExams();
     setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const loadSubjectExams = async () => {
+    setExamsLoading(true);
+    const result = await getExamsBySubject(subjectId, userProfile?.uid);
+    if (result.success) {
+      setExams(result.data || []);
+    } else {
+      setError(result.error || 'Failed to load exams');
+    }
+    setExamsLoading(false);
+  };
+
+  const loadTeacherClasses = async () => {
+    const result = await getClassesByTeacher(userProfile?.uid);
+    if (!result.success) return;
+
+    const nextMap = (result.classes || []).reduce((acc, cls) => {
+      acc[cls.id] = cls.className || cls.name;
+      return acc;
+    }, {});
+
+    setClassMap(nextMap);
+  };
+
+  const getStatusBadge = (status) => {
+    const styles = {
+      draft: 'bg-gray-100 text-gray-800',
+      published: 'bg-blue-100 text-blue-800',
+      closed: 'bg-gray-500 text-white'
+    };
+
+    const labels = {
+      draft: 'Nháp',
+      published: 'Đã phát hành',
+      closed: 'Đã đóng'
+    };
+
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${styles[status] || styles.draft}`}>
+        {labels[status] || 'Nháp'}
+      </span>
+    );
   };
 
   return (
@@ -375,6 +433,93 @@ const SubjectDetail = () => {
                     </div>
                   </Card>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Exams Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Bài thi</h2>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/teacher/exams')}
+              >
+                Xem tất cả
+              </Button>
+            </div>
+
+            {examsLoading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" />
+              </div>
+            ) : exams.length === 0 ? (
+              <Card>
+                <div className="text-center py-12">
+                  <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có bài thi</h3>
+                  <p className="text-gray-600">Bài thi mới tạo sẽ xuất hiện ở đây</p>
+                </div>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {exams.map((exam) => {
+                  const classNames = (exam.classIds || [])
+                    .map((id) => classMap[id])
+                    .filter(Boolean);
+
+                  const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
+                  const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
+
+                  return (
+                    <Card key={exam.id} className="hover:shadow-lg transition-shadow">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900">{exam.title}</h3>
+                            {getStatusBadge(exam.status)}
+                          </div>
+
+                          {exam.description && (
+                            <p className="text-gray-600 text-sm mb-3">{exam.description}</p>
+                          )}
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3 text-sm">
+                            <div className="text-gray-600">
+                              <span className="font-medium">{exam.totalQuestions}</span> câu hỏi
+                            </div>
+                            <div className="text-gray-600">
+                              <span className="font-medium">{exam.durationMinutes}</span> phút
+                            </div>
+                            <div className="text-gray-600 md:col-span-2">
+                              {classNames.length > 0
+                                ? classNames.join(', ')
+                                : 'Chưa gán lớp'}
+                            </div>
+                          </div>
+
+                          <div className="text-xs text-gray-500 space-y-1">
+                            {startTime && endTime && (
+                              <>
+                                <div>
+                                  Bắt đầu: {format(startTime, 'MMM dd, yyyy HH:mm')}
+                                </div>
+                                <div>
+                                  Kết thúc: {format(endTime, 'MMM dd, yyyy HH:mm')}
+                                </div>
+                              </>
+                            )}
+                            <div>
+                              Tạo {formatDistanceToNow(exam.createdAt?.toDate?.() || new Date(), {
+                                addSuffix: true
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </div>

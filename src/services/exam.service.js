@@ -286,6 +286,37 @@ export const getExamsByClass = async (classId) => {
   }
 };
 
+// Get exams by subject (optionally filter by teacher on client side)
+export const getExamsBySubject = async (subjectId, teacherId) => {
+  try {
+    const q = query(
+      collection(db, 'exams'),
+      where('subjectId', '==', subjectId)
+    );
+
+    const querySnapshot = await getDocs(q);
+    let exams = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    if (teacherId) {
+      exams = exams.filter((exam) => exam.teacherId === teacherId);
+    }
+
+    exams.sort((a, b) => {
+      const aTime = a.createdAt?.seconds || 0;
+      const bTime = b.createdAt?.seconds || 0;
+      return bTime - aTime;
+    });
+
+    return { success: true, data: exams };
+  } catch (error) {
+    console.error('Error getting subject exams:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Get exam with questions (fetch question details from subcollections)
 export const getExamWithQuestions = async (examId, subjectId) => {
   try {
