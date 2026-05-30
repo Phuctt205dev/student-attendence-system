@@ -913,7 +913,7 @@ const SubjectDetail = () => {
                               setPdfFaculty('');
                             }}
                           >
-                            Xuất PDF
+                            Xuất Word
                           </Button>
                         </div>
                       </div>
@@ -1167,7 +1167,7 @@ const SubjectDetail = () => {
             setPdfFaculty('');
             setPdfCodeBase('');
           }}
-          title="Xuat PDF bai thi"
+          title="Xuất file Word bài thi"
           size="sm"
         >
           <div className="space-y-4">
@@ -1185,7 +1185,7 @@ const SubjectDetail = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ma de (co ban)
+                Mã đề (cơ bản)
               </label>
               <input
                 type="text"
@@ -1194,7 +1194,7 @@ const SubjectDetail = () => {
                 placeholder="VD: 123456"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
-              <p className="text-xs text-gray-500 mt-1">He thong se tu tao 2 ma de: A va B.</p>
+              <p className="text-xs text-gray-500 mt-1">Hệ thống sẽ tự tạo 2 mã đề: A và B.</p>
             </div>
             <div className="flex justify-end gap-2">
               <Button
@@ -1205,10 +1205,10 @@ const SubjectDetail = () => {
                   setPdfCodeBase('');
                 }}
               >
-                Huy
+                Hủy
               </Button>
-              <Button variant="primary" onClick={handleExportPdf} disabled={pdfLoading}>
-                {pdfLoading ? 'Dang tao...' : 'Tao PDF'}
+              <Button variant="primary" onClick={handleExportDoc} disabled={pdfLoading}>
+                {pdfLoading ? 'Đang tạo...' : 'Tạo file Word'}
               </Button>
             </div>
           </div>
