@@ -682,7 +682,7 @@ const SubjectDetail = () => {
         codeLabel: `${baseCode}-B`,
       });
 
-      // Create documents
+      // Create documents (docx auto-creates sections from plain objects)
       const docA = new Document({
         sections: [
           {
