@@ -264,15 +264,16 @@ export const getExamsByClass = async (classId) => {
     const q = query(
       collection(db, 'exams'),
       where('classIds', 'array-contains', classId),
-      where('status', 'in', ['published', 'closed']),
-      orderBy('startTime', 'asc')
+      orderBy('createdAt', 'desc')
     );
 
     const querySnapshot = await getDocs(q);
-    const exams = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const exams = querySnapshot.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      .filter((exam) => exam.status === 'published' || exam.status === 'closed');
 
     return { success: true, data: exams };
   } catch (error) {

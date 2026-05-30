@@ -245,17 +245,14 @@ service cloud.firestore {
       // Đọc:
       // - Teacher có thể đọc bài thi của chính mình (trạng thái gì cũng được)
       // - Admin có thể đọc tất cả
-      // - Student có thể đọc bài thi được assign cho lớp mình
+      // - Student có thể đọc tất cả exams (filter on client side)
       allow read: if signedIn() && (
         resource.data.teacherId == request.auth.uid ||
         isAdmin() ||
-        (isStudent() && (
-          exists(/databases/$(database)/documents/classes/{classId}/students/$(request.auth.uid)) &&
-          classId in resource.data.classIds
-        ))
+        isStudent()
       );
 
-      // Cho phép list/query exams
+      // Cho phép list/query exams cho tất cả authenticated users
       allow list: if signedIn();
 
       // Tạo bài thi: teacherId phải là user hiện tại, status = draft

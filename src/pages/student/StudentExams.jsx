@@ -49,13 +49,13 @@ const StudentExams = () => {
       return;
     }
 
-    const classIds = classesResult.data.map(c => c.id);
+    const classIds = (classesResult.classes || []).map(c => c.id);
     const allExams = [];
 
     // Fetch exams for each class
     for (const classId of classIds) {
       const examsResult = await getExamsByClass(classId);
-      if (examsResult.success) {
+      if (examsResult.success && examsResult.data) {
         // Get student's attempt if exists
         for (const exam of examsResult.data) {
           const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id);
