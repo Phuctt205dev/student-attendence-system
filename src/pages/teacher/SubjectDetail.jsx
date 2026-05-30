@@ -173,10 +173,16 @@ const SubjectDetail = () => {
         setShowQuestionModal(false);
         setEditingQuestion(null);
 
-        // Reload questions
+        // Reload questions in modal
         const questionsResult = await getTopicQuestions(subjectId, selectedTopic.id);
         if (questionsResult.success) {
           setQuestions(questionsResult.data);
+        }
+
+        // Reload topics to update questionCount on topic card
+        const topicsResult = await getSubjectTopics(subjectId);
+        if (topicsResult.success) {
+          setTopics(topicsResult.data);
         }
 
         setTimeout(() => setSuccess(''), 3000);
@@ -197,10 +203,16 @@ const SubjectDetail = () => {
     if (result.success) {
       setSuccess('Question deleted!');
 
-      // Reload questions
+      // Reload questions in modal
       const questionsResult = await getTopicQuestions(subjectId, selectedTopic.id);
       if (questionsResult.success) {
         setQuestions(questionsResult.data);
+      }
+
+      // Reload topics to update questionCount on topic card
+      const topicsResult = await getSubjectTopics(subjectId);
+      if (topicsResult.success) {
+        setTopics(topicsResult.data);
       }
 
       setTimeout(() => setSuccess(''), 3000);
