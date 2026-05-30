@@ -46,7 +46,7 @@ const SubjectDetail = () => {
   const [lastQuestionPoints, setLastQuestionPoints] = useState(1);
 
   const [showExamModal, setShowExamModal] = useState(false);
-  const [examTopicContext, setExamTopicContext] = useState(null);
+  const [selectedTopicIds, setSelectedTopicIds] = useState([]);
 
   useEffect(() => {
     if (subjectId) {
@@ -221,15 +221,27 @@ const SubjectDetail = () => {
     }
   };
 
-  const handleOpenExamModal = (topic) => {
-    setExamTopicContext(topic);
+  const handleToggleTopicSelection = (topicId) => {
+    setSelectedTopicIds((prev) =>
+      prev.includes(topicId)
+        ? prev.filter((id) => id !== topicId)
+        : [...prev, topicId]
+    );
+  };
+
+  const handleOpenExamModal = () => {
+    if (selectedTopicIds.length === 0) {
+      setError('Vui lòng chọn ít nhất một chủ đề');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
     setShowExamModal(true);
   };
 
   const handleExamCreated = (examData) => {
     setSuccess('Bài thi được tạo thành công!');
     setShowExamModal(false);
-    setExamTopicContext(null);
+    setSelectedTopicIds([]);
     setTimeout(() => setSuccess(''), 3000);
   };
 
@@ -278,13 +290,23 @@ const SubjectDetail = () => {
           <div className="mb-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">Chủ đề</h2>
-              <Button
-                variant="primary"
-                icon={<Plus className="w-4 h-4" />}
-                onClick={handleOpenCreateTopicModal}
-              >
-                Thêm chủ đề
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  icon={<FileText className="w-4 h-4" />}
+                  onClick={handleOpenExamModal}
+                  disabled={selectedTopicIds.length === 0}
+                >
+                  Tạo bài thi ({selectedTopicIds.length})
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={handleOpenCreateTopicModal}
+                >
+                  Thêm chủ đề
+                </Button>
+              </div>
             </div>
 
             {loading ? (
@@ -311,25 +333,25 @@ const SubjectDetail = () => {
                 {topics.map((topic) => (
                   <Card key={topic.id} className="hover:shadow-lg transition-shadow">
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">{topic.name}</h3>
-                        {topic.description && (
-                          <p className="text-gray-600 mt-1">{topic.description}</p>
-                        )}
-                        <div className="mt-3 text-sm text-gray-500">
-                          <span className="font-semibold text-gray-900">{topic.questionCount || 0}</span> câu hỏi
+                      <div className="flex items-start gap-3 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedTopicIds.includes(topic.id)}
+                          onChange={() => handleToggleTopicSelection(topic.id)}
+                          className="w-5 h-5 mt-1 rounded border-gray-300 cursor-pointer"
+                        />
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">{topic.name}</h3>
+                          {topic.description && (
+                            <p className="text-gray-600 mt-1">{topic.description}</p>
+                          )}
+                          <div className="mt-3 text-sm text-gray-500">
+                            <span className="font-semibold text-gray-900">{topic.questionCount || 0}</span> câu hỏi
+                          </div>
                         </div>
                       </div>
 
-                      <div className="flex gap-2 ml-4 items-center">
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          icon={<FileText className="w-3 h-3" />}
-                          onClick={() => handleOpenExamModal(topic)}
-                        >
-                          Tạo bài thi
-                        </Button>
+                      <div className="flex gap-2 ml-4">
                         <button
                           onClick={() => handleViewQuestions(topic)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -510,21 +532,24 @@ const SubjectDetail = () => {
           isOpen={showExamModal}
           onClose={() => {
             setShowExamModal(false);
-            setExamTopicContext(null);
           }}
-          title={`Tạo bài thi - ${examTopicContext?.name}`}
+          title={`Tạo bài thi từ ${selectedTopicIds.length} chủ đề`}
           size="md"
         >
-          {examTopicContext && subject && (
+          {selectedTopicIds.length > 0 && subject && (
             <ExamCreationModal
               subject={subject}
-              topic={examTopicContext}
-              availableQuestionCount={examTopicContext.questionCount || 0}
+              topicIds={selectedTopicIds}
+              topicNames={topics
+                .filter((t) => selectedTopicIds.includes(t.id))
+                .map((t) => t.name)}
+              availableQuestionCount={topics
+                .filter((t) => selectedTopicIds.includes(t.id))
+                .reduce((sum, t) => sum + (t.questionCount || 0), 0)}
               teacherId={userProfile?.uid}
               onSuccess={handleExamCreated}
               onCancel={() => {
                 setShowExamModal(false);
-                setExamTopicContext(null);
               }}
             />
           )}

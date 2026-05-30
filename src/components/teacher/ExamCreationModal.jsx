@@ -7,7 +7,8 @@ import { createExam } from '../../services/exam.service';
 
 const ExamCreationModal = ({
   subject,
-  topic,
+  topicIds,
+  topicNames,
   availableQuestionCount = 0,
   teacherId,
   onSuccess,
@@ -16,7 +17,7 @@ const ExamCreationModal = ({
 }) => {
   const { register, handleSubmit, formState: { errors }, watch } = useForm({
     defaultValues: {
-      title: `${subject?.name} - ${topic?.name}`,
+      title: `${subject?.name} - ${topicNames?.join(', ')}`,
       description: '',
       durationMinutes: 60,
       questionCount: Math.min(availableQuestionCount, 10),
@@ -63,7 +64,7 @@ const ExamCreationModal = ({
         classIds: data.classIds,
         durationMinutes: parseInt(data.durationMinutes),
         subjectId: subject.id,
-        topicIds: [topic.id],
+        topicIds: topicIds,
         questionCount: parseInt(data.questionCount)
       };
 
