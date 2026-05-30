@@ -682,21 +682,13 @@ const SubjectDetail = () => {
         codeLabel: `${baseCode}-B`,
       });
 
-      // Create documents (docx auto-creates sections from plain objects)
+      // Create documents (docx auto-creates section from children array)
       const docA = new Document({
-        sections: [
-          {
-            children: childrenA,
-          },
-        ],
+        children: childrenA,
       });
 
       const docB = new Document({
-        sections: [
-          {
-            children: childrenB,
-          },
-        ],
+        children: childrenB,
       });
 
       // Download version A
