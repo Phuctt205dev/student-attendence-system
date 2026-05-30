@@ -263,8 +263,7 @@ export const getExamsByClass = async (classId) => {
   try {
     const q = query(
       collection(db, 'exams'),
-      where('classIds', 'array-contains', classId),
-      orderBy('createdAt', 'desc')
+      where('classIds', 'array-contains', classId)
     );
 
     const querySnapshot = await getDocs(q);
@@ -273,7 +272,12 @@ export const getExamsByClass = async (classId) => {
         id: doc.id,
         ...doc.data()
       }))
-      .filter((exam) => exam.status === 'published' || exam.status === 'closed');
+      .filter((exam) => exam.status === 'published' || exam.status === 'closed')
+      .sort((a, b) => {
+        const aTime = a.createdAt?.seconds || 0;
+        const bTime = b.createdAt?.seconds || 0;
+        return bTime - aTime;
+      });
 
     return { success: true, data: exams };
   } catch (error) {
