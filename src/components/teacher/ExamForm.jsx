@@ -9,7 +9,7 @@ import Button from '../common/Button';
 import Card from '../common/Card';
 import { AlertCircle } from 'lucide-react';
 
-const ExamForm = ({ initialData, classes, onSuccess, onCancel }) => {
+const ExamForm = ({ initialData, classes = [], onSuccess, onCancel }) => {
   console.log('ExamForm rendering with classes:', classes);
   const { userProfile } = useAuth();
   const { register, handleSubmit, watch, formState: { errors }, setValue } = useForm({
@@ -45,7 +45,7 @@ const ExamForm = ({ initialData, classes, onSuccess, onCancel }) => {
       const examData = {
         title: data.title,
         description: data.description,
-        classIds: data.classIds.length > 0 ? data.classIds : classes[0]?.id,
+        classIds: (data.classIds && data.classIds.length > 0) ? data.classIds : [],
         durationMinutes: parseInt(data.durationMinutes),
         teacherId: userProfile.uid,
         questionDistribution: {
