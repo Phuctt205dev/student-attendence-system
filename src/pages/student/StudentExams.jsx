@@ -6,8 +6,7 @@ import {
   getClassesByStudent
 } from '../../services/class.service';
 import {
-  getExamsByClass,
-  getExamWithQuestions
+  getExamsByClass
 } from '../../services/exam.service';
 import {
   getStudentExamAttempt,
@@ -95,7 +94,7 @@ const StudentExams = () => {
 
     // Check if already has in-progress attempt
     if (exam.attempt && exam.attempt.status === 'in-progress') {
-      navigate(`/student/exams/${exam.id}/take`);
+      navigate(`/student/exams/${exam.id}/take`, { state: { classId: exam.classId } });
       return;
     }
 
@@ -103,7 +102,7 @@ const StudentExams = () => {
     const result = await startExamAttempt(userProfile.uid, exam.id, exam.classId);
 
     if (result.success) {
-      navigate(`/student/exams/${exam.id}/take`);
+      navigate(`/student/exams/${exam.id}/take`, { state: { classId: exam.classId } });
     } else {
       setError(result.error);
     }
@@ -229,7 +228,7 @@ const StudentExams = () => {
               <Button
                 variant="primary"
                 icon={<PlayCircle className="w-4 h-4" />}
-                onClick={() => navigate(`/student/exams/${exam.id}/take`)}
+                onClick={() => navigate(`/student/exams/${exam.id}/take`, { state: { classId: exam.classId } })}
               >
                 Continue
               </Button>
@@ -249,7 +248,7 @@ const StudentExams = () => {
               <Button
                 variant="outline"
                 icon={<ChevronRight className="w-4 h-4" />}
-                onClick={() => navigate(`/student/exams/${exam.id}`)}
+                onClick={() => navigate(`/student/exams/${exam.id}/take`, { state: { classId: exam.classId } })}
               >
                 View Details
               </Button>

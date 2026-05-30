@@ -21,6 +21,8 @@ import TeacherQuestionBank from './pages/teacher/TeacherQuestionBank';
 import TeacherSubjects from './pages/teacher/TeacherSubjects';
 import SubjectDetail from './pages/teacher/SubjectDetail';
 import StudentExams from './pages/student/StudentExams';
+import StudentExamTake from './pages/student/StudentExamTake';
+import StudentExamResult from './pages/student/StudentExamResult';
 
 function App() {
   return (
@@ -132,6 +134,26 @@ function App() {
               <ProtectedRoute>
                 <RoleBasedRoute allowedRoles={['student']}>
                   <StudentExams />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/exams/:examId/take"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['student']}>
+                  <StudentExamTake />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/exams/:examId/result"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['student']}>
+                  <StudentExamResult />
                 </RoleBasedRoute>
               </ProtectedRoute>
             }

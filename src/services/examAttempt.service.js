@@ -11,7 +11,22 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { getQuestionById } from './questionBank.service';
+const getQuestionFromExam = async (examData, questionId) => {
+  const subjectId = examData.subjectId;
+  const topicIds = examData.topicIds || [];
+
+  for (const topicId of topicIds) {
+    const qSnap = await getDoc(
+      doc(db, 'subjects', subjectId, 'topics', topicId, 'questions', questionId)
+    );
+
+    if (qSnap.exists()) {
+      return { id: qSnap.id, ...qSnap.data() };
+    }
+  }
+
+  return null;
+};
 
 // Start exam attempt
 export const startExamAttempt = async (studentId, examId, classId) => {
@@ -137,25 +152,31 @@ export const submitExamAttempt = async (attemptId) => {
     }
 
     const examData = examSnap.data();
-    const { questionIds, totalPoints } = examData;
+    const questionRefs = examData.questionIds || [];
+    let totalPoints = examData.totalPoints || 0;
 
     // Calculate score
     let earnedPoints = 0;
     const updatedAnswers = { ...answers };
 
-    for (const questionId of questionIds) {
-      if (answers[questionId]) {
-        const questionSnap = await getDoc(doc(db, 'questions', questionId));
-        if (questionSnap.exists()) {
-          const question = questionSnap.data();
-          const isCorrect = answers[questionId].selected === question.correctAnswer;
-          updatedAnswers[questionId].isCorrect = isCorrect;
+    for (const questionRef of questionRefs) {
+      const questionId = questionRef.id || questionRef;
+      if (!answers[questionId]) continue;
 
-          if (isCorrect) {
-            earnedPoints += 2.5; // 2.5 points per question
-          }
-        }
+      const question = await getQuestionFromExam(examData, questionId);
+      if (!question) continue;
+
+      const isCorrect = answers[questionId].selected === question.correctAnswer;
+      updatedAnswers[questionId].isCorrect = isCorrect;
+
+      if (isCorrect) {
+        const points = questionRef.points ?? question.points ?? 1;
+        earnedPoints += points;
       }
+    }
+
+    if (!totalPoints) {
+      totalPoints = questionRefs.reduce((sum, ref) => sum + (ref.points ?? 1), 0);
     }
 
     // Calculate duration
@@ -335,21 +356,21 @@ export const getAttemptWithDetails = async (attemptId) => {
     }
 
     const examData = examSnap.data();
-    const { questionIds } = examData;
+    const questionRefs = examData.questionIds || [];
 
     // Get questions with answers
     const questionsWithAnswers = [];
-    for (const questionId of questionIds) {
-      const qSnap = await getDoc(doc(db, 'questions', questionId));
-      if (qSnap.exists()) {
-        const question = qSnap.data();
-        questionsWithAnswers.push({
-          id: qSnap.id,
-          ...question,
-          studentAnswer: answers[qSnap.id]?.selected || null,
-          isCorrect: answers[qSnap.id]?.isCorrect || false
-        });
-      }
+    for (const questionRef of questionRefs) {
+      const questionId = questionRef.id || questionRef;
+      const question = await getQuestionFromExam(examData, questionId);
+      if (!question) continue;
+
+      questionsWithAnswers.push({
+        id: questionId,
+        ...question,
+        studentAnswer: answers[questionId]?.selected || null,
+        isCorrect: answers[questionId]?.isCorrect || false
+      });
     }
 
     return {
