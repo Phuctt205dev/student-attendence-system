@@ -175,9 +175,15 @@ service cloud.firestore {
     // App dùng: attendanceSessions/{sessionId}
     // =========================
     match /attendanceSessions/{sessionId} {
-      // Đọc session: chỉ giáo viên tạo session đó
-      allow read: if signedIn() &&
-        resource.data.teacherId == request.auth.uid;
+      // Đọc session:
+      // - Teacher tạo session có thể đọc
+      // - Student có thể đọc sessions của classes họ thuộc
+      allow read: if signedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        (isStudent() && (
+          exists(/databases/$(database)/documents/classes/$(resource.data.classId)/students/$(request.auth.uid))
+        ))
+      );
 
       // Cho phép list/query sessions
       allow list: if signedIn();
@@ -195,8 +201,11 @@ service cloud.firestore {
       // App dùng: attendanceSessions/{sessionId}/records/{studentId}
       // =========================
       match /records/{studentId} {
-        allow read, create, update, delete: if signedIn() &&
-          sessionDoc(sessionId).data.teacherId == request.auth.uid;
+        // Teacher tạo session hoặc student đọc records của chính mình
+        allow read, create, update, delete: if signedIn() && (
+          sessionDoc(sessionId).data.teacherId == request.auth.uid ||
+          isSelf(studentId)
+        );
       }
     }
 
