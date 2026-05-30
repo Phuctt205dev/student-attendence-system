@@ -11,7 +11,9 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
-  Settings
+  Settings,
+  FileText,
+  ClipboardList
 } from 'lucide-react';
 
 const TeacherLayout = ({ children }) => {
@@ -31,6 +33,16 @@ const TeacherLayout = ({ children }) => {
       name: 'Lớp học',
       href: '/teacher/classes',
       icon: BookOpen
+    },
+    {
+      name: 'Ngân hàng câu hỏi',
+      href: '/teacher/question-bank',
+      icon: FileText
+    },
+    {
+      name: 'Bài thi',
+      href: '/teacher/exams',
+      icon: ClipboardList
     },
     {
       name: 'Hồ sơ',

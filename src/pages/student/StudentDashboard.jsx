@@ -6,12 +6,12 @@ import { getStudentAttendanceHistory, markAttendance } from '../../services/atte
 import StudentLayout from '../../layouts/StudentLayout';
 import {
   BookOpen,
-  ClipboardList,
   QrCode,
   TrendingUp,
   Calendar,
   ArrowRight,
-  CheckCircle
+  CheckCircle,
+  ClipboardList
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -168,11 +168,11 @@ const StudentDashboard = () => {
       onClick: () => navigate('/student/classes')
     },
     {
-      title: 'Lịch học',
-      description: 'Xem lịch học và thời khóa biểu',
-      icon: Calendar,
-      color: 'bg-green-500',
-      onClick: () => alert('Tính năng đang phát triển')
+      title: 'Bài thi',
+      description: 'Xem và làm bài thi được giao',
+      icon: ClipboardList,
+      color: 'bg-purple-500',
+      onClick: () => navigate('/student/exams')
     }
   ];
 

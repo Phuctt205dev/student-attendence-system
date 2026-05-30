@@ -16,6 +16,11 @@ import TeacherProfile from './pages/teacher/TeacherProfile';
 import StudentDashboard from './pages/student/StudentDashboard';
 import StudentClasses from './pages/student/StudentClasses';
 
+// Question Bank & Exam pages
+import TeacherQuestionBank from './pages/teacher/TeacherQuestionBank';
+import TeacherExams from './pages/teacher/TeacherExams';
+import StudentExams from './pages/student/StudentExams';
+
 function App() {
   return (
     <Router>
@@ -69,6 +74,26 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/teacher/question-bank"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['teacher', 'admin']}>
+                  <TeacherQuestionBank />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/exams"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['teacher', 'admin']}>
+                  <TeacherExams />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
 
           {/* Protected routes - Student */}
           <Route
@@ -87,6 +112,16 @@ function App() {
               <ProtectedRoute>
                 <RoleBasedRoute allowedRoles={['student']}>
                   <StudentClasses />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/exams"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['student']}>
+                  <StudentExams />
                 </RoleBasedRoute>
               </ProtectedRoute>
             }

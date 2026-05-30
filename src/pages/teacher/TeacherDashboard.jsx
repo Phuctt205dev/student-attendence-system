@@ -9,7 +9,9 @@ import {
   Users,
   ClipboardCheck,
   ArrowRight,
-  Calendar
+  Calendar,
+  FileText,
+  ClipboardList
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -98,6 +100,20 @@ const TeacherDashboard = () => {
       icon: ClipboardCheck,
       color: 'bg-purple-500',
       onClick: () => navigate('/teacher/classes')
+    },
+    {
+      title: 'Ngân hàng câu hỏi',
+      description: 'Tạo và quản lý câu hỏi cho bài thi',
+      icon: FileText,
+      color: 'bg-green-500',
+      onClick: () => navigate('/teacher/question-bank')
+    },
+    {
+      title: 'Bài thi',
+      description: 'Tạo bài thi tự động từ ngân hàng câu hỏi',
+      icon: ClipboardList,
+      color: 'bg-orange-500',
+      onClick: () => navigate('/teacher/exams')
     }
   ];
 
