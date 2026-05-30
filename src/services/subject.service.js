@@ -48,7 +48,10 @@ export const getTeacherSubjects = async (teacherId) => {
     const subjects = await Promise.all(
       snapshot.docs.map(async (doc) => {
         const topicsSnapshot = await getDocs(
-          collection(db, 'subjects', doc.id, 'topics')
+          query(
+            collection(db, 'subjects', doc.id, 'topics'),
+            where('isActive', '==', true)
+          )
         );
 
         return {
@@ -143,7 +146,10 @@ export const getSubjectTopics = async (subjectId) => {
     const topics = await Promise.all(
       snapshot.docs.map(async (topicDoc) => {
         const questionsSnapshot = await getDocs(
-          collection(db, 'subjects', subjectId, 'topics', topicDoc.id, 'questions')
+          query(
+            collection(db, 'subjects', subjectId, 'topics', topicDoc.id, 'questions'),
+            where('isActive', '==', true)
+          )
         );
 
         return {
