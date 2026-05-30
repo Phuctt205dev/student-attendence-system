@@ -10,6 +10,7 @@ import Card from '../common/Card';
 import { AlertCircle } from 'lucide-react';
 
 const ExamForm = ({ initialData, classes, onSuccess, onCancel }) => {
+  console.log('ExamForm rendering with classes:', classes);
   const { userProfile } = useAuth();
   const { register, handleSubmit, watch, formState: { errors }, setValue } = useForm({
     defaultValues: {

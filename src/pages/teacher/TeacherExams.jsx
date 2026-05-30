@@ -72,9 +72,17 @@ const TeacherExams = () => {
   const loadClasses = async () => {
     if (!userProfile?.uid) return;
 
-    const result = await getClassesByTeacher(userProfile.uid);
-    if (result.success) {
-      setClasses(result.data);
+    try {
+      const result = await getClassesByTeacher(userProfile.uid);
+      if (result.success) {
+        setClasses(result.data);
+      } else {
+        console.error('Failed to load classes:', result.error);
+        setError(result.error);
+      }
+    } catch (error) {
+      console.error('Error loading classes:', error);
+      setError(error.message);
     }
   };
 
@@ -165,6 +173,7 @@ const TeacherExams = () => {
                 variant="primary"
                 icon={<Plus className="w-5 h-5" />}
                 onClick={() => {
+                  console.log('Create Exam clicked');
                   setEditingExam(null);
                   setShowExamModal(true);
                 }}
@@ -370,6 +379,7 @@ const TeacherExams = () => {
             setEditingExam(null);
           }}
           title={editingExam ? 'Edit Exam' : 'Create Exam'}
+          size="xl"
         >
           <ExamForm
             initialData={editingExam}

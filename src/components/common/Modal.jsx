@@ -12,7 +12,7 @@ export const Modal = ({
   closeOnOverlayClick = true,
   showCloseButton = true,
   className = '',
-  zIndex = 50
+  zIndex = 9999
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -37,7 +37,12 @@ export const Modal = ({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    console.log('Modal is closed');
+    return null;
+  }
+
+  console.log('Modal is rendering, children:', children);
 
   const sizes = {
     sm: 'max-w-md',
