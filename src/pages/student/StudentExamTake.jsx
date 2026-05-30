@@ -186,25 +186,27 @@ const StudentExamTake = () => {
                   <h2 className="text-lg font-semibold text-gray-900 mb-4">{currentQuestion.questionText}</h2>
 
                   <div className="space-y-3">
-                    {Object.entries(currentQuestion.options || {}).map(([key, value]) => (
-                      <label
-                        key={key}
-                        className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${answers[currentQuestion.id]?.selected === key ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-primary-300'}`}
-                      >
-                        <input
-                          type="radio"
-                          name={currentQuestion.id}
-                          value={key}
-                          checked={answers[currentQuestion.id]?.selected === key}
-                          onChange={() => handleSelectAnswer(currentQuestion.id, key)}
-                          className="mt-1"
-                        />
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">{key}</p>
-                          <p className="text-gray-900">{value}</p>
-                        </div>
-                      </label>
-                    ))}
+                    {['A', 'B', 'C', 'D']
+                      .filter((key) => currentQuestion.options?.[key] !== undefined)
+                      .map((key) => (
+                        <label
+                          key={key}
+                          className={`flex items-center gap-4 p-3 border rounded-lg cursor-pointer transition-colors ${answers[currentQuestion.id]?.selected === key ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-primary-300'}`}
+                        >
+                          <input
+                            type="radio"
+                            name={currentQuestion.id}
+                            value={key}
+                            checked={answers[currentQuestion.id]?.selected === key}
+                            onChange={() => handleSelectAnswer(currentQuestion.id, key)}
+                            className="mt-0.5"
+                          />
+                          <span className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-300 text-sm font-semibold text-gray-700">
+                            {key}
+                          </span>
+                          <span className="text-gray-900">{currentQuestion.options?.[key]}</span>
+                        </label>
+                      ))}
                   </div>
                 </Card>
 
