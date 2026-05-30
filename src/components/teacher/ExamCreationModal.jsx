@@ -57,16 +57,28 @@ const ExamCreationModal = ({
       setError('');
       setSubmitting(true);
 
+      // Debug logging
+      console.log('Form data:', data);
+      console.log('ClassIds:', data.classIds);
+
+      if (!data.classIds || data.classIds.length === 0) {
+        setError('Vui lòng chọn ít nhất một lớp');
+        setSubmitting(false);
+        return;
+      }
+
       const examData = {
         teacherId,
         title: data.title,
         description: data.description,
-        classIds: data.classIds,
+        classIds: Array.isArray(data.classIds) ? data.classIds : [data.classIds],
         durationMinutes: parseInt(data.durationMinutes),
         subjectId: subject.id,
         topicIds: topicIds,
         questionCount: parseInt(data.questionCount)
       };
+
+      console.log('Exam data to save:', examData);
 
       const result = await createExam(examData);
 
