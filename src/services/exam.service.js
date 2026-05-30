@@ -15,91 +15,90 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import {
-  getQuestionsByDifficultyAndTeacher,
-  getQuestionById
-} from './questionBank.service';
+  getRandomQuestionsFromTopics,
+  calculateTotalPoints,
+  calculatePassingScore
+} from './subject.service';
 
-// Create exam (with automatic question selection)
+// Create exam with topic-based question selection
 export const createExam = async (examData) => {
   try {
-    const { teacherId, classIds, durationMinutes, questionDistribution } = examData;
+    const {
+      teacherId,
+      title,
+      description,
+      classIds,
+      durationMinutes,
+      subjectId,
+      topicIds,
+      questionCount
+    } = examData;
 
-    // Validate question distribution
-    const { easy = 0, medium = 0, hard = 0 } = questionDistribution;
-    const totalQuestions = easy + medium + hard;
+    if (!subjectId || !topicIds || topicIds.length === 0) {
+      return {
+        success: false,
+        error: 'Please select subject and at least one topic'
+      };
+    }
 
-    if (totalQuestions === 0) {
+    if (!questionCount || questionCount < 1) {
       return {
         success: false,
         error: 'Please specify at least one question'
       };
     }
 
-    // Select questions randomly from each difficulty
-    const selectedQuestions = [];
+    // Get random questions from selected topics
+    const questionsResult = await getRandomQuestionsFromTopics(
+      subjectId,
+      topicIds,
+      questionCount
+    );
 
-    // Get easy questions
-    if (easy > 0) {
-      const easyQs = await getQuestionsByDifficultyAndTeacher('easy', teacherId);
-      if (easyQs.success && easyQs.data.length > 0) {
-        selectedQuestions.push(...easyQs.data.slice(0, easy));
-      } else if (easyQs.data.length < easy) {
-        return {
-          success: false,
-          error: `Not enough easy questions. Available: ${easyQs.data.length}, Required: ${easy}`
-        };
-      }
+    if (!questionsResult.success) {
+      return questionsResult;
     }
 
-    // Get medium questions
-    if (medium > 0) {
-      const mediumQs = await getQuestionsByDifficultyAndTeacher('medium', teacherId);
-      if (mediumQs.success && mediumQs.data.length > 0) {
-        selectedQuestions.push(...mediumQs.data.slice(0, medium));
-      } else if (mediumQs.data.length < medium) {
-        return {
-          success: false,
-          error: `Not enough medium questions. Available: ${mediumQs.data.length}, Required: ${medium}`
-        };
-      }
+    const selectedQuestions = questionsResult.data;
+
+    if (selectedQuestions.length === 0) {
+      return {
+        success: false,
+        error: `No questions found in selected topics. Available: ${questionsResult.totalAvailable}`
+      };
     }
 
-    // Get hard questions
-    if (hard > 0) {
-      const hardQs = await getQuestionsByDifficultyAndTeacher('hard', teacherId);
-      if (hardQs.success && hardQs.data.length > 0) {
-        selectedQuestions.push(...hardQs.data.slice(0, hard));
-      } else if (hardQs.data.length < hard) {
-        return {
-          success: false,
-          error: `Not enough hard questions. Available: ${hardQs.data.length}, Required: ${hard}`
-        };
-      }
+    if (selectedQuestions.length < questionCount) {
+      return {
+        success: false,
+        error: `Not enough questions. Requested: ${questionCount}, Available: ${selectedQuestions.length}`
+      };
     }
 
-    // Shuffle selected questions
-    const shuffledQuestions = shuffleArray(selectedQuestions);
-    const questionIds = shuffledQuestions.map(q => q.id);
+    // Calculate total points from questions
+    const totalPoints = calculateTotalPoints(selectedQuestions);
+    const passingScore = calculatePassingScore(totalPoints);
+    const questionIds = selectedQuestions.map((q) => ({
+      id: q.id,
+      points: q.points || 1
+    }));
 
     // Create exam document
     const docRef = await addDoc(collection(db, 'exams'), {
-      title: examData.title,
-      description: examData.description || '',
+      title,
+      description: description || '',
       teacherId,
       classIds: Array.isArray(classIds) ? classIds : [classIds],
-      durationMinutes,
-      totalQuestions,
-      status: 'draft',
+      durationMinutes: parseInt(durationMinutes),
+      subjectId,
+      topicIds,
       questionIds,
-      questionDistribution: {
-        easy,
-        medium,
-        hard
-      },
-      totalPoints: totalQuestions * 2.5, // 2.5 points per question = 100 total
-      passingScore: Math.ceil(totalQuestions * 1.25), // 50% passing
-      startTime: examData.startTime || null,
-      endTime: examData.endTime || null,
+      totalQuestions: selectedQuestions.length,
+      totalPoints,
+      passingScore,
+      status: 'draft',
+      startTime: null,
+      endTime: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       publishedAt: null
@@ -109,10 +108,11 @@ export const createExam = async (examData) => {
       success: true,
       data: {
         id: docRef.id,
-        ...examData,
-        questionIds,
-        totalQuestions,
-        totalPoints: totalQuestions * 2.5
+        title,
+        description,
+        totalQuestions: selectedQuestions.length,
+        totalPoints,
+        passingScore
       }
     };
   } catch (error) {
@@ -124,16 +124,16 @@ export const createExam = async (examData) => {
   }
 };
 
-// Update exam
+// Update exam (only for draft exams)
 export const updateExam = async (examId, examData) => {
   try {
-    // Don't allow updating questions if exam is published
     const exam = await getDoc(doc(db, 'exams', examId));
-    if (exam.exists() && exam.data().status === 'published') {
-      return {
-        success: false,
-        error: 'Cannot edit published exam'
-      };
+    if (!exam.exists()) {
+      return { success: false, error: 'Exam not found' };
+    }
+
+    if (exam.data().status === 'published') {
+      return { success: false, error: 'Cannot edit published exam' };
     }
 
     const updateData = {
@@ -143,26 +143,12 @@ export const updateExam = async (examId, examData) => {
       updatedAt: serverTimestamp()
     };
 
-    // Optional fields
-    if (examData.startTime !== undefined) {
-      updateData.startTime = examData.startTime;
-    }
-    if (examData.endTime !== undefined) {
-      updateData.endTime = examData.endTime;
-    }
-
     await updateDoc(doc(db, 'exams', examId), updateData);
 
-    return {
-      success: true,
-      data: { id: examId }
-    };
+    return { success: true, data: { id: examId } };
   } catch (error) {
     console.error('Error updating exam:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -177,16 +163,10 @@ export const publishExam = async (examId, startTime, endTime) => {
       updatedAt: serverTimestamp()
     });
 
-    return {
-      success: true,
-      data: { id: examId }
-    };
+    return { success: true, data: { id: examId } };
   } catch (error) {
     console.error('Error publishing exam:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -198,23 +178,26 @@ export const closeExam = async (examId) => {
       updatedAt: serverTimestamp()
     });
 
-    return {
-      success: true,
-      data: { id: examId }
-    };
+    return { success: true, data: { id: examId } };
   } catch (error) {
     console.error('Error closing exam:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
-// Delete exam
+// Delete exam (only draft exams)
 export const deleteExam = async (examId) => {
   try {
-    // Check if exam has any attempts
+    const exam = await getDoc(doc(db, 'exams', examId));
+
+    if (!exam.exists()) {
+      return { success: false, error: 'Exam not found' };
+    }
+
+    if (exam.data().status !== 'draft') {
+      return { success: false, error: 'Can only delete draft exams' };
+    }
+
     const q = query(
       collection(db, 'examAttempts'),
       where('examId', '==', examId)
@@ -222,24 +205,15 @@ export const deleteExam = async (examId) => {
     const attempts = await getDocs(q);
 
     if (attempts.size > 0) {
-      return {
-        success: false,
-        error: 'Cannot delete exam with student submissions'
-      };
+      return { success: false, error: 'Cannot delete exam with student submissions' };
     }
 
     await deleteDoc(doc(db, 'exams', examId));
 
-    return {
-      success: true,
-      data: { id: examId }
-    };
+    return { success: true, data: { id: examId } };
   } catch (error) {
     console.error('Error deleting exam:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -251,23 +225,14 @@ export const getExamById = async (examId) => {
     if (docSnap.exists()) {
       return {
         success: true,
-        data: {
-          id: docSnap.id,
-          ...docSnap.data()
-        }
+        data: { id: docSnap.id, ...docSnap.data() }
       };
     } else {
-      return {
-        success: false,
-        error: 'Exam not found'
-      };
+      return { success: false, error: 'Exam not found' };
     }
   } catch (error) {
     console.error('Error getting exam:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -281,21 +246,15 @@ export const getTeacherExams = async (teacherId) => {
     );
 
     const querySnapshot = await getDocs(q);
-    const exams = querySnapshot.docs.map(doc => ({
+    const exams = querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data()
     }));
 
-    return {
-      success: true,
-      data: exams
-    };
+    return { success: true, data: exams };
   } catch (error) {
     console.error('Error getting teacher exams:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -310,47 +269,45 @@ export const getExamsByClass = async (classId) => {
     );
 
     const querySnapshot = await getDocs(q);
-    const exams = querySnapshot.docs.map(doc => ({
+    const exams = querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data()
     }));
 
-    return {
-      success: true,
-      data: exams
-    };
+    return { success: true, data: exams };
   } catch (error) {
     console.error('Error getting class exams:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
-// Get exam with questions
-export const getExamWithQuestions = async (examId) => {
+// Get exam with questions (fetch question details from subcollections)
+export const getExamWithQuestions = async (examId, subjectId) => {
   try {
     const examSnap = await getDoc(doc(db, 'exams', examId));
 
     if (!examSnap.exists()) {
-      return {
-        success: false,
-        error: 'Exam not found'
-      };
+      return { success: false, error: 'Exam not found' };
     }
 
     const examData = examSnap.data();
     const questions = [];
 
-    // Fetch each question
-    for (const questionId of examData.questionIds) {
-      const qSnap = await getDoc(doc(db, 'questions', questionId));
-      if (qSnap.exists()) {
-        questions.push({
-          id: qSnap.id,
-          ...qSnap.data()
-        });
+    // Fetch each question from the new hierarchical structure
+    for (const qRef of examData.questionIds) {
+      // Search through all topics for this question
+      for (const topicId of examData.topicIds) {
+        const qSnap = await getDoc(
+          doc(db, 'subjects', examData.subjectId, 'topics', topicId, 'questions', qRef.id)
+        );
+
+        if (qSnap.exists()) {
+          questions.push({
+            id: qSnap.id,
+            ...qSnap.data()
+          });
+          break;
+        }
       }
     }
 
@@ -364,10 +321,7 @@ export const getExamWithQuestions = async (examId) => {
     };
   } catch (error) {
     console.error('Error getting exam with questions:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -379,16 +333,10 @@ export const assignExamToClass = async (examId, classId) => {
       updatedAt: serverTimestamp()
     });
 
-    return {
-      success: true,
-      data: { id: examId }
-    };
+    return { success: true, data: { id: examId } };
   } catch (error) {
     console.error('Error assigning exam:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -400,27 +348,11 @@ export const removeExamFromClass = async (examId, classId) => {
       updatedAt: serverTimestamp()
     });
 
-    return {
-      success: true,
-      data: { id: examId }
-    };
+    return { success: true, data: { id: examId } };
   } catch (error) {
     console.error('Error removing exam from class:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
-};
-
-// Helper function to shuffle array
-const shuffleArray = (array) => {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
 };
 
 // Get exam statistics
@@ -432,11 +364,13 @@ export const getExamStatistics = async (examId) => {
     );
 
     const querySnapshot = await getDocs(q);
-    const attempts = querySnapshot.docs.map(doc => doc.data());
+    const attempts = querySnapshot.docs.map((doc) => doc.data());
 
     const totalAttempts = attempts.length;
-    const submittedAttempts = attempts.filter(a => a.status !== 'in-progress');
-    const scores = submittedAttempts.map(a => a.score);
+    const submittedAttempts = attempts.filter((a) => a.status !== 'in-progress');
+    const scores = submittedAttempts.map((a) => a.score);
+
+    const exam = await getExamById(examId);
 
     const stats = {
       totalAttempts,
@@ -444,21 +378,14 @@ export const getExamStatistics = async (examId) => {
       avgScore: scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : 0,
       maxScore: scores.length > 0 ? Math.max(...scores) : 0,
       minScore: scores.length > 0 ? Math.min(...scores) : 0,
-      passedCount: submittedAttempts.filter(a => {
-        const exam = getExamById(examId);
-        return a.score >= (exam.data?.passingScore || 50);
-      }).length
+      passedCount: submittedAttempts.filter(
+        (a) => a.score >= (exam.data?.passingScore || 50)
+      ).length
     };
 
-    return {
-      success: true,
-      data: stats
-    };
+    return { success: true, data: stats };
   } catch (error) {
     console.error('Error getting exam statistics:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };

@@ -35,14 +35,9 @@ const TeacherLayout = ({ children }) => {
       icon: BookOpen
     },
     {
-      name: 'Ngân hàng câu hỏi',
-      href: '/teacher/question-bank',
+      name: 'Môn học',
+      href: '/teacher/subjects',
       icon: FileText
-    },
-    {
-      name: 'Bài thi',
-      href: '/teacher/exams',
-      icon: ClipboardList
     },
     {
       name: 'Hồ sơ',
