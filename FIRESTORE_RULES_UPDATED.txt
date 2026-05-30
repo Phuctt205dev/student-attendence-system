@@ -111,12 +111,10 @@ service cloud.firestore {
     match /classes/{classId} {
       // Đọc lớp:
       // - Teacher có thể đọc lớp của mình
-      // - Student có thể đọc lớp mà mình được enroll
-      // - Cho phép query khi filter theo teacherId hoặc students array
+      // - Student có thể đọc lớp mà mình được enroll (kiểm tra subcollection students)
       allow read: if signedIn() && (
-        // Đọc document cụ thể: kiểm tra ownership
         resource.data.teacherId == request.auth.uid ||
-        request.auth.uid in resource.data.students
+        exists(/databases/$(database)/documents/classes/$(classId)/students/$(request.auth.uid))
       );
 
       // Cho phép list/query classes
@@ -135,8 +133,12 @@ service cloud.firestore {
       // App dùng: classes/{classId}/students/{studentId}
       // =========================
       match /students/{studentId} {
-        allow read, create, update, delete: if signedIn() &&
-          classDoc(classId).data.teacherId == request.auth.uid;
+        // Teacher của lớp có thể đọc/ghi tất cả students
+        // Student chỉ có thể đọc chính mình
+        allow read, create, update, delete: if signedIn() && (
+          classDoc(classId).data.teacherId == request.auth.uid ||
+          isSelf(studentId)
+        );
       }
 
       // =========================

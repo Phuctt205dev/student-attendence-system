@@ -110,6 +110,7 @@ export const getClassesByTeacher = async (teacherId) => {
 // Get classes by student ID (tìm trong subcollection students)
 export const getClassesByStudent = async (studentId) => {
   try {
+    console.log('getClassesByStudent called with studentId:', studentId);
     // Lấy tất cả các lớp
     const classesSnapshot = await getDocs(collection(db, 'classes'));
     const classes = [];
@@ -117,6 +118,7 @@ export const getClassesByStudent = async (studentId) => {
     // Kiểm tra từng lớp xem có chứa sinh viên không
     for (const classDoc of classesSnapshot.docs) {
       const studentDoc = await getDoc(doc(db, 'classes', classDoc.id, 'students', studentId));
+      console.log(`Checking class ${classDoc.id} for student ${studentId}:`, studentDoc.exists());
       if (studentDoc.exists()) {
         const classData = classDoc.data();
         classes.push({
@@ -127,6 +129,7 @@ export const getClassesByStudent = async (studentId) => {
       }
     }
 
+    console.log('Found classes:', classes.length);
     return { success: true, classes };
   } catch (error) {
     console.error('Error getting student classes:', error);
