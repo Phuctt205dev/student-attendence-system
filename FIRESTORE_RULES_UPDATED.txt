@@ -201,45 +201,45 @@ service cloud.firestore {
     }
 
     // =========================
-    // QUESTIONS (Phase 2)
-    // Web dùng: questions/{questionId}
-    // Lưu ngân hàng câu hỏi của giáo viên
+    // SUBJECTS (Phase 2 - New Structure)
+    // Web dùng: subjects/{subjectId}
+    // Môn học mới - chứa topics và questions trong subcollections
     // =========================
-    match /questions/{questionId} {
-      // Đọc:
-      // - Teacher có thể đọc câu hỏi của chính mình
-      // - Admin có thể đọc tất cả
-      // - Student không được đọc trực tiếp (phải thông qua exam)
-      allow read: if signedIn() && (
-        resource.data.createdBy == request.auth.uid ||
-        isAdmin()
-      );
+    match /subjects/{subjectId} {
+      // Teacher owner của subject có thể đọc/ghi subject
+      allow read, write: if signedIn() &&
+        resource.data.createdBy == request.auth.uid;
 
-      // Cho phép list/query để lấy toàn bộ questions của teacher
-      allow list: if isTeacher();
-
-      // Tạo câu hỏi: createdBy phải là user hiện tại
+      // Cho phép teacher create subject
       allow create: if isTeacher() &&
-        request.resource.data.createdBy == request.auth.uid &&
-        request.resource.data.isActive == true;
+        request.resource.data.createdBy == request.auth.uid;
 
-      // Cập nhật câu hỏi: chỉ owner (soft update)
-      allow update: if signedIn() && (
-        resource.data.createdBy == request.auth.uid ||
-        isAdmin()
-      );
+      // =========================
+      // TOPICS SUBCOLLECTION
+      // Web dùng: subjects/{subjectId}/topics/{topicId}
+      // =========================
+      match /topics/{topicId} {
+        // Teacher owner của subject có thể đọc/ghi topics
+        allow read, write: if signedIn() &&
+          get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
 
-      // Xóa câu hỏi: chỉ owner hoặc admin (soft delete qua isActive)
-      allow delete: if signedIn() && (
-        resource.data.createdBy == request.auth.uid ||
-        isAdmin()
-      );
+        // =========================
+        // QUESTIONS SUBCOLLECTION (New Location)
+        // Web dùng: subjects/{subjectId}/topics/{topicId}/questions/{questionId}
+        // Câu hỏi mới nằm dưới topics (thay vì flat structure)
+        // =========================
+        match /questions/{questionId} {
+          // Teacher owner của subject có thể đọc/ghi questions
+          allow read, write, create, update, delete: if signedIn() &&
+            get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
+        }
+      }
     }
 
     // =========================
-    // EXAMS (Phase 2)
+    // EXAMS (Phase 2 - Updated for new subject structure)
     // Web dùng: exams/{examId}
-    // Lưu bài thi được tạo từ ngân hàng câu hỏi
+    // Bài thi - now references subjects/topics instead of difficulty
     // =========================
     match /exams/{examId} {
       // Đọc:
@@ -250,7 +250,6 @@ service cloud.firestore {
         resource.data.teacherId == request.auth.uid ||
         isAdmin() ||
         (isStudent() && (
-          // Student trong bất kỳ classId nào của bài thi
           exists(/databases/$(database)/documents/classes/{classId}/students/$(request.auth.uid)) &&
           classId in resource.data.classIds
         ))
