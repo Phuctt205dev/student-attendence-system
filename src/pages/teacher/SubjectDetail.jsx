@@ -558,23 +558,11 @@ const SubjectDetail = () => {
       const urlA = URL.createObjectURL(blobA);
       const linkA = document.createElement('a');
       linkA.href = urlA;
-      linkA.download = `de-thi-${baseCode}-A.docx`;
+      linkA.download = `de-thi-${baseCode}.docx`;
       document.body.appendChild(linkA);
       linkA.click();
       document.body.removeChild(linkA);
       URL.revokeObjectURL(urlA);
-
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const blobB = buildDocxBlob(versionB, `${baseCode}-B`);
-      const urlB = URL.createObjectURL(blobB);
-      const linkB = document.createElement('a');
-      linkB.href = urlB;
-      linkB.download = `de-thi-${baseCode}-B.docx`;
-      document.body.appendChild(linkB);
-      linkB.click();
-      document.body.removeChild(linkB);
-      URL.revokeObjectURL(urlB);
 
       setSuccess('Xuất file Word thành công! Đã tạo 2 mã đề A và B.');
     } catch (err) {
