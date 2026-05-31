@@ -12,6 +12,7 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import TeacherClasses from './pages/teacher/TeacherClasses';
+import ClassDetail from './pages/teacher/ClassDetail';
 import TeacherProfile from './pages/teacher/TeacherProfile';
 import StudentDashboard from './pages/student/StudentDashboard';
 import StudentClasses from './pages/student/StudentClasses';
@@ -65,6 +66,16 @@ function App() {
               <ProtectedRoute>
                 <RoleBasedRoute allowedRoles={['teacher']}>
                   <TeacherClasses />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/classes/:classId"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['teacher']}>
+                  <ClassDetail />
                 </RoleBasedRoute>
               </ProtectedRoute>
             }
