@@ -526,7 +526,8 @@ const SubjectDetail = () => {
       const versionA = shuffleWithSeed(questions, seedA);
       const versionB = shuffleWithSeed(questions, seedB);
 
-      const templateResponse = await fetch('/templates/dethimau.docx');
+      const templateUrl = `${import.meta.env.BASE_URL}templates/dethimau.docx`;
+      const templateResponse = await fetch(templateUrl);
       if (!templateResponse.ok) {
         throw new Error('TEMPLATE_NOT_FOUND');
       }
