@@ -20,6 +20,8 @@ import StudentClasses from './pages/student/StudentClasses';
 import TeacherQuestionBank from './pages/teacher/TeacherQuestionBank';
 import TeacherSubjects from './pages/teacher/TeacherSubjects';
 import SubjectDetail from './pages/teacher/SubjectDetail';
+import SubjectExams from './pages/teacher/SubjectExams';
+import TopicDetail from './pages/teacher/TopicDetail';
 import StudentExams from './pages/student/StudentExams';
 import StudentExamTake from './pages/student/StudentExamTake';
 import StudentExamResult from './pages/student/StudentExamResult';
@@ -93,6 +95,26 @@ function App() {
               <ProtectedRoute>
                 <RoleBasedRoute allowedRoles={['teacher', 'admin']}>
                   <SubjectDetail />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/subjects/:subjectId/exams"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['teacher', 'admin']}>
+                  <SubjectExams />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/subjects/:subjectId/topics/:topicId"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['teacher', 'admin']}>
+                  <TopicDetail />
                 </RoleBasedRoute>
               </ProtectedRoute>
             }

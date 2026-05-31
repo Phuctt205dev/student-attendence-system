@@ -1,33 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   getSubjectById,
   getSubjectTopics,
   createTopic,
   updateTopic,
-  deleteTopic,
-  getTopicQuestions,
-  createQuestion,
-  updateQuestion,
-  deleteQuestion
+  deleteTopic
 } from '../../services/subject.service';
-import { getExamWithQuestions, getExamsBySubject, setExamVisibility, setExamSchedule } from '../../services/exam.service';
-import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Eye, FileText, Lock, Unlock, Calendar } from 'lucide-react';
+import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Eye, FileText } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import TopicForm from '../../components/teacher/TopicForm';
-import QuestionForm from '../../components/teacher/QuestionForm';
-import ExamCreationModal from '../../components/teacher/ExamCreationModal';
-import { format, formatDistanceToNow } from 'date-fns';
-import PizZip from 'pizzip';
-import Docxtemplater from 'docxtemplater';
 
 const SubjectDetail = () => {
-  const { userProfile } = useAuth();
   const navigate = useNavigate();
   const { subjectId } = useParams();
 
@@ -41,43 +28,12 @@ const SubjectDetail = () => {
   const [editingTopic, setEditingTopic] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const [showQuestionsModal, setShowQuestionsModal] = useState(false);
-  const [selectedTopic, setSelectedTopic] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [questionsLoading, setQuestionsLoading] = useState(false);
-
-  const [showQuestionModal, setShowQuestionModal] = useState(false);
-  const [editingQuestion, setEditingQuestion] = useState(null);
-  const [lastQuestionPoints, setLastQuestionPoints] = useState(1);
-
-  const [showExamModal, setShowExamModal] = useState(false);
-  const [selectedTopicIds, setSelectedTopicIds] = useState([]);
-
-  const [exams, setExams] = useState([]);
-  const [examsLoading, setExamsLoading] = useState(false);
-  const [classMap, setClassMap] = useState({});
-  const [scheduleExam, setScheduleExam] = useState(null);
-  const [scheduleStart, setScheduleStart] = useState('');
-  const [scheduleEnd, setScheduleEnd] = useState('');
-  const [scheduleError, setScheduleError] = useState('');
-
-  const [pdfExam, setPdfExam] = useState(null);
-  const [pdfFaculty, setPdfFaculty] = useState('');
-  const [pdfCodeBase, setPdfCodeBase] = useState('');
-  const [pdfLoading, setPdfLoading] = useState(false);
-
   useEffect(() => {
     if (subjectId) {
       loadSubjectAndTopics();
     }
   }, [subjectId]);
 
-  useEffect(() => {
-    if (subjectId && userProfile?.uid) {
-      loadSubjectExams();
-      loadTeacherClasses();
-    }
-  }, [subjectId, userProfile?.uid]);
 
   const loadSubjectAndTopics = async () => {
     setLoading(true);
@@ -153,428 +109,12 @@ const SubjectDetail = () => {
     }
   };
 
-  const handleViewQuestions = async (topic) => {
-    setSelectedTopic(topic);
-    setQuestionsLoading(true);
-
-    const result = await getTopicQuestions(subjectId, topic.id);
-    if (result.success) {
-      setQuestions(result.data);
-    } else {
-      setError(result.error || 'Failed to load questions');
-    }
-
-    setQuestionsLoading(false);
-    setShowQuestionsModal(true);
+  const handleOpenTopicDetail = (topicId) => {
+    navigate(`/teacher/subjects/${subjectId}/topics/${topicId}`);
   };
 
-  const handleOpenCreateQuestionModal = () => {
-    setEditingQuestion(null);
-    setShowQuestionModal(true);
-  };
-
-  const handleOpenEditQuestionModal = (question) => {
-    setEditingQuestion(question);
-    setShowQuestionModal(true);
-  };
-
-  const handleSubmitQuestion = async (data) => {
-    try {
-      setSubmitting(true);
-      let result;
-
-      if (editingQuestion) {
-        result = await updateQuestion(subjectId, selectedTopic.id, editingQuestion.id, data);
-      } else {
-        result = await createQuestion(subjectId, selectedTopic.id, {
-          ...data,
-          createdBy: userProfile?.uid
-        });
-      }
-
-      if (result.success) {
-        setSuccess(editingQuestion ? 'Question updated!' : 'Question created!');
-        setLastQuestionPoints(data.points || 1);
-        setShowQuestionModal(false);
-        setEditingQuestion(null);
-
-        // Reload questions in modal
-        const questionsResult = await getTopicQuestions(subjectId, selectedTopic.id);
-        if (questionsResult.success) {
-          setQuestions(questionsResult.data);
-        }
-
-        // Reload topics to update questionCount on topic card
-        const topicsResult = await getSubjectTopics(subjectId);
-        if (topicsResult.success) {
-          setTopics(topicsResult.data);
-        }
-
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(result.error || 'Error saving question');
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteQuestion = async (questionId) => {
-    if (!window.confirm('Are you sure you want to delete this question?')) return;
-
-    const result = await deleteQuestion(subjectId, selectedTopic.id, questionId);
-    if (result.success) {
-      setSuccess('Question deleted!');
-
-      // Reload questions in modal
-      const questionsResult = await getTopicQuestions(subjectId, selectedTopic.id);
-      if (questionsResult.success) {
-        setQuestions(questionsResult.data);
-      }
-
-      // Reload topics to update questionCount on topic card
-      const topicsResult = await getSubjectTopics(subjectId);
-      if (topicsResult.success) {
-        setTopics(topicsResult.data);
-      }
-
-      setTimeout(() => setSuccess(''), 3000);
-    } else {
-      setError(result.error || 'Failed to delete question');
-    }
-  };
-
-  const handleToggleTopicSelection = (topicId) => {
-    setSelectedTopicIds((prev) =>
-      prev.includes(topicId)
-        ? prev.filter((id) => id !== topicId)
-        : [...prev, topicId]
-    );
-  };
-
-  const handleOpenExamModal = () => {
-    if (selectedTopicIds.length === 0) {
-      setError('Vui lòng chọn ít nhất một chủ đề');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-    setShowExamModal(true);
-  };
-
-  const handleExamCreated = (examData) => {
-    setSuccess('Bài thi được tạo thành công!');
-    setShowExamModal(false);
-    setSelectedTopicIds([]);
-    loadSubjectExams();
-    setTimeout(() => setSuccess(''), 3000);
-  };
-
-  const loadSubjectExams = async () => {
-    setExamsLoading(true);
-    const result = await getExamsBySubject(subjectId, userProfile?.uid);
-    if (result.success) {
-      setExams(result.data || []);
-    } else {
-      setError(result.error || 'Failed to load exams');
-    }
-    setExamsLoading(false);
-  };
-
-  const loadTeacherClasses = async () => {
-    const result = await getClassesByTeacher(userProfile?.uid);
-    if (!result.success) return;
-
-    const nextMap = (result.classes || []).reduce((acc, cls) => {
-      acc[cls.id] = cls.className || cls.name;
-      return acc;
-    }, {});
-
-    setClassMap(nextMap);
-  };
-
-  const getStatusBadge = (visibility) => {
-    const styles = {
-      private: 'bg-gray-100 text-gray-800',
-      public: 'bg-blue-100 text-blue-800'
-    };
-
-    const labels = {
-      private: 'Private',
-      public: 'Public'
-    };
-
-    const nextVisibility = visibility || 'private';
-
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${styles[nextVisibility] || styles.private}`}>
-        {labels[nextVisibility] || 'Private'}
-      </span>
-    );
-  };
-
-  const toLocalInputValue = (dateValue) => {
-    if (!dateValue) return '';
-    const date = dateValue?.toDate?.() || new Date(dateValue);
-    const offset = date.getTimezoneOffset();
-    const localDate = new Date(date.getTime() - offset * 60000);
-    return localDate.toISOString().slice(0, 16);
-  };
-
-  const openScheduleModal = (exam) => {
-    setScheduleExam(exam);
-    setScheduleStart(toLocalInputValue(exam.startTime));
-    setScheduleEnd(toLocalInputValue(exam.endTime));
-    setScheduleError('');
-  };
-
-  const handleSaveSchedule = async () => {
-    if (!scheduleExam) return;
-
-    const startDate = scheduleStart ? new Date(scheduleStart) : null;
-    const endDate = scheduleEnd ? new Date(scheduleEnd) : null;
-
-    if (startDate && endDate && endDate <= startDate) {
-      setScheduleError('Thời gian kết thúc phải sau thời gian bắt đầu');
-      return;
-    }
-
-    const result = await setExamSchedule(scheduleExam.id, startDate, endDate);
-    if (result.success) {
-      setScheduleExam(null);
-      setScheduleStart('');
-      setScheduleEnd('');
-      setScheduleError('');
-      loadSubjectExams();
-    } else {
-      setScheduleError(result.error || 'Không thể lưu lịch thi');
-    }
-  };
-
-  const handleToggleVisibility = async (exam) => {
-    const nextVisibility = exam.visibility === 'public' ? 'private' : 'public';
-    const now = new Date();
-    const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
-
-    if (nextVisibility === 'public' && endTime && endTime <= now) {
-      setError('Không thể mở bài thi vì thời gian kết thúc đã qua');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
-    const result = await setExamVisibility(exam.id, nextVisibility);
-    if (result.success) {
-      loadSubjectExams();
-    } else {
-      setError(result.error || 'Không thể cập nhật trạng thái');
-      setTimeout(() => setError(''), 3000);
-    }
-  };
-
-  const hashToSeed = (value) => {
-    let hash = 0;
-    for (let i = 0; i < value.length; i += 1) {
-      hash = (hash << 5) - hash + value.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash) || 1;
-  };
-
-  const createSeededRandom = (seed) => {
-    let state = seed;
-    return () => {
-      state = (state * 9301 + 49297) % 233280;
-      return state / 233280;
-    };
-  };
-
-  const shuffleWithSeed = (items, seedValue) => {
-    const result = [...items];
-    const rand = createSeededRandom(seedValue);
-    for (let i = result.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(rand() * (i + 1));
-      [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
-  };
-
-  const escapeHtml = (value) => {
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  };
-
-  const buildQuestionsText = (questions) => {
-    return questions
-      .map((question, index) => {
-        const options = ['A', 'B', 'C', 'D']
-          .filter((key) => question.options?.[key] !== undefined)
-          .map((key) => `${key}. ${question.options?.[key]}`)
-          .join('\n');
-
-        return `Câu ${index + 1}: ${question.questionText}\n${options}`.trim();
-      })
-      .join('\n\n');
-  };
-
-  const buildExamHtml = ({ examData, questions, subjectName, facultyName, codeLabel }) => {
-    const questionHtml = questions
-      .map((question, index) => {
-        const options = ['A', 'B', 'C', 'D']
-          .filter((key) => question.options?.[key] !== undefined)
-          .map((key) => `<div style="margin-left: 20px;"><strong>${key}.</strong> ${question.options?.[key]}</div>`)
-          .join('');
-
-        return `
-          <div style="margin-bottom: 15px;">
-            <div><strong>Câu ${index + 1}:</strong> ${question.questionText}</div>
-            ${options}
-          </div>
-        `;
-      })
-      .join('');
-
-    const durationLabel = examData?.durationMinutes ? `${examData.durationMinutes} phút` : '';
-
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>Exam</title>
-        </head>
-        <body style="font-family: 'Times New Roman', serif; margin: 20px;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td style="border: 1px solid #000; padding: 10px; text-align: center; width: 30%;">
-                <div><strong>TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN</strong></div>
-                <div>KHOA ${facultyName || ''}</div>
-              </td>
-              <td style="border: 1px solid #000; padding: 10px; text-align: center; width: 50%;">
-                <div><strong>ĐỀ THI CUỐI HỌC KỲ ... (20.. - 20..)</strong></div>
-                <div>Môn học: ${subjectName}</div>
-                <div>Thời gian làm bài: ${durationLabel}</div>
-              </td>
-              <td style="border: 1px solid #000; padding: 10px; text-align: center; width: 20%;">
-                <div><strong>Mã đề thi</strong></div>
-                <div style="font-size: 20px; font-weight: bold;">${codeLabel}</div>
-              </td>
-            </tr>
-          </table>
-
-          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-            <tr>
-              <td style="border: 1px solid #000; padding: 8px;"><strong>Họ, tên SV:</strong> ........................................................</td>
-              <td style="border: 1px solid #000; padding: 8px;"><strong>Mã SV:</strong> ........................................................</td>
-              <td style="border: 1px solid #000; padding: 8px;"><strong>STT:</strong> ........................................................</td>
-            </tr>
-          </table>
-
-          <div style="margin-top: 20px;">
-            <h3>A. TRẮC NGHIỆM</h3>
-            <hr style="border: none; border-bottom: 1px dashed #000; margin: 10px 0;" />
-            ${questionHtml}
-          </div>
-
-          <div style="margin-top: 30px; page-break-before: always;">
-            <p><strong>Thí sinh lưu ý:</strong></p>
-            <ul>
-              <li>Giữ cho phiếu phẳng, không bôi bẩn, làm rách, không lấy xóa.</li>
-              <li>Tô đen hoàn toàn vào các ô vuông, dùng bút chì HB.</li>
-              <li>Không được ghi chú và các ô vuông khác ngoài phần trả lời.</li>
-            </ul>
-          </div>
-        </body>
-      </html>
-    `;
-  };
-
-  const getOmrImageBuffer = async () => {
-    const response = await fetch('/omr-template.png');
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('Không thể đọc ảnh OMR'));
-      reader.readAsDataURL(blob);
-    });
-  };
-
-  const handleExportDoc = async () => {
-    if (!pdfExam) return;
-    setPdfLoading(true);
-    setError('');
-
-    try {
-      const result = await getExamWithQuestions(pdfExam.id);
-      if (!result.success) {
-        setError(result.error || 'Không thể tải bài thi');
-        setPdfLoading(false);
-        return;
-      }
-
-      const questions = Array.isArray(result.data.questions) ? result.data.questions : [];
-      const subjectName = subject?.name || '';
-      const baseCode = pdfCodeBase || pdfExam.id.slice(0, 6).toUpperCase();
-
-      const seedA = hashToSeed(`${pdfExam.id}-A`);
-      const seedB = hashToSeed(`${pdfExam.id}-B`);
-      const versionA = shuffleWithSeed(questions, seedA);
-      const versionB = shuffleWithSeed(questions, seedB);
-
-      const templateUrl = `${import.meta.env.BASE_URL}templates/dethimau.docx`;
-      const templateResponse = await fetch(templateUrl);
-      if (!templateResponse.ok) {
-        throw new Error('TEMPLATE_NOT_FOUND');
-      }
-      const templateBuffer = await templateResponse.arrayBuffer();
-
-      const buildDocxBlob = (versionQuestions, codeLabel) => {
-        const zip = new PizZip(templateBuffer);
-        const doc = new Docxtemplater(zip, {
-          paragraphLoop: true,
-          linebreaks: true,
-          delimiters: { start: '{{', end: '}}' }
-        });
-        doc.setData({
-          QUESTIONS: buildQuestionsText(versionQuestions),
-          EXAM_CODE: codeLabel,
-          SUBJECT: subjectName,
-          FACULTY: pdfFaculty,
-          DURATION: result.data?.durationMinutes ? `${result.data.durationMinutes} phút` : ''
-        });
-        doc.render();
-        return doc.getZip().generate({
-          type: 'blob',
-          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        });
-      };
-
-      const blobA = buildDocxBlob(versionA, `${baseCode}-A`);
-      const urlA = URL.createObjectURL(blobA);
-      const linkA = document.createElement('a');
-      linkA.href = urlA;
-      linkA.download = `de-thi-${baseCode}.docx`;
-      document.body.appendChild(linkA);
-      linkA.click();
-      document.body.removeChild(linkA);
-      URL.revokeObjectURL(urlA);
-
-      setSuccess('Xuất file Word thành công! Đã tạo 2 mã đề A và B.');
-    } catch (err) {
-      console.error('Lỗi xuất file:', err);
-      if (err?.stack) {
-        console.error(err.stack);
-      }
-      setError('Lỗi xuất file: ' + (err?.message || String(err)));
-    } finally {
-      setPdfLoading(false);
-      setPdfExam(null);
-    }
+  const handleGoToExams = () => {
+    navigate(`/teacher/subjects/${subjectId}/exams`);
   };
 
   return (
@@ -583,20 +123,38 @@ const SubjectDetail = () => {
         {/* Header */}
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 py-6">
-            <div className="flex items-center gap-4 mb-4">
-              <button
-                onClick={() => navigate('/teacher/subjects')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">
-                  {loading ? 'Loading...' : subject?.name}
-                </h1>
-                {subject?.description && (
-                  <p className="text-gray-600 mt-1">{subject.description}</p>
-                )}
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  variant="primary"
+                  icon={<FileText className="w-4 h-4" />}
+                  onClick={handleGoToExams}
+                >
+                  Bài thi
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={handleOpenCreateTopicModal}
+                >
+                  Thêm chủ đề
+                </Button>
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => navigate('/teacher/subjects')}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">
+                    {loading ? 'Loading...' : subject?.name}
+                  </h1>
+                  {subject?.description && (
+                    <p className="text-gray-600 mt-1">{subject.description}</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -620,27 +178,6 @@ const SubjectDetail = () => {
 
           {/* Topics Section */}
           <div className="mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Chủ đề</h2>
-              <div className="flex gap-2">
-                <Button
-                  variant="primary"
-                  icon={<FileText className="w-4 h-4" />}
-                  onClick={handleOpenExamModal}
-                  disabled={selectedTopicIds.length === 0}
-                >
-                  Tạo bài thi ({selectedTopicIds.length})
-                </Button>
-                <Button
-                  variant="primary"
-                  icon={<Plus className="w-4 h-4" />}
-                  onClick={handleOpenCreateTopicModal}
-                >
-                  Thêm chủ đề
-                </Button>
-              </div>
-            </div>
-
             {loading ? (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" />
@@ -663,15 +200,13 @@ const SubjectDetail = () => {
             ) : (
               <div className="space-y-4">
                 {topics.map((topic) => (
-                  <Card key={topic.id} className="hover:shadow-lg transition-shadow">
+                  <Card
+                    key={topic.id}
+                    className="hover:shadow-lg transition-shadow cursor-pointer"
+                    onClick={() => handleOpenTopicDetail(topic.id)}
+                  >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3 flex-1">
-                        <input
-                          type="checkbox"
-                          checked={selectedTopicIds.includes(topic.id)}
-                          onChange={() => handleToggleTopicSelection(topic.id)}
-                          className="w-5 h-5 mt-1 rounded border-gray-300 cursor-pointer"
-                        />
                         <div>
                           <h3 className="text-lg font-semibold text-gray-900">{topic.name}</h3>
                           {topic.description && (
@@ -685,20 +220,29 @@ const SubjectDetail = () => {
 
                       <div className="flex gap-2 ml-4">
                         <button
-                          onClick={() => handleViewQuestions(topic)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleOpenTopicDetail(topic.id);
+                          }}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="View questions"
+                          title="Xem chi tiết"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleOpenEditTopicModal(topic)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleOpenEditTopicModal(topic);
+                          }}
                           className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteTopic(topic.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteTopic(topic.id);
+                          }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -711,122 +255,6 @@ const SubjectDetail = () => {
             )}
           </div>
 
-          {/* Exams Section */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Bài thi</h2>
-            </div>
-
-            {examsLoading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" />
-              </div>
-            ) : exams.length === 0 ? (
-              <Card>
-                <div className="text-center py-12">
-                  <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có bài thi</h3>
-                  <p className="text-gray-600">Bài thi mới tạo sẽ xuất hiện ở đây</p>
-                </div>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {exams.map((exam) => {
-                  const classNames = (exam.classIds || [])
-                    .map((id) => classMap[id])
-                    .filter(Boolean);
-
-                  const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
-                  const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
-                  const isLocked = endTime && new Date() > endTime;
-
-                  return (
-                    <Card key={exam.id} className="hover:shadow-lg transition-shadow">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900">{exam.title}</h3>
-                            {getStatusBadge(exam.visibility)}
-                            {isLocked && (
-                              <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-200 text-gray-700">
-                                Đã khóa
-                              </span>
-                            )}
-                          </div>
-
-                          {exam.description && (
-                            <p className="text-gray-600 text-sm mb-3">{exam.description}</p>
-                          )}
-
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3 text-sm">
-                            <div className="text-gray-600">
-                              <span className="font-medium">{exam.totalQuestions}</span> câu hỏi
-                            </div>
-                            <div className="text-gray-600">
-                              <span className="font-medium">{exam.durationMinutes}</span> phút
-                            </div>
-                            <div className="text-gray-600 md:col-span-2">
-                              {classNames.length > 0
-                                ? classNames.join(', ')
-                                : 'Chưa gán lớp'}
-                            </div>
-                          </div>
-
-                          <div className="text-xs text-gray-500 space-y-1">
-                            {startTime && endTime && (
-                              <>
-                                <div>
-                                  Bắt đầu: {format(startTime, 'MMM dd, yyyy HH:mm')}
-                                </div>
-                                <div>
-                                  Kết thúc: {format(endTime, 'MMM dd, yyyy HH:mm')}
-                                </div>
-                              </>
-                            )}
-                            <div>
-                              Tạo {formatDistanceToNow(exam.createdAt?.toDate?.() || new Date(), {
-                                addSuffix: true
-                              })}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={exam.visibility === 'public' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                            onClick={() => handleToggleVisibility(exam)}
-                          >
-                            {exam.visibility === 'public' ? 'Khóa' : 'Mở'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={<Calendar className="w-4 h-4" />}
-                            onClick={() => openScheduleModal(exam)}
-                          >
-                            Đặt thời gian
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => {
-                              setPdfExam(exam);
-                              setPdfCodeBase('');
-                              setPdfFaculty('');
-                            }}
-                          >
-                            Xuất Word
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </main>
 
         {/* Topic Modal */}
@@ -848,274 +276,6 @@ const SubjectDetail = () => {
             }}
             loading={submitting}
           />
-        </Modal>
-
-        {/* Questions Modal */}
-        <Modal
-          isOpen={showQuestionsModal}
-          onClose={() => {
-            setShowQuestionsModal(false);
-            setSelectedTopic(null);
-            setQuestions([]);
-            setEditingQuestion(null);
-          }}
-          title={selectedTopic ? `${selectedTopic.name} - Câu hỏi` : 'Câu hỏi'}
-          size="lg"
-        >
-          {questionsLoading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" />
-            </div>
-          ) : questions.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-600 mb-4">Chưa có câu hỏi nào</p>
-              <Button
-                variant="primary"
-                icon={<Plus className="w-4 h-4" />}
-                onClick={handleOpenCreateQuestionModal}
-              >
-                Thêm câu hỏi
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {questions.map((question) => (
-                  <Card key={question.id} className="p-3">
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{question.questionText}</p>
-                        <div className="mt-2 space-y-1 text-xs text-gray-600">
-                          <div>
-                            <span className="font-semibold">A:</span> {question.options?.A}
-                          </div>
-                          <div>
-                            <span className="font-semibold">B:</span> {question.options?.B}
-                          </div>
-                          <div>
-                            <span className="font-semibold">C:</span> {question.options?.C}
-                          </div>
-                          <div>
-                            <span className="font-semibold">D:</span> {question.options?.D}
-                          </div>
-                        </div>
-                        <div className="mt-2 flex gap-3 text-xs text-gray-600">
-                          <span>
-                            <span className="font-semibold">Đáp án:</span> {question.correctAnswer}
-                          </span>
-                          <span>
-                            <span className="font-semibold">Điểm:</span> {question.points}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleOpenEditQuestionModal(question)}
-                          className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteQuestion(question.id)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-
-              <div className="border-t pt-3 flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowQuestionsModal(false);
-                    setSelectedTopic(null);
-                    setQuestions([]);
-                    setEditingQuestion(null);
-                  }}
-                >
-                  Đóng
-                </Button>
-                <Button
-                  variant="primary"
-                  icon={<Plus className="w-4 h-4" />}
-                  onClick={handleOpenCreateQuestionModal}
-                >
-                  Thêm câu hỏi
-                </Button>
-              </div>
-            </div>
-          )}
-        </Modal>
-
-        {/* Question Modal */}
-        <Modal
-          isOpen={showQuestionModal}
-          onClose={() => {
-            setShowQuestionModal(false);
-            setEditingQuestion(null);
-          }}
-          title={editingQuestion ? 'Chỉnh sửa câu hỏi' : 'Tạo câu hỏi'}
-          size="md"
-        >
-          {selectedTopic && (
-            <QuestionForm
-              initialData={editingQuestion}
-              lastQuestionPoints={lastQuestionPoints}
-              onSubmit={handleSubmitQuestion}
-              onCancel={() => {
-                setShowQuestionModal(false);
-                setEditingQuestion(null);
-              }}
-              loading={submitting}
-            />
-          )}
-        </Modal>
-
-        {/* Exam Creation Modal */}
-        <Modal
-          isOpen={showExamModal}
-          onClose={() => {
-            setShowExamModal(false);
-          }}
-          title={`Tạo bài thi từ ${selectedTopicIds.length} chủ đề`}
-          size="md"
-        >
-          {selectedTopicIds.length > 0 && subject && (
-            <ExamCreationModal
-              subject={subject}
-              topicIds={selectedTopicIds}
-              topicNames={topics
-                .filter((t) => selectedTopicIds.includes(t.id))
-                .map((t) => t.name)}
-              availableQuestionCount={topics
-                .filter((t) => selectedTopicIds.includes(t.id))
-                .reduce((sum, t) => sum + (t.questionCount || 0), 0)}
-              teacherId={userProfile?.uid}
-              onSuccess={handleExamCreated}
-              onCancel={() => {
-                setShowExamModal(false);
-              }}
-            />
-          )}
-        </Modal>
-
-        {/* Schedule Modal */}
-        <Modal
-          isOpen={!!scheduleExam}
-          onClose={() => {
-            setScheduleExam(null);
-            setScheduleStart('');
-            setScheduleEnd('');
-            setScheduleError('');
-          }}
-          title="Thiết lập thời gian"
-          size="sm"
-        >
-          <div className="space-y-4">
-            {scheduleError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {scheduleError}
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Bắt đầu
-              </label>
-              <input
-                type="datetime-local"
-                value={scheduleStart}
-                onChange={(event) => setScheduleStart(event.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Kết thúc
-              </label>
-              <input
-                type="datetime-local"
-                value={scheduleEnd}
-                onChange={(event) => setScheduleEnd(event.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setScheduleExam(null);
-                  setScheduleStart('');
-                  setScheduleEnd('');
-                  setScheduleError('');
-                }}
-              >
-                Hủy
-              </Button>
-              <Button variant="primary" onClick={handleSaveSchedule}>
-                Lưu
-              </Button>
-            </div>
-          </div>
-        </Modal>
-
-        {/* PDF Export Modal */}
-        <Modal
-          isOpen={!!pdfExam}
-          onClose={() => {
-            setPdfExam(null);
-            setPdfFaculty('');
-            setPdfCodeBase('');
-          }}
-          title="Xuất file Word bài thi"
-          size="sm"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Khoa
-              </label>
-              <input
-                type="text"
-                value={pdfFaculty}
-                onChange={(event) => setPdfFaculty(event.target.value)}
-                placeholder="Mang may tinh & Truyen thong"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Mã đề (cơ bản)
-              </label>
-              <input
-                type="text"
-                value={pdfCodeBase}
-                onChange={(event) => setPdfCodeBase(event.target.value)}
-                placeholder="VD: 123456"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">Hệ thống sẽ tự tạo 2 mã đề: A và B.</p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPdfExam(null);
-                  setPdfFaculty('');
-                  setPdfCodeBase('');
-                }}
-              >
-                Hủy
-              </Button>
-              <Button variant="primary" onClick={handleExportDoc} disabled={pdfLoading}>
-                {pdfLoading ? 'Đang tạo...' : 'Tạo file Word'}
-              </Button>
-            </div>
-          </div>
         </Modal>
       </div>
     </TeacherLayout>
