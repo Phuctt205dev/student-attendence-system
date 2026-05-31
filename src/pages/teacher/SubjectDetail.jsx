@@ -502,7 +502,7 @@ const SubjectDetail = () => {
         return;
       }
 
-      const questions = result.data.questions || [];
+      const questions = Array.isArray(result.data.questions) ? result.data.questions : [];
       const subjectName = subject?.name || '';
       const baseCode = pdfCodeBase || pdfExam.id.slice(0, 6).toUpperCase();
 
@@ -512,29 +512,42 @@ const SubjectDetail = () => {
       const versionB = shuffleWithSeed(questions, seedB);
 
       // Build version A HTML
-      const htmlA = buildExamHtml({
-        examData: result.data,
-        questions: versionA,
-        subjectName,
-        facultyName: pdfFaculty,
-        codeLabel: `${baseCode}-A`,
-      });
+      let htmlA = '';
+      try {
+        htmlA = buildExamHtml({
+          examData: result.data,
+          questions: versionA,
+          subjectName,
+          facultyName: pdfFaculty,
+          codeLabel: `${baseCode}-A`,
+        });
+      } catch (buildError) {
+        throw new Error(`BUILD_HTML_A: ${buildError?.message || buildError}`);
+      }
 
       // Build version B HTML
-      const htmlB = buildExamHtml({
-        examData: result.data,
-        questions: versionB,
-        subjectName,
-        facultyName: pdfFaculty,
-        codeLabel: `${baseCode}-B`,
-      });
+      let htmlB = '';
+      try {
+        htmlB = buildExamHtml({
+          examData: result.data,
+          questions: versionB,
+          subjectName,
+          facultyName: pdfFaculty,
+          codeLabel: `${baseCode}-B`,
+        });
+      } catch (buildError) {
+        throw new Error(`BUILD_HTML_B: ${buildError?.message || buildError}`);
+      }
 
-      // Convert HTML to DOCX blob for version A
-      const blobA = new Blob([htmlA], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      // Export HTML as .doc (Word-compatible HTML)
+      if (typeof htmlA !== 'string') {
+        throw new Error('HTML_A_NOT_STRING');
+      }
+      const blobA = new Blob([htmlA], { type: 'application/msword;charset=utf-8' });
       const urlA = URL.createObjectURL(blobA);
       const linkA = document.createElement('a');
       linkA.href = urlA;
-      linkA.download = `de-thi-${baseCode}-A.docx`;
+      linkA.download = `de-thi-${baseCode}-A.doc`;
       document.body.appendChild(linkA);
       linkA.click();
       document.body.removeChild(linkA);
@@ -543,12 +556,15 @@ const SubjectDetail = () => {
       // Small delay before second download
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Convert HTML to DOCX blob for version B
-      const blobB = new Blob([htmlB], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      // Export HTML as .doc (Word-compatible HTML)
+      if (typeof htmlB !== 'string') {
+        throw new Error('HTML_B_NOT_STRING');
+      }
+      const blobB = new Blob([htmlB], { type: 'application/msword;charset=utf-8' });
       const urlB = URL.createObjectURL(blobB);
       const linkB = document.createElement('a');
       linkB.href = urlB;
-      linkB.download = `de-thi-${baseCode}-B.docx`;
+      linkB.download = `de-thi-${baseCode}-B.doc`;
       document.body.appendChild(linkB);
       linkB.click();
       document.body.removeChild(linkB);
@@ -557,7 +573,10 @@ const SubjectDetail = () => {
       setSuccess('Xuất file Word thành công! Đã tạo 2 mã đề A và B.');
     } catch (err) {
       console.error('Lỗi xuất file:', err);
-      setError('Lỗi xuất file: ' + (err.message || 'Unknown error'));
+      if (err?.stack) {
+        console.error(err.stack);
+      }
+      setError('Lỗi xuất file: ' + (err?.message || String(err)));
     } finally {
       setPdfLoading(false);
       setPdfExam(null);
