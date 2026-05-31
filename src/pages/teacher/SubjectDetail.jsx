@@ -23,6 +23,8 @@ import TopicForm from '../../components/teacher/TopicForm';
 import QuestionForm from '../../components/teacher/QuestionForm';
 import ExamCreationModal from '../../components/teacher/ExamCreationModal';
 import { format, formatDistanceToNow } from 'date-fns';
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
 
 const SubjectDetail = () => {
   const { userProfile } = useAuth();
@@ -406,6 +408,19 @@ const SubjectDetail = () => {
       .replace(/'/g, '&#039;');
   };
 
+  const buildQuestionsText = (questions) => {
+    return questions
+      .map((question, index) => {
+        const options = ['A', 'B', 'C', 'D']
+          .filter((key) => question.options?.[key] !== undefined)
+          .map((key) => `${key}. ${question.options?.[key]}`)
+          .join('\n');
+
+        return `Câu ${index + 1}: ${question.questionText}\n${options}`.trim();
+      })
+      .join('\n\n');
+  };
+
   const buildExamHtml = ({ examData, questions, subjectName, facultyName, codeLabel }) => {
     const questionHtml = questions
       .map((question, index) => {
@@ -511,60 +526,50 @@ const SubjectDetail = () => {
       const versionA = shuffleWithSeed(questions, seedA);
       const versionB = shuffleWithSeed(questions, seedB);
 
-      // Build version A HTML
-      let htmlA = '';
-      try {
-        htmlA = buildExamHtml({
-          examData: result.data,
-          questions: versionA,
-          subjectName,
-          facultyName: pdfFaculty,
-          codeLabel: `${baseCode}-A`,
-        });
-      } catch (buildError) {
-        throw new Error(`BUILD_HTML_A: ${buildError?.message || buildError}`);
+      const templateResponse = await fetch('/templates/dethimau.docx');
+      if (!templateResponse.ok) {
+        throw new Error('TEMPLATE_NOT_FOUND');
       }
+      const templateBuffer = await templateResponse.arrayBuffer();
 
-      // Build version B HTML
-      let htmlB = '';
-      try {
-        htmlB = buildExamHtml({
-          examData: result.data,
-          questions: versionB,
-          subjectName,
-          facultyName: pdfFaculty,
-          codeLabel: `${baseCode}-B`,
+      const buildDocxBlob = (versionQuestions, codeLabel) => {
+        const zip = new PizZip(templateBuffer);
+        const doc = new Docxtemplater(zip, {
+          paragraphLoop: true,
+          linebreaks: true,
+          delimiters: { start: '{{', end: '}}' }
         });
-      } catch (buildError) {
-        throw new Error(`BUILD_HTML_B: ${buildError?.message || buildError}`);
-      }
+        doc.setData({
+          QUESTIONS: buildQuestionsText(versionQuestions),
+          EXAM_CODE: codeLabel,
+          SUBJECT: subjectName,
+          FACULTY: pdfFaculty,
+          DURATION: result.data?.durationMinutes ? `${result.data.durationMinutes} phút` : ''
+        });
+        doc.render();
+        return doc.getZip().generate({
+          type: 'blob',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        });
+      };
 
-      // Export HTML as .doc (Word-compatible HTML)
-      if (typeof htmlA !== 'string') {
-        throw new Error('HTML_A_NOT_STRING');
-      }
-      const blobA = new Blob([htmlA], { type: 'application/msword;charset=utf-8' });
+      const blobA = buildDocxBlob(versionA, `${baseCode}-A`);
       const urlA = URL.createObjectURL(blobA);
       const linkA = document.createElement('a');
       linkA.href = urlA;
-      linkA.download = `de-thi-${baseCode}-A.doc`;
+      linkA.download = `de-thi-${baseCode}-A.docx`;
       document.body.appendChild(linkA);
       linkA.click();
       document.body.removeChild(linkA);
       URL.revokeObjectURL(urlA);
 
-      // Small delay before second download
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Export HTML as .doc (Word-compatible HTML)
-      if (typeof htmlB !== 'string') {
-        throw new Error('HTML_B_NOT_STRING');
-      }
-      const blobB = new Blob([htmlB], { type: 'application/msword;charset=utf-8' });
+      const blobB = buildDocxBlob(versionB, `${baseCode}-B`);
       const urlB = URL.createObjectURL(blobB);
       const linkB = document.createElement('a');
       linkB.href = urlB;
-      linkB.download = `de-thi-${baseCode}-B.doc`;
+      linkB.download = `de-thi-${baseCode}-B.docx`;
       document.body.appendChild(linkB);
       linkB.click();
       document.body.removeChild(linkB);
