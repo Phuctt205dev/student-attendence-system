@@ -50,6 +50,7 @@ Tab **Variables** → **Add variables** (hoặc Raw Editor):
 AI_API_KEY=<key Azure của bạn>
 AI_API_BASE_URL=https://<resource>.services.ai.azure.com/api/projects/<project>/openai/v1
 AI_MODEL=gpt-oss-120b
+AI_API_VERSION=2024-10-21
 CORS_ORIGIN=http://localhost:5173,https://phuctt205dev.github.io
 ```
 
@@ -226,6 +227,7 @@ Hoặc: push bất kỳ commit nào lên `master` cũng kích hoạt deploy.
 | `configured: false` | Thiếu/sai `AI_API_KEY` hoặc `AI_API_BASE_URL` |
 | **Failed to fetch** / CORS blocked `phuctt205dev.github.io` | Xem mục **9.1** bên dưới |
 | Frontend không gọi Railway | Thiếu `VITE_API_URL` hoặc chưa build lại Pages |
+| AI 400 `Missing ... api-version` | Thêm `AI_API_VERSION=2024-10-21` trên Railway (hoặc version Azure Portal ghi) → Redeploy |
 | AI 401/404 | Kiểm tra endpoint Azure trong Portal |
 | Deploy hết credit (free) | Nạp credit hoặc nâng plan Railway |
 
