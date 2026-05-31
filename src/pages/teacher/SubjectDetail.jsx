@@ -8,7 +8,7 @@ import {
   deleteTopic
 } from '../../services/subject.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Eye, FileText } from 'lucide-react';
+import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -123,23 +123,7 @@ const SubjectDetail = () => {
         {/* Header */}
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 py-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  variant="primary"
-                  icon={<FileText className="w-4 h-4" />}
-                  onClick={handleGoToExams}
-                >
-                  Bài thi
-                </Button>
-                <Button
-                  variant="primary"
-                  icon={<Plus className="w-4 h-4" />}
-                  onClick={handleOpenCreateTopicModal}
-                >
-                  Thêm chủ đề
-                </Button>
-              </div>
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => navigate('/teacher/subjects')}
@@ -155,6 +139,22 @@ const SubjectDetail = () => {
                     <p className="text-gray-600 mt-1">{subject.description}</p>
                   )}
                 </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="primary"
+                  icon={<FileText className="w-4 h-4" />}
+                  onClick={handleGoToExams}
+                >
+                  Bài thi
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={handleOpenCreateTopicModal}
+                >
+                  Thêm chủ đề
+                </Button>
               </div>
             </div>
           </div>
@@ -219,16 +219,6 @@ const SubjectDetail = () => {
                       </div>
 
                       <div className="flex gap-2 ml-4">
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleOpenTopicDetail(topic.id);
-                          }}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Xem chi tiết"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
                         <button
                           onClick={(event) => {
                             event.stopPropagation();
