@@ -179,6 +179,15 @@ service cloud.firestore {
           allow create, update, delete: if signedIn() &&
             get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
         }
+
+        // =========================
+        // ATTACHMENTS SUBCOLLECTION
+        // =========================
+        match /attachments/{attachmentId} {
+          allow read: if signedIn();
+          allow create, update, delete: if signedIn() &&
+            get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
+        }
       }
     }
 

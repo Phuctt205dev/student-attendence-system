@@ -13,7 +13,8 @@ import {
   serverTimestamp,
   limit
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebase';
 
 // ==================== SUBJECT CRUD ====================
 
@@ -309,6 +310,74 @@ export const deleteQuestion = async (subjectId, topicId, questionId) => {
     return { success: true };
   } catch (error) {
     console.error('Error deleting question:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ==================== TOPIC ATTACHMENTS ====================
+
+const normalizeFileName = (name) => {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+};
+
+export const uploadTopicAttachment = async (subjectId, topicId, file, userId) => {
+  try {
+    const safeName = normalizeFileName(file.name || 'attachment');
+    const filePath = `subjects/${subjectId}/topics/${topicId}/attachments/${Date.now()}_${safeName}`;
+    const fileRef = storageRef(storage, filePath);
+
+    const snapshot = await uploadBytes(fileRef, file, {
+      contentType: file.type || 'application/octet-stream'
+    });
+    const url = await getDownloadURL(snapshot.ref);
+
+    const docRef = await addDoc(
+      collection(db, 'subjects', subjectId, 'topics', topicId, 'attachments'),
+      {
+        name: file.name,
+        url,
+        type: file.type || '',
+        size: file.size || 0,
+        storagePath: filePath,
+        createdBy: userId || null,
+        createdAt: serverTimestamp()
+      }
+    );
+
+    return {
+      success: true,
+      data: {
+        id: docRef.id,
+        name: file.name,
+        url,
+        type: file.type || '',
+        size: file.size || 0,
+        storagePath: filePath,
+        createdBy: userId || null
+      }
+    };
+  } catch (error) {
+    console.error('Error uploading topic attachment:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getTopicAttachments = async (subjectId, topicId) => {
+  try {
+    const q = query(
+      collection(db, 'subjects', subjectId, 'topics', topicId, 'attachments'),
+      orderBy('createdAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    const attachments = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return { success: true, data: attachments };
+  } catch (error) {
+    console.error('Error getting topic attachments:', error);
     return { success: false, error: error.message };
   }
 };
