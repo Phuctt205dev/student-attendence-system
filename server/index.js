@@ -5,11 +5,40 @@ import aiRoutes from './routes/ai.routes.js';
 
 const app = express();
 
-const corsOrigins = config.corsOrigin === '*'
-  ? true
-  : config.corsOrigin.split(',').map((o) => o.trim());
+const buildCorsOptions = () => {
+  if (config.corsOrigin === '*') {
+    return { origin: true };
+  }
 
-app.use(cors({ origin: corsOrigins }));
+  const allowed = config.corsOrigin
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+
+  return {
+    origin(origin, callback) {
+      // Postman / server-side — no Origin header
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const normalized = origin.replace(/\/$/, '');
+      if (allowed.includes(normalized)) {
+        callback(null, true);
+      } else {
+        console.warn(`CORS blocked origin: ${origin}. Allowed: ${allowed.join(', ')}`);
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  };
+};
+
+const corsOptions = buildCorsOptions();
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
 app.use('/api/ai', aiRoutes);
@@ -24,8 +53,9 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(config.port, () => {
-  console.log(`AI question server listening on http://localhost:${config.port}`);
+  console.log(`AI question server listening on port ${config.port}`);
+  console.log(`CORS_ORIGIN: ${config.corsOrigin}`);
   if (!config.aiApiKey || !config.aiApiBaseUrl) {
-    console.warn('Warning: Set AI_API_KEY and AI_API_BASE_URL in server/.env');
+    console.warn('Warning: Set AI_API_KEY and AI_API_BASE_URL');
   }
 });

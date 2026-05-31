@@ -89,6 +89,8 @@ cd server && npm install && copy .env.example .env
 
 GitHub Pages **chỉ** chạy React tĩnh. Backend Node phải host **ở dịch vụ khác**, rồi frontend gọi URL đó.
 
+**Khuyên dùng Railway:** xem hướng dẫn chi tiết **[RAILWAY_DEPLOY.md](./RAILWAY_DEPLOY.md)**.
+
 ### Bước chung
 
 1. Deploy folder `server/` lên một host (bảng dưới).

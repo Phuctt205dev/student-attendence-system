@@ -2,6 +2,9 @@
   "name": "student-attendance-ai-server",
   "private": true,
   "version": "1.0.0",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "scripts": {
     "dev": "node --watch index.js",
