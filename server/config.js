@@ -12,7 +12,7 @@ export const config = {
   aiApiKey: process.env.AI_API_KEY || '',
   aiApiBaseUrl: (process.env.AI_API_BASE_URL || '').replace(/\/$/, ''),
   aiModel: process.env.AI_MODEL || 'gpt-oss-120b',
-  aiApiVersion: process.env.AI_API_VERSION || '2025-01-01-preview',
+  aiApiVersion: process.env.AI_API_VERSION || '2025-04-01-preview',
   chunkSize: parseIntEnv('AI_CHUNK_SIZE', 4000),
   chunkOverlap: parseIntEnv('AI_CHUNK_OVERLAP', 200),
   maxChunks: parseIntEnv('AI_MAX_CHUNKS', 8),
