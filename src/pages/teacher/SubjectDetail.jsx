@@ -23,17 +23,6 @@ import TopicForm from '../../components/teacher/TopicForm';
 import QuestionForm from '../../components/teacher/QuestionForm';
 import ExamCreationModal from '../../components/teacher/ExamCreationModal';
 import { format, formatDistanceToNow } from 'date-fns';
-import {
-  Document,
-  Packer,
-  Table,
-  TableRow,
-  TableCell,
-  Paragraph,
-  AlignmentType,
-  VerticalAlign,
-  BorderStyle,
-} from 'docx';
 
 const SubjectDetail = () => {
   const { userProfile } = useAuth();
@@ -417,196 +406,76 @@ const SubjectDetail = () => {
       .replace(/'/g, '&#039;');
   };
 
-  const buildExamDocxChildren = ({ examData, questions, subjectName, facultyName, codeLabel }) => {
-    // Build question paragraphs
-    const questionParagraphs = [];
-    
-    questions.forEach((question, index) => {
-      // Question text
-      questionParagraphs.push(
-        new Paragraph({
-          text: `Câu ${index + 1}: ${question.questionText}`,
-          bold: true,
-          spacing: { after: 100, before: 150 },
-        })
-      );
+  const buildExamHtml = ({ examData, questions, subjectName, facultyName, codeLabel }) => {
+    const questionHtml = questions
+      .map((question, index) => {
+        const options = ['A', 'B', 'C', 'D']
+          .filter((key) => question.options?.[key] !== undefined)
+          .map((key) => `<div style="margin-left: 20px;"><strong>${key}.</strong> ${question.options?.[key]}</div>`)
+          .join('');
 
-      // Answer options
-      ['A', 'B', 'C', 'D']
-        .filter((key) => question.options?.[key] !== undefined)
-        .forEach((key) => {
-          questionParagraphs.push(
-            new Paragraph({
-              text: `${key}. ${question.options?.[key]}`,
-              spacing: { after: 50 },
-              indent: { left: 400 },
-            })
-          );
-        });
+        return `
+          <div style="margin-bottom: 15px;">
+            <div><strong>Câu ${index + 1}:</strong> ${question.questionText}</div>
+            ${options}
+          </div>
+        `;
+      })
+      .join('');
 
-      questionParagraphs.push(
-        new Paragraph({
-          text: '',
-          spacing: { after: 150 },
-        })
-      );
-    });
+    const durationLabel = examData?.durationMinutes ? `${examData.durationMinutes} phút` : '';
 
-    // Header section - School + Exam Info
-    const headerTable = new Table({
-      rows: [
-        new TableRow({
-          cells: [
-            // Left: School info
-            new TableCell({
-              children: [
-                new Paragraph({
-                  text: 'TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN',
-                  bold: true,
-                  alignment: AlignmentType.CENTER,
-                }),
-                new Paragraph({
-                  text: `KHOA ${facultyName || ''}`,
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 100 },
-                }),
-              ],
-              borders: {
-                top: { style: BorderStyle.SINGLE },
-                bottom: { style: BorderStyle.SINGLE },
-                left: { style: BorderStyle.SINGLE },
-                right: { style: BorderStyle.SINGLE },
-              },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 200, bottom: 200, left: 100, right: 100 },
-            }),
-            // Center: Exam info
-            new TableCell({
-              children: [
-                new Paragraph({
-                  text: 'ĐỀ THI CUỐI HỌC KỲ ... (20.. - 20..)',
-                  bold: true,
-                  alignment: AlignmentType.CENTER,
-                  size: 28,
-                }),
-                new Paragraph({
-                  text: `Môn học: ${subjectName}`,
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 100 },
-                }),
-                new Paragraph({
-                  text: `Thời gian làm bài: ${examData?.durationMinutes ? examData.durationMinutes + ' phút' : ''}`,
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 100 },
-                }),
-              ],
-              borders: {
-                top: { style: BorderStyle.SINGLE },
-                bottom: { style: BorderStyle.SINGLE },
-                left: { style: BorderStyle.SINGLE },
-                right: { style: BorderStyle.SINGLE },
-              },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 200, bottom: 200, left: 100, right: 100 },
-            }),
-            // Right: Code
-            new TableCell({
-              children: [
-                new Paragraph({
-                  text: 'Mã đề thi',
-                  alignment: AlignmentType.CENTER,
-                  bold: true,
-                  spacing: { after: 150 },
-                }),
-                new Paragraph({
-                  text: codeLabel,
-                  alignment: AlignmentType.CENTER,
-                  bold: true,
-                  size: 40,
-                }),
-              ],
-              borders: {
-                top: { style: BorderStyle.SINGLE },
-                bottom: { style: BorderStyle.SINGLE },
-                left: { style: BorderStyle.SINGLE },
-                right: { style: BorderStyle.SINGLE },
-              },
-              verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 200, bottom: 200, left: 100, right: 100 },
-            }),
-          ],
-        }),
-      ],
-      width: { size: 100, type: 'pct' },
-    });
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Exam</title>
+        </head>
+        <body style="font-family: 'Times New Roman', serif; margin: 20px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="border: 1px solid #000; padding: 10px; text-align: center; width: 30%;">
+                <div><strong>TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN</strong></div>
+                <div>KHOA ${facultyName || ''}</div>
+              </td>
+              <td style="border: 1px solid #000; padding: 10px; text-align: center; width: 50%;">
+                <div><strong>ĐỀ THI CUỐI HỌC KỲ ... (20.. - 20..)</strong></div>
+                <div>Môn học: ${subjectName}</div>
+                <div>Thời gian làm bài: ${durationLabel}</div>
+              </td>
+              <td style="border: 1px solid #000; padding: 10px; text-align: center; width: 20%;">
+                <div><strong>Mã đề thi</strong></div>
+                <div style="font-size: 20px; font-weight: bold;">${codeLabel}</div>
+              </td>
+            </tr>
+          </table>
 
-    // Student info section
-    const studentInfoTable = new Table({
-      rows: [
-        new TableRow({
-          cells: [
-            new TableCell({
-              children: [new Paragraph('Họ, tên SV: ...................................................')],
-              borders: { top: { style: BorderStyle.SINGLE }, bottom: { style: BorderStyle.SINGLE }, left: { style: BorderStyle.SINGLE }, right: { style: BorderStyle.SINGLE } },
-              margins: { top: 100, bottom: 100, left: 100, right: 100 },
-            }),
-            new TableCell({
-              children: [new Paragraph('Mã SV: ...................................................')],
-              borders: { top: { style: BorderStyle.SINGLE }, bottom: { style: BorderStyle.SINGLE }, left: { style: BorderStyle.SINGLE }, right: { style: BorderStyle.SINGLE } },
-              margins: { top: 100, bottom: 100, left: 100, right: 100 },
-            }),
-            new TableCell({
-              children: [new Paragraph('STT: ...................................................')],
-              borders: { top: { style: BorderStyle.SINGLE }, bottom: { style: BorderStyle.SINGLE }, left: { style: BorderStyle.SINGLE }, right: { style: BorderStyle.SINGLE } },
-              margins: { top: 100, bottom: 100, left: 100, right: 100 },
-            }),
-          ],
-        }),
-      ],
-      width: { size: 100, type: 'pct' },
-    });
+          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <tr>
+              <td style="border: 1px solid #000; padding: 8px;"><strong>Họ, tên SV:</strong> ........................................................</td>
+              <td style="border: 1px solid #000; padding: 8px;"><strong>Mã SV:</strong> ........................................................</td>
+              <td style="border: 1px solid #000; padding: 8px;"><strong>STT:</strong> ........................................................</td>
+            </tr>
+          </table>
 
-    return [
-      headerTable,
-      new Paragraph({ text: '', spacing: { after: 200 } }),
-      studentInfoTable,
-      new Paragraph({ text: '', spacing: { after: 200 } }),
-      new Paragraph({
-        text: 'A. TRẮC NGHIỆM',
-        bold: true,
-        size: 26,
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-        text: '_'.repeat(100),
-        spacing: { after: 200 },
-      }),
-      ...questionParagraphs,
-      new Paragraph({ text: '', spacing: { after: 300 } }),
-      new Paragraph({
-        text: '[Phiếu trả lời trắc nghiệm - OMR sẽ được thêm vào đây]',
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 200, after: 200 },
-      }),
-      new Paragraph({ text: '', spacing: { after: 200 } }),
-      new Paragraph({
-        text: 'Thí sinh lưu ý:',
-        bold: true,
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-        text: '• Giữ cho phiếu phẳng, không bôi bẩn, làm rách, không lấy xóa.',
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-        text: '• Tô đen hoàn toàn vào các ô vuông, dùng bút chì HB.',
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-        text: '• Không được ghi chú và các ô vuông khác ngoài phần trả lời.',
-        spacing: { after: 100 },
-      }),
-    ];
+          <div style="margin-top: 20px;">
+            <h3>A. TRẮC NGHIỆM</h3>
+            <hr style="border: none; border-bottom: 1px dashed #000; margin: 10px 0;" />
+            ${questionHtml}
+          </div>
+
+          <div style="margin-top: 30px; page-break-before: always;">
+            <p><strong>Thí sinh lưu ý:</strong></p>
+            <ul>
+              <li>Giữ cho phiếu phẳng, không bôi bẩn, làm rách, không lấy xóa.</li>
+              <li>Tô đen hoàn toàn vào các ô vuông, dùng bút chì HB.</li>
+              <li>Không được ghi chú và các ô vuông khác ngoài phần trả lời.</li>
+            </ul>
+          </div>
+        </body>
+      </html>
+    `;
   };
 
   const getOmrImageBuffer = async () => {
@@ -637,35 +506,13 @@ const SubjectDetail = () => {
       const subjectName = subject?.name || '';
       const baseCode = pdfCodeBase || pdfExam.id.slice(0, 6).toUpperCase();
 
-      let omrImageBuffer = null;
-      try {
-        const response = await fetch('/omr-template.png');
-        const blob = await response.blob();
-        omrImageBuffer = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64 = reader.result.split(',')[1];
-            const binaryString = atob(base64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            resolve(bytes);
-          };
-          reader.onerror = () => reject(new Error('Không thể đọc ảnh OMR'));
-          reader.readAsDataURL(blob);
-        });
-      } catch (imageError) {
-        console.warn('Không thể tải ảnh OMR:', imageError.message);
-      }
-
       const seedA = hashToSeed(`${pdfExam.id}-A`);
       const seedB = hashToSeed(`${pdfExam.id}-B`);
       const versionA = shuffleWithSeed(questions, seedA);
       const versionB = shuffleWithSeed(questions, seedB);
 
-      // Build version A children
-      const childrenA = buildExamDocxChildren({
+      // Build version A HTML
+      const htmlA = buildExamHtml({
         examData: result.data,
         questions: versionA,
         subjectName,
@@ -673,8 +520,8 @@ const SubjectDetail = () => {
         codeLabel: `${baseCode}-A`,
       });
 
-      // Build version B children
-      const childrenB = buildExamDocxChildren({
+      // Build version B HTML
+      const htmlB = buildExamHtml({
         examData: result.data,
         questions: versionB,
         subjectName,
@@ -682,17 +529,8 @@ const SubjectDetail = () => {
         codeLabel: `${baseCode}-B`,
       });
 
-      // Create documents (docx auto-creates section from children array)
-      const docA = new Document({
-        children: childrenA,
-      });
-
-      const docB = new Document({
-        children: childrenB,
-      });
-
-      // Download version A
-      const blobA = await Packer.toBlob(docA);
+      // Convert HTML to DOCX blob for version A
+      const blobA = new Blob([htmlA], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
       const urlA = URL.createObjectURL(blobA);
       const linkA = document.createElement('a');
       linkA.href = urlA;
@@ -705,8 +543,8 @@ const SubjectDetail = () => {
       // Small delay before second download
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Download version B
-      const blobB = await Packer.toBlob(docB);
+      // Convert HTML to DOCX blob for version B
+      const blobB = new Blob([htmlB], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
       const urlB = URL.createObjectURL(blobB);
       const linkB = document.createElement('a');
       linkB.href = urlB;
