@@ -1090,7 +1090,7 @@ const ClassDetail = () => {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate('/teacher/classes')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 rounded-lg text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
