@@ -10,7 +10,8 @@ import {
   deleteQuestion
 } from '../../services/subject.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
+import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Sparkles } from 'lucide-react';
+import GenerateQuestionsFromFileModal from '../../components/teacher/GenerateQuestionsFromFileModal';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -29,6 +30,7 @@ const TopicDetail = () => {
   const [success, setSuccess] = useState('');
 
   const [showQuestionModal, setShowQuestionModal] = useState(false);
+  const [showAiGenerateModal, setShowAiGenerateModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [lastQuestionPoints, setLastQuestionPoints] = useState(1);
@@ -153,13 +155,22 @@ const TopicDetail = () => {
                   <p className="text-gray-600 mt-1">{subject?.name}</p>
                 </div>
               </div>
-              <Button
-                variant="primary"
-                icon={<Plus className="w-4 h-4" />}
-                onClick={handleOpenCreateQuestionModal}
-              >
-                Thêm câu hỏi
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  icon={<Sparkles className="w-4 h-4" />}
+                  onClick={() => setShowAiGenerateModal(true)}
+                >
+                  Tạo từ tệp (AI)
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={handleOpenCreateQuestionModal}
+                >
+                  Thêm câu hỏi
+                </Button>
+              </div>
             </div>
             {topic?.description && (
               <p className="text-gray-600 mt-3">{topic.description}</p>
@@ -192,13 +203,22 @@ const TopicDetail = () => {
                 <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có câu hỏi</h3>
                 <p className="text-gray-600 mb-6">Hãy tạo câu hỏi đầu tiên</p>
-                <Button
-                  variant="primary"
-                  icon={<Plus className="w-4 h-4" />}
-                  onClick={handleOpenCreateQuestionModal}
-                >
-                  Thêm câu hỏi
-                </Button>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    icon={<Sparkles className="w-4 h-4" />}
+                    onClick={() => setShowAiGenerateModal(true)}
+                  >
+                    Tạo từ tệp (AI)
+                  </Button>
+                  <Button
+                    variant="primary"
+                    icon={<Plus className="w-4 h-4" />}
+                    onClick={handleOpenCreateQuestionModal}
+                  >
+                    Thêm câu hỏi
+                  </Button>
+                </div>
               </div>
             </Card>
           ) : (
@@ -252,6 +272,34 @@ const TopicDetail = () => {
             </div>
           )}
         </main>
+
+        <Modal
+          isOpen={showAiGenerateModal}
+          onClose={() => setShowAiGenerateModal(false)}
+          title="Tạo câu hỏi tự động từ tệp"
+          size="md"
+        >
+          <GenerateQuestionsFromFileModal
+            subjectId={subjectId}
+            topicId={topicId}
+            subjectName={subject?.name}
+            topicName={topic?.name}
+            createdBy={userProfile?.uid}
+            onCancel={() => setShowAiGenerateModal(false)}
+            onSuccess={async ({ saved, total, chunksProcessed, failed }) => {
+              setShowAiGenerateModal(false);
+              const failNote = failed > 0 ? ` (${failed} câu lỗi)` : '';
+              setSuccess(
+                `Đã tạo ${saved}/${total} câu hỏi từ ${chunksProcessed} đoạn nội dung${failNote}`
+              );
+              const questionsResult = await getTopicQuestions(subjectId, topicId);
+              if (questionsResult.success) {
+                setQuestions(questionsResult.data);
+              }
+              setTimeout(() => setSuccess(''), 5000);
+            }}
+          />
+        </Modal>
 
         <Modal
           isOpen={showQuestionModal}

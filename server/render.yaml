@@ -1,0 +1,21 @@
+# Deploy trên Render: https://render.com
+# New → Blueprint → connect repo, chọn file này (hoặc tạo Web Service thủ công)
+services:
+  - type: web
+    name: student-attendance-ai
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_API_BASE_URL
+        sync: false
+      - key: AI_MODEL
+        value: gpt-oss-120b
+      - key: CORS_ORIGIN
+        sync: false

@@ -1,5 +1,24 @@
-# Logs
-logs
+# ==================== Dependencies ====================
+node_modules/
+
+# ==================== Build / output ====================
+dist/
+dist-ssr/
+build/
+.vite/
+coverage/
+
+# ==================== Environment (secrets) ====================
+# Chỉ bỏ qua file env thật — .env.example vẫn được commit
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+server/.env
+
+# ==================== Logs ====================
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,21 +26,23 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# ==================== Backend runtime (tạm) ====================
+server/tmp/
+server/uploads/
+
+# ==================== OS / editor ====================
+.DS_Store
+Thumbs.db
 *.local
-
-# Environment variables
-.env
-
-# Editor directories and files
+.idea/
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# ==================== Deploy platforms (local CLI cache) ====================
+.vercel/
+.railway/
