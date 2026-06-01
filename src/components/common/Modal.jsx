@@ -66,12 +66,11 @@ export const Modal = ({
     >
       <div
         className={`
-          bg-white text-gray-900 rounded-lg shadow-xl w-full
+          bg-white rounded-lg shadow-xl w-full
           ${sizes[size] || sizes.md}
           ${className}
           max-h-[90vh] flex flex-col
         `}
-        style={{ colorScheme: 'light' }}
       >
         {/* Header */}
         {(title || showCloseButton) && (

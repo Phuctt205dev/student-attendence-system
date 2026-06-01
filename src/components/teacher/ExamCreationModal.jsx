@@ -121,7 +121,7 @@ const ExamCreationModal = ({
               minLength: { value: 5, message: 'Title must be at least 5 characters' }
             })}
             placeholder="Exam title"
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           {errors.title && (
             <p className="text-red-600 text-sm mt-1">{errors.title.message}</p>
@@ -137,7 +137,7 @@ const ExamCreationModal = ({
             {...register('description')}
             rows="2"
             placeholder="Exam description (optional)"
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
           />
         </div>
       </div>
@@ -163,7 +163,7 @@ const ExamCreationModal = ({
               })}
               min="1"
               max={availableQuestionCount}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             {errors.questionCount && (
               <p className="text-red-600 text-sm mt-1">{errors.questionCount.message}</p>
@@ -183,7 +183,7 @@ const ExamCreationModal = ({
               })}
               min="5"
               max="480"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             {errors.durationMinutes && (
               <p className="text-red-600 text-sm mt-1">{errors.durationMinutes.message}</p>

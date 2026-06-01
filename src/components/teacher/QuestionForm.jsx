@@ -70,7 +70,7 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
           })}
           rows="4"
           placeholder="Enter the question..."
-          className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
         />
         {errors.questionText && (
           <p className="text-red-600 text-sm mt-1">{errors.questionText.message}</p>
@@ -101,7 +101,7 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
                   }
                 })}
                 placeholder={`Enter option ${option}...`}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               {correctAnswer === option && (
                 <span className="text-green-600 text-sm font-medium">✓ Correct</span>
@@ -135,7 +135,7 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
           min="1"
           max="100"
           placeholder="Enter points for this question"
-          className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         {errors.points && (
           <p className="text-red-600 text-sm mt-1">{errors.points.message}</p>
