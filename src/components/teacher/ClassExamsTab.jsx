@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   getExamsByClassForTeacher,
-  getTeacherExamsNotInClass,
+  getExamsBySubject,
   setClassExamVisibility,
   setClassExamSchedule,
   assignExamToClass,
@@ -10,6 +10,7 @@ import {
 import { getTeacherSubjects } from '../../services/subject.service';
 import Button from '../common/Button';
 import Modal from '../common/Modal';
+import TeacherExamClassDetailModal from './TeacherExamClassDetailModal';
 import {
   BookOpen,
   Plus,
@@ -17,7 +18,8 @@ import {
   Unlock,
   Calendar,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -33,10 +35,12 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [subjects, setSubjects] = useState([]);
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [availableExams, setAvailableExams] = useState([]);
   const [availableLoading, setAvailableLoading] = useState(false);
-  const [subjectNames, setSubjectNames] = useState({});
   const [assigningId, setAssigningId] = useState(null);
+  const [detailExam, setDetailExam] = useState(null);
 
   const [scheduleExam, setScheduleExam] = useState(null);
   const [scheduleStart, setScheduleStart] = useState('');
@@ -56,27 +60,29 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
     setLoading(false);
   }, [classId, teacherId, onError]);
 
-  const loadAvailableExams = useCallback(async () => {
-    if (!classId || !teacherId) return;
-
-    setAvailableLoading(true);
-    const [examsResult, subjectsResult] = await Promise.all([
-      getTeacherExamsNotInClass(teacherId, classId),
-      getTeacherSubjects(teacherId)
-    ]);
-
+  const loadSubjects = useCallback(async () => {
+    if (!teacherId) return;
+    const subjectsResult = await getTeacherSubjects(teacherId);
     if (subjectsResult.success) {
-      const map = (subjectsResult.data || []).reduce((acc, subject) => {
-        acc[subject.id] = subject.name;
-        return acc;
-      }, {});
-      setSubjectNames(map);
+      setSubjects(subjectsResult.data || []);
+    }
+  }, [teacherId]);
+
+  const loadExamsForSubject = useCallback(async (subjectId) => {
+    if (!classId || !teacherId || !subjectId) {
+      setAvailableExams([]);
+      return;
     }
 
-    if (examsResult.success) {
-      setAvailableExams(examsResult.data || []);
+    setAvailableLoading(true);
+    const result = await getExamsBySubject(subjectId, teacherId);
+    if (result.success) {
+      const notInClass = (result.data || []).filter(
+        (exam) => !(exam.classIds || []).includes(classId)
+      );
+      setAvailableExams(notInClass);
     } else if (onError) {
-      onError(examsResult.error || 'Không thể tải bài thi khả dụng');
+      onError(result.error || 'Không thể tải bài thi');
     }
     setAvailableLoading(false);
   }, [classId, teacherId, onError]);
@@ -149,7 +155,7 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
     if (result.success) {
       if (onSuccess) onSuccess('Đã gán bài thi vào lớp');
       await loadExams();
-      await loadAvailableExams();
+      if (selectedSubjectId) await loadExamsForSubject(selectedSubjectId);
     } else if (onError) {
       onError(result.error || 'Không thể gán bài thi');
     }
@@ -169,8 +175,15 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
   };
 
   const handleOpenAddModal = () => {
+    setSelectedSubjectId('');
+    setAvailableExams([]);
     setShowAddModal(true);
-    loadAvailableExams();
+    loadSubjects();
+  };
+
+  const handleSubjectChange = (subjectId) => {
+    setSelectedSubjectId(subjectId);
+    loadExamsForSubject(subjectId);
   };
 
   const getVisibilityBadge = (visibility) => (
@@ -267,6 +280,14 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
                     <Button
                       variant="outline"
                       size="sm"
+                      icon={<Eye className="w-4 h-4" />}
+                      onClick={() => setDetailExam(exam)}
+                    >
+                      Chi tiết
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       icon={
                         exam.visibility === 'public' ? (
                           <Lock className="w-4 h-4" />
@@ -305,47 +326,83 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
 
       <Modal
         isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={() => {
+          setShowAddModal(false);
+          setSelectedSubjectId('');
+          setAvailableExams([]);
+        }}
         title="Thêm bài thi vào lớp"
         size="md"
       >
-        {availableLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto" />
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Bước 1: Chọn môn học
+            </label>
+            <select
+              value={selectedSubjectId}
+              onChange={(e) => handleSubjectChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">-- Chọn môn học --</option>
+              {subjects.map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.name}
+                </option>
+              ))}
+            </select>
           </div>
-        ) : availableExams.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <AlertCircle className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-            <p>Không còn bài thi nào để thêm</p>
-            <p className="text-sm mt-1">Hãy tạo bài thi mới trong mục Môn học</p>
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {availableExams.map((exam) => (
-              <div
-                key={exam.id}
-                className="flex items-center justify-between gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-900 truncate">{exam.title}</p>
-                  <p className="text-xs text-gray-500">
-                    {subjectNames[exam.subjectId] || 'Môn học'} · {exam.totalQuestions} câu ·{' '}
-                    {exam.durationMinutes} phút
-                  </p>
+
+          {selectedSubjectId && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Bước 2: Chọn bài thi
+              </label>
+              {availableLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto" />
                 </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={assigningId === exam.id}
-                  onClick={() => handleAssignExam(exam.id)}
-                >
-                  {assigningId === exam.id ? 'Đang gán...' : 'Gán'}
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
+              ) : availableExams.length === 0 ? (
+                <div className="text-center py-6 text-gray-500 bg-gray-50 rounded-lg">
+                  <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                  <p className="text-sm">Không còn bài thi nào của môn này để gán</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {availableExams.map((exam) => (
+                    <div
+                      key={exam.id}
+                      className="flex items-center justify-between gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{exam.title}</p>
+                        <p className="text-xs text-gray-500">
+                          {exam.totalQuestions} câu · {exam.durationMinutes} phút
+                        </p>
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={assigningId === exam.id}
+                        onClick={() => handleAssignExam(exam.id)}
+                      >
+                        {assigningId === exam.id ? 'Đang gán...' : 'Gán'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </Modal>
+
+      <TeacherExamClassDetailModal
+        exam={detailExam}
+        classId={classId}
+        isOpen={!!detailExam}
+        onClose={() => setDetailExam(null)}
+      />
 
       <Modal
         isOpen={!!scheduleExam}

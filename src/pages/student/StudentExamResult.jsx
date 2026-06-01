@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import StudentLayout from '../../layouts/StudentLayout';
 import { getStudentExamAttempt, getAttemptWithDetails } from '../../services/examAttempt.service';
@@ -11,6 +11,8 @@ const StudentExamResult = () => {
   const { userProfile } = useAuth();
   const { examId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const classId = location.state?.classId;
 
   const [attempt, setAttempt] = useState(null);
   const [details, setDetails] = useState(null);
@@ -51,7 +53,14 @@ const StudentExamResult = () => {
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-6xl mx-auto px-4 py-6 flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">Kết quả bài thi</h1>
-            <Button variant="outline" onClick={() => navigate('/student/exams')}>
+            <Button
+              variant="outline"
+              onClick={() =>
+                classId
+                  ? navigate(`/student/classes/${classId}`)
+                  : navigate('/student/exams')
+              }
+            >
               Quay lại
             </Button>
           </div>

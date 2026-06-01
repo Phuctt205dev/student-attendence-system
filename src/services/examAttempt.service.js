@@ -280,15 +280,20 @@ export const getExamAttempts = async (examId) => {
   try {
     const q = query(
       collection(db, 'examAttempts'),
-      where('examId', '==', examId),
-      orderBy('submittedAt', 'desc')
+      where('examId', '==', examId)
     );
 
     const querySnapshot = await getDocs(q);
-    const attempts = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
+    const attempts = querySnapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data()
     }));
+
+    attempts.sort((a, b) => {
+      const aTime = a.submittedAt?.seconds || a.startedAt?.seconds || 0;
+      const bTime = b.submittedAt?.seconds || b.startedAt?.seconds || 0;
+      return bTime - aTime;
+    });
 
     return {
       success: true,
@@ -301,6 +306,22 @@ export const getExamAttempts = async (examId) => {
       error: error.message
     };
   }
+};
+
+export const getExamAttemptsForClass = async (examId, classId) => {
+  const result = await getExamAttempts(examId);
+  if (!result.success) return result;
+
+  const data = (result.data || []).filter(
+    (attempt) => !classId || attempt.classId === classId
+  );
+
+  return { success: true, data };
+};
+
+export const countCorrectAnswers = (attempt) => {
+  if (!attempt?.answers) return 0;
+  return Object.values(attempt.answers).filter((answer) => answer?.isCorrect).length;
 };
 
 // Get student's all exam attempts

@@ -16,11 +16,12 @@ import {
   XCircle,
   Clock,
   PlayCircle,
-  ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
+import StudentExamDetailModal from '../../components/student/StudentExamDetailModal';
 import { format, formatDistanceToNow, isAfter, isBefore } from 'date-fns';
 
 const STATUS_LABELS = {
@@ -48,6 +49,7 @@ const StudentClassDetail = () => {
 
   const [tags, setTags] = useState([]);
   const [tagsLoading, setTagsLoading] = useState(true);
+  const [detailExam, setDetailExam] = useState(null);
 
   const loadClass = useCallback(async () => {
     const result = await getClassById(classId);
@@ -303,6 +305,14 @@ const StudentClassDetail = () => {
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={<Eye className="w-4 h-4" />}
+                    onClick={() => setDetailExam(exam)}
+                  >
+                    Chi tiết
+                  </Button>
                   {canStart && (
                     <Button
                       variant="primary"
@@ -311,16 +321,6 @@ const StudentClassDetail = () => {
                       onClick={() => handleStartExam(exam)}
                     >
                       {exam.attempt?.status === 'in-progress' ? 'Tiếp tục' : 'Làm bài'}
-                    </Button>
-                  )}
-                  {exam.attempt?.status?.includes('submitted') && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      icon={<ChevronRight className="w-4 h-4" />}
-                      onClick={() => navigate(`/student/exams/${exam.id}/result`)}
-                    >
-                      Xem kết quả
                     </Button>
                   )}
                 </div>
@@ -471,6 +471,14 @@ const StudentClassDetail = () => {
             </div>
           )}
         </main>
+
+        <StudentExamDetailModal
+          exam={detailExam}
+          classId={classId}
+          studentId={userProfile?.uid}
+          isOpen={!!detailExam}
+          onClose={() => setDetailExam(null)}
+        />
       </div>
     </StudentLayout>
   );

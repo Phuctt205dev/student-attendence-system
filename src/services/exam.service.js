@@ -275,8 +275,12 @@ export const deleteExam = async (examId) => {
     }
 
     const visibility = normalizeExamVisibility(exam.data());
-    if (visibility !== 'private') {
-      return { success: false, error: 'Can only delete private exams' };
+    const hasPublicClass = (exam.data().visibleToClassIds || []).length > 0;
+    if (visibility !== 'private' || hasPublicClass) {
+      return {
+        success: false,
+        error: 'Chỉ xóa được bài thi chưa mở cho lớp nào. Hãy khóa tất cả lớp trước.'
+      };
     }
 
     const q = query(
@@ -286,7 +290,10 @@ export const deleteExam = async (examId) => {
     const attempts = await getDocs(q);
 
     if (attempts.size > 0) {
-      return { success: false, error: 'Cannot delete exam with student submissions' };
+      return {
+        success: false,
+        error: 'Không thể xóa bài thi đã có sinh viên nộp bài'
+      };
     }
 
     await deleteDoc(doc(db, 'exams', examId));

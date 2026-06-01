@@ -2,10 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSubjectById, getSubjectTopics } from '../../services/subject.service';
-import { getExamWithQuestions, getExamsBySubject } from '../../services/exam.service';
+import {
+  getExamWithQuestions,
+  getExamsBySubject,
+  assignExamToClass,
+  deleteExam
+} from '../../services/exam.service';
 import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
+import { ChevronLeft, Plus, BookOpen, AlertCircle, CheckCircle, Users, Trash2 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -35,6 +40,10 @@ const SubjectExams = () => {
   const [pdfFaculty, setPdfFaculty] = useState('');
   const [pdfCodeBase, setPdfCodeBase] = useState('');
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [assignExam, setAssignExam] = useState(null);
+  const [assigningClassId, setAssigningClassId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const loadSubjectAndTopics = useCallback(async () => {
     setLoading(true);
@@ -106,6 +115,45 @@ const SubjectExams = () => {
 
     setClassMap(nextMap);
   }, [userProfile?.uid]);
+
+  const handleAssignToClass = async () => {
+    if (!assignExam || !assigningClassId) return;
+
+    setAssigning(true);
+    const result = await assignExamToClass(assignExam.id, assigningClassId);
+    if (result.success) {
+      setSuccess('Đã gán bài thi vào lớp');
+      setAssignExam(null);
+      setAssigningClassId('');
+      loadSubjectExams();
+      setTimeout(() => setSuccess(''), 3000);
+    } else {
+      setError(result.error || 'Không thể gán lớp');
+      setTimeout(() => setError(''), 3000);
+    }
+    setAssigning(false);
+  };
+
+  const handleDeleteExam = async (exam) => {
+    if (!window.confirm(`Xóa bài thi "${exam.title}"? Hành động không thể hoàn tác.`)) return;
+
+    setDeletingId(exam.id);
+    const result = await deleteExam(exam.id);
+    if (result.success) {
+      setSuccess('Đã xóa bài thi');
+      loadSubjectExams();
+      setTimeout(() => setSuccess(''), 3000);
+    } else {
+      setError(result.error || 'Không thể xóa bài thi');
+      setTimeout(() => setError(''), 3000);
+    }
+    setDeletingId(null);
+  };
+
+  const getUnassignedClasses = (exam) => {
+    const assigned = new Set(exam.classIds || []);
+    return Object.entries(classMap).filter(([id]) => !assigned.has(id));
+  };
 
   const getStatusBadge = (visibility) => {
     const styles = {
@@ -408,6 +456,17 @@ const SubjectExams = () => {
 
                         <div className="flex flex-col gap-2">
                           <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Users className="w-4 h-4" />}
+                            onClick={() => {
+                              setAssignExam(exam);
+                              setAssigningClassId('');
+                            }}
+                          >
+                            Gán lớp
+                          </Button>
+                          <Button
                             variant="primary"
                             size="sm"
                             onClick={() => {
@@ -417,6 +476,16 @@ const SubjectExams = () => {
                             }}
                           >
                             Xuất Word
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Trash2 className="w-4 h-4" />}
+                            className="border-red-300 text-red-600 hover:bg-red-50"
+                            disabled={deletingId === exam.id}
+                            onClick={() => handleDeleteExam(exam)}
+                          >
+                            {deletingId === exam.id ? 'Đang xóa...' : 'Xóa'}
                           </Button>
                         </div>
                       </div>
@@ -452,6 +521,65 @@ const SubjectExams = () => {
                 setShowExamModal(false);
               }}
             />
+          )}
+        </Modal>
+
+        <Modal
+          isOpen={!!assignExam}
+          onClose={() => {
+            setAssignExam(null);
+            setAssigningClassId('');
+          }}
+          title="Gán bài thi vào lớp"
+          size="sm"
+        >
+          {assignExam && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Bài thi: <span className="font-medium text-gray-900">{assignExam.title}</span>
+              </p>
+              {getUnassignedClasses(assignExam).length === 0 ? (
+                <p className="text-sm text-gray-500">Đã gán vào tất cả lớp của bạn</p>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Chọn lớp
+                    </label>
+                    <select
+                      value={assigningClassId}
+                      onChange={(e) => setAssigningClassId(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="">-- Chọn lớp --</option>
+                      {getUnassignedClasses(assignExam).map(([id, name]) => (
+                        <option key={id} value={id}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setAssignExam(null);
+                        setAssigningClassId('');
+                      }}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      variant="primary"
+                      disabled={!assigningClassId || assigning}
+                      onClick={handleAssignToClass}
+                    >
+                      {assigning ? 'Đang gán...' : 'Gán'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </Modal>
 
