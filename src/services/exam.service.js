@@ -55,6 +55,20 @@ export const getClassExamSettings = (exam, classId) => {
     };
   }
 
+  const linkedToClass =
+    exam.classId === classId ||
+    (exam.classIds || []).includes(classId) ||
+    Boolean(exam.sourceExamId);
+
+  // classExams snapshot stores visibility/schedule on document root
+  if (linkedToClass && exam.visibility !== undefined) {
+    return {
+      visibility: exam.visibility || 'private',
+      startTime: exam.startTime ?? null,
+      endTime: exam.endTime ?? null
+    };
+  }
+
   if ((exam.classIds || []).includes(classId)) {
     return {
       visibility: normalizeExamVisibility(exam),
@@ -117,21 +131,21 @@ export const normalizeClassExamRecord = (record, classId) => {
 };
 
 export const isClassExamVisibleInList = (exam, classId) => {
-  const settings = getClassExamSettings(exam, classId);
-  if (settings.visibility !== 'public') return false;
-  if (settings.endTime && isScheduleExpired(settings.endTime)) return false;
+  const normalized = normalizeClassExamRecord(exam, classId);
+  if (normalized.visibility !== 'public') return false;
+  if (normalized.endTime && isScheduleExpired(normalized.endTime)) return false;
   return true;
 };
 
 export const canStudentTakeClassExam = (exam, classId) => {
-  const settings = getClassExamSettings(exam, classId);
+  const { visibility, startTime, endTime } = normalizeClassExamRecord(exam, classId);
 
-  if (settings.visibility !== 'public') {
+  if (visibility !== 'public') {
     return { allowed: false, message: 'Bài thi chưa được mở cho lớp này' };
   }
 
-  const start = toDateValue(settings.startTime);
-  const end = toDateValue(settings.endTime);
+  const start = toDateValue(startTime);
+  const end = toDateValue(endTime);
 
   if (!start || !end) {
     return {
@@ -467,21 +481,56 @@ export const getTeacherExams = async (teacherId) => {
 // Get exams assigned to a class (student view)
 export const getExamsByClass = async (classId) => {
   try {
-    let exams = await getClassExamsSnapshot(classId);
+    const examMap = new Map();
 
-    if (exams.length === 0) {
+    const classExams = await getClassExamsSnapshot(classId);
+    classExams.forEach((exam) => examMap.set(exam.id, exam));
+
+    const mergeLegacyExam = (docSnap) => {
+      const examId = docSnap.id;
+      const merged = mergeExamForClass({ id: examId, ...docSnap.data() }, classId);
+      const existing = examMap.get(examId);
+
+      if (!existing) {
+        examMap.set(examId, merged);
+        return;
+      }
+
+      if (existing.visibility !== 'public' && merged.visibility === 'public') {
+        examMap.set(examId, {
+          ...existing,
+          visibility: merged.visibility,
+          startTime: merged.startTime,
+          endTime: merged.endTime
+        });
+      }
+    };
+
+    try {
+      const publishedQuery = query(
+        collection(db, 'exams'),
+        where('visibleToClassIds', 'array-contains', classId)
+      );
+      const publishedSnapshot = await getDocs(publishedQuery);
+      publishedSnapshot.docs.forEach(mergeLegacyExam);
+    } catch (publishedError) {
+      console.warn('Published exam fetch skipped:', publishedError.message);
+    }
+
+    try {
       const legacyQuery = query(
         collection(db, 'exams'),
         where('classIds', 'array-contains', classId)
       );
       const legacySnapshot = await getDocs(legacyQuery);
-      exams = legacySnapshot.docs.map((docSnap) =>
-        mergeExamForClass({ id: docSnap.id, ...docSnap.data() }, classId)
-      );
+      legacySnapshot.docs.forEach(mergeLegacyExam);
+    } catch (legacyError) {
+      console.warn('Legacy exam fetch skipped:', legacyError.message);
     }
 
-    exams = exams
+    const exams = Array.from(examMap.values())
       .filter((exam) => isClassExamActiveForStudents(exam, classId))
+      .map((exam) => normalizeClassExamRecord(exam, classId))
       .sort((a, b) => {
         const aTime = a.assignedAt?.seconds || a.createdAt?.seconds || 0;
         const bTime = b.assignedAt?.seconds || b.createdAt?.seconds || 0;
