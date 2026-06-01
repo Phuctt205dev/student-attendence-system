@@ -1,17 +1,30 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   getSubjectById,
   getTopic,
   getTopicQuestions,
+  getTopicAttachments,
   createQuestion,
   updateQuestion,
-  deleteQuestion
+  deleteQuestion,
+  uploadTopicAttachment
 } from '../../services/subject.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, Sparkles } from 'lucide-react';
-import GenerateQuestionsFromFileModal from '../../components/teacher/GenerateQuestionsFromFileModal';
+import {
+  ChevronLeft,
+  Plus,
+  Edit2,
+  Trash2,
+  BookOpen,
+  AlertCircle,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Paperclip,
+  FileText
+} from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -25,7 +38,9 @@ const TopicDetail = () => {
   const [subject, setSubject] = useState(null);
   const [topic, setTopic] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const [attachments, setAttachments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -34,6 +49,23 @@ const TopicDetail = () => {
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [lastQuestionPoints, setLastQuestionPoints] = useState(1);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(true);
+  const [questionsOpen, setQuestionsOpen] = useState(true);
+
+  const fileInputRef = useRef(null);
+
+  const loadAttachments = useCallback(async () => {
+    if (!subjectId || !topicId) return;
+    setAttachmentsLoading(true);
+    const result = await getTopicAttachments(subjectId, topicId);
+    if (result.success) {
+      setAttachments(result.data || []);
+    } else {
+      setError(result.error || 'Failed to load attachments');
+    }
+    setAttachmentsLoading(false);
+  }, [subjectId, topicId]);
 
   const loadTopicData = useCallback(async () => {
     setLoading(true);
@@ -132,8 +164,52 @@ const TopicDetail = () => {
   useEffect(() => {
     if (subjectId && topicId) {
       loadTopicData();
+      loadAttachments();
     }
-  }, [subjectId, topicId, loadTopicData]);
+  }, [subjectId, topicId, loadTopicData, loadAttachments]);
+
+  const isAllowedAttachment = (file) => {
+    const name = file?.name?.toLowerCase() || '';
+    return name.endsWith('.pdf') || name.endsWith('.docx');
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '0 KB';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, index);
+    return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+  };
+
+  const handlePickAttachment = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAttachmentSelected = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) return;
+    if (!isAllowedAttachment(file)) {
+      setError('Chỉ hỗ trợ tệp PDF hoặc DOCX');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    setUploadingAttachment(true);
+    setError('');
+
+    const result = await uploadTopicAttachment(subjectId, topicId, file, userProfile?.uid);
+    if (result.success) {
+      setSuccess('Đã đính kèm tệp');
+      loadAttachments();
+      setTimeout(() => setSuccess(''), 3000);
+    } else {
+      setError(result.error || 'Không thể đính kèm tệp');
+    }
+
+    setUploadingAttachment(false);
+  };
 
   return (
     <TeacherLayout>
@@ -157,11 +233,12 @@ const TopicDetail = () => {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  variant="outline"
-                  icon={<Sparkles className="w-4 h-4" />}
-                  onClick={() => setShowAiGenerateModal(true)}
+                  variant="success"
+                  icon={<Paperclip className="w-4 h-4" />}
+                  onClick={handlePickAttachment}
+                  disabled={uploadingAttachment}
                 >
-                  Tạo từ tệp (AI)
+                  {uploadingAttachment ? 'Đang tải...' : 'Đính kèm tệp'}
                 </Button>
                 <Button
                   variant="primary"
@@ -175,6 +252,13 @@ const TopicDetail = () => {
             {topic?.description && (
               <p className="text-gray-600 mt-3">{topic.description}</p>
             )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="hidden"
+              onChange={handleAttachmentSelected}
+            />
           </div>
         </header>
 
@@ -197,78 +281,153 @@ const TopicDetail = () => {
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" />
             </div>
-          ) : questions.length === 0 ? (
-            <Card>
-              <div className="text-center py-12">
-                <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có câu hỏi</h3>
-                <p className="text-gray-600 mb-6">Hãy tạo câu hỏi đầu tiên</p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Button
-                    variant="outline"
-                    icon={<Sparkles className="w-4 h-4" />}
-                    onClick={() => setShowAiGenerateModal(true)}
-                  >
-                    Tạo từ tệp (AI)
-                  </Button>
-                  <Button
-                    variant="primary"
-                    icon={<Plus className="w-4 h-4" />}
-                    onClick={handleOpenCreateQuestionModal}
-                  >
-                    Thêm câu hỏi
-                  </Button>
-                </div>
-              </div>
-            </Card>
           ) : (
-            <div className="space-y-4">
-              {questions.map((question) => (
-                <Card key={question.id} className="p-4">
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{question.questionText}</p>
-                      <div className="mt-2 space-y-1 text-xs text-gray-600">
-                        <div>
-                          <span className="font-semibold">A:</span> {question.options?.A}
-                        </div>
-                        <div>
-                          <span className="font-semibold">B:</span> {question.options?.B}
-                        </div>
-                        <div>
-                          <span className="font-semibold">C:</span> {question.options?.C}
-                        </div>
-                        <div>
-                          <span className="font-semibold">D:</span> {question.options?.D}
-                        </div>
-                      </div>
-                      <div className="mt-2 flex gap-3 text-xs text-gray-600">
-                        <span>
-                          <span className="font-semibold">Đáp án:</span> {question.correctAnswer}
-                        </span>
-                        <span>
-                          <span className="font-semibold">Điểm:</span> {question.points}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => handleOpenEditQuestionModal(question)}
-                        className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteQuestion(question.id)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+            <div className="space-y-6">
+              <Card className="p-0">
+                <button
+                  type="button"
+                  onClick={() => setAttachmentsOpen((prev) => !prev)}
+                  className="w-full flex items-center justify-between px-6 py-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-gray-500" />
+                    <h3 className="text-lg font-semibold text-gray-900">Tệp đính kèm</h3>
+                    <span className="text-sm text-gray-500">({attachments.length})</span>
                   </div>
-                </Card>
-              ))}
+                  {attachmentsOpen ? (
+                    <ChevronUp className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-500" />
+                  )}
+                </button>
+                {attachmentsOpen && (
+                  <div className="px-6 pb-6">
+                    {attachmentsLoading ? (
+                      <p className="text-sm text-gray-600">Đang tải tệp...</p>
+                    ) : attachments.length === 0 ? (
+                      <div className="text-sm text-gray-600">Chưa có tệp đính kèm</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {attachments.map((file) => {
+                          const isPdf = (file.name || '').toLowerCase().endsWith('.pdf');
+                          return (
+                          <div
+                            key={file.id}
+                            className="flex flex-wrap items-center justify-between gap-3 p-3 border border-gray-200 rounded-lg"
+                          >
+                            <div className="flex items-center gap-3">
+                              <FileText className="w-5 h-5 text-gray-400" />
+                              <div>
+                                <a
+                                  href={file.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sm font-medium text-primary-700 hover:underline"
+                                >
+                                  {file.name}
+                                </a>
+                                <div className="text-xs text-gray-500">
+                                  {formatFileSize(file.size)}
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                              {isPdf ? 'PDF' : 'DOCX'}
+                            </span>
+                          </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-0">
+                <button
+                  type="button"
+                  onClick={() => setQuestionsOpen((prev) => !prev)}
+                  className="w-full flex items-center justify-between px-6 py-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-gray-500" />
+                    <h3 className="text-lg font-semibold text-gray-900">Danh sách câu hỏi</h3>
+                    <span className="text-sm text-gray-500">({questions.length})</span>
+                  </div>
+                  {questionsOpen ? (
+                    <ChevronUp className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-500" />
+                  )}
+                </button>
+                {questionsOpen && (
+                  <div className="px-6 pb-6">
+                    {questions.length === 0 ? (
+                      <div className="text-center py-12">
+                        <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có câu hỏi</h3>
+                        <p className="text-gray-600 mb-6">Hãy tạo câu hỏi đầu tiên</p>
+                        <Button
+                          variant="primary"
+                          icon={<Plus className="w-4 h-4" />}
+                          onClick={handleOpenCreateQuestionModal}
+                        >
+                          Thêm câu hỏi
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {questions.map((question) => (
+                          <Card key={question.id} className="p-4">
+                            <div className="flex justify-between items-start gap-4">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">{question.questionText}</p>
+                                <div className="mt-2 space-y-1 text-xs text-gray-600">
+                                  <div>
+                                    <span className="font-semibold">A:</span> {question.options?.A}
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold">B:</span> {question.options?.B}
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold">C:</span> {question.options?.C}
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold">D:</span> {question.options?.D}
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex gap-3 text-xs text-gray-600">
+                                  <span>
+                                    <span className="font-semibold">Đáp án:</span> {question.correctAnswer}
+                                  </span>
+                                  <span>
+                                    <span className="font-semibold">Điểm:</span> {question.points}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleOpenEditQuestionModal(question)}
+                                  className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteQuestion(question.id)}
+                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
             </div>
           )}
         </main>
