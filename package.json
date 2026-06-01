@@ -12,6 +12,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/ai-projects": "^2.2.0",
+    "@azure/identity": "^4.13.1",
     "date-fns": "^4.1.0",
     "docxtemplater": "^3.68.7",
     "firebase": "^12.10.0",

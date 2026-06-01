@@ -1,11 +1,6 @@
-import { config, getChatCompletionsUrl } from '../config.js';
-
-const SYSTEM_PROMPT = `Bạn là trợ lý tạo ngân hàng câu hỏi trắc nghiệm (MCQ) cho giáo viên đại học Việt Nam.
-Dựa trên đoạn nội dung được cung cấp, tạo câu hỏi trắc nghiệm 4 đáp án A, B, C, D.
-Mỗi câu phải có đúng một đáp án đúng (correctAnswer: "A"|"B"|"C"|"D").
-Câu hỏi và đáp án phải bằng tiếng Việt, sát nội dung đoạn văn, không bịa thông tin ngoài văn bản.
-Trả về JSON thuần theo schema:
-{"questions":[{"questionText":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correctAnswer":"A","points":1}]}`;
+import { config } from '../config.js';
+import { ClientSecretCredential } from '@azure/identity';
+import { AIProjectClient } from '@azure/ai-projects/client';
 
 const parseQuestionsFromContent = (content) => {
   if (!content || typeof content !== 'string') {
@@ -71,57 +66,50 @@ export const generateQuestionsForChunk = async ({
   subjectName,
   topicName
 }) => {
-  if (!config.aiApiKey) {
-    throw new Error('Thiếu cấu hình AI_API_KEY trên server');
+  if (!config.azureClientId || !config.azureClientSecret || !config.azureTenantId) {
+    throw new Error('Thiếu cấu hình Azure credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)');
   }
 
-  const url = getChatCompletionsUrl();
-  if (!url) {
-    throw new Error('Thiếu cấu hình AI_API_BASE_URL trên server');
+  if (!config.azureAiEndpoint) {
+    throw new Error('Thiếu cấu hình AZURE_AI_ENDPOINT');
   }
+
+  const credential = new ClientSecretCredential(
+    config.azureTenantId,
+    config.azureClientId,
+    config.azureClientSecret
+  );
+
+  const projectClient = new AIProjectClient(
+    config.azureAiEndpoint,
+    credential
+  );
 
   const userPrompt = `Môn học: ${subjectName || 'N/A'}
 Chủ đề: ${topicName || 'N/A'}
-Đoạn ${chunkIndex + 1}/${totalChunks} — tạo đúng ${questionsPerChunk} câu hỏi MCQ từ nội dung sau:
+Đoạn ${chunkIndex + 1}/${totalChunks} — tạo đúng ${questionsPerChunk} câu hỏi trắc nghiệm 4 đáp án A, B, C, D từ nội dung sau:
 
 ---
 ${chunkText}
----`;
+---
 
-  const body = {
-    model: config.aiModel,
+Yêu cầu:
+- Mỗi câu phải có đúng một đáp án đúng (correctAnswer: "A"|"B"|"C"|"D")
+- Câu hỏi và đáp án phải bằng tiếng Việt
+- Không bịa thông tin ngoài văn bản được cung cấp
+- Trả về JSON thuần theo schema: {"questions":[{"questionText":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correctAnswer":"A","points":1}]}`;
+
+  const openaiClient = projectClient.getOpenAIClient();
+
+  const response = await openaiClient.chat.completions.create({
+    model: config.azureAgentName,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userPrompt }
     ],
     temperature: 0.4
-  };
-
-  if (config.aiModel.includes('gpt-oss') || config.aiModel.includes('o1') || config.aiModel.includes('o3')) {
-    body.response_format = { type: 'json_object' };
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.aiApiKey}`
-    },
-    body: JSON.stringify(body)
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error('Azure API Full Error:', {
-      status: response.status,
-      url: url,
-      error: errText
-    });
-    throw new Error(`AI API lỗi (${response.status}): ${errText.slice(0, 500)}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
+  const content = response.choices[0].message.content;
 
   return parseQuestionsFromContent(content);
 };

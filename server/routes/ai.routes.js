@@ -99,8 +99,14 @@ router.post('/generate-questions', handleUpload, async (req, res) => {
 router.get('/health', (_req, res) => {
   res.json({
     success: true,
-    configured: Boolean(config.aiApiKey && config.aiApiBaseUrl),
-    model: config.aiModel
+    configured: Boolean(
+      config.azureClientId &&
+      config.azureClientSecret &&
+      config.azureTenantId &&
+      config.azureAiEndpoint
+    ),
+    agent: config.azureAgentName,
+    agentVersion: config.azureAgentVersion
   });
 });
 

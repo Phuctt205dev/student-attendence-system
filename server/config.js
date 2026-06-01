@@ -18,7 +18,15 @@ export const config = {
   chunkOverlap: parseIntEnv('AI_CHUNK_OVERLAP', 200),
   maxChunks: parseIntEnv('AI_MAX_CHUNKS', 8),
   maxFileSizeMb: parseIntEnv('MAX_FILE_SIZE_MB', 10),
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173'
+  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  // Azure AI Projects Agent credentials
+  azureSubscriptionId: process.env.AZURE_SUBSCRIPTION_ID || '',
+  azureTenantId: process.env.AZURE_TENANT_ID || '',
+  azureClientId: process.env.AZURE_CLIENT_ID || '',
+  azureClientSecret: process.env.AZURE_CLIENT_SECRET || '',
+  azureAiEndpoint: process.env.AZURE_AI_ENDPOINT || '',
+  azureAgentName: process.env.AZURE_AGENT_NAME || 'roll-call-AI',
+  azureAgentVersion: process.env.AZURE_AGENT_VERSION || '2'
 };
 
 export const getChatCompletionsUrl = () => {
