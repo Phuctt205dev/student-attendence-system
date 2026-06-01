@@ -52,11 +52,13 @@ import {
   Edit2,
   ChevronDown,
   ChevronUp,
-  Search
+  Search,
+  BookOpen
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
+import ClassExamsTab from '../../components/teacher/ClassExamsTab';
 import QRCode from 'qrcode';
 
 const ClassDetail = () => {
@@ -1153,6 +1155,17 @@ const ClassDetail = () => {
                       <Tag className="w-4 h-4 inline mr-2" />
                       Quản lý thẻ ({classTags.length})
                     </button>
+                    <button
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        classDetailTab === 'exams'
+                          ? 'border-primary-500 text-primary-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                      onClick={() => setClassDetailTab('exams')}
+                    >
+                      <BookOpen className="w-4 h-4 inline mr-2" />
+                      Bài thi
+                    </button>
                   </div>
 
                   {classDetailTab === 'overview' && (
@@ -1541,6 +1554,21 @@ const ClassDetail = () => {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {classDetailTab === 'exams' && (
+                    <ClassExamsTab
+                      classId={classId}
+                      teacherId={userProfile?.uid}
+                      onError={(message) => {
+                        setError(message);
+                        setTimeout(() => setError(''), 4000);
+                      }}
+                      onSuccess={(message) => {
+                        setSuccess(message);
+                        setTimeout(() => setSuccess(''), 3000);
+                      }}
+                    />
                   )}
                 </div>
               ) : (

@@ -61,17 +61,17 @@ const ExamCreationModal = ({
       console.log('Form data:', data);
       console.log('ClassIds:', data.classIds);
 
-      if (!data.classIds || data.classIds.length === 0) {
-        setError('Vui lòng chọn ít nhất một lớp');
-        setSubmitting(false);
-        return;
-      }
+      const selectedClassIds = Array.isArray(data.classIds)
+        ? data.classIds
+        : data.classIds
+          ? [data.classIds]
+          : [];
 
       const examData = {
         teacherId,
         title: data.title,
         description: data.description,
-        classIds: Array.isArray(data.classIds) ? data.classIds : [data.classIds],
+        classIds: selectedClassIds,
         durationMinutes: parseInt(data.durationMinutes),
         subjectId: subject.id,
         topicIds: topicIds,
@@ -196,9 +196,12 @@ const ExamCreationModal = ({
         </p>
       </div>
 
-      {/* Class Selection */}
+      {/* Class Selection (optional — assign & schedule in class detail) */}
       <div className="border-b pb-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Chọn lớp</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Gán lớp (tùy chọn)</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Có thể gán lớp sau tại Chi tiết lớp học → Bài thi
+        </p>
 
         {classesLoading ? (
           <p className="text-sm text-gray-600">Đang tải lớp học...</p>
@@ -218,9 +221,6 @@ const ExamCreationModal = ({
               </label>
             ))}
           </div>
-        )}
-        {classIds.length === 0 && (
-          <p className="text-xs text-orange-600 mt-2">⚠ Chọn ít nhất một lớp</p>
         )}
       </div>
 
@@ -251,7 +251,7 @@ const ExamCreationModal = ({
         <Button
           variant="primary"
           type="submit"
-          disabled={submitting || classIds.length === 0}
+          disabled={submitting}
           icon={<Plus className="w-4 h-4" />}
         >
           {submitting ? 'Đang tạo...' : 'Tạo bài thi'}

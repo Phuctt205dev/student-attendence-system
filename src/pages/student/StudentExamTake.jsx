@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import StudentLayout from '../../layouts/StudentLayout';
-import { getExamWithQuestions } from '../../services/exam.service';
+import { getExamWithQuestions, mergeExamForClass } from '../../services/exam.service';
 import {
   getStudentExamAttempt,
   startExamAttempt,
@@ -59,7 +59,11 @@ const StudentExamTake = () => {
         return;
       }
 
-      const examData = examResult.data;
+      const resolvedClassId = classId || examResult.data.classIds?.[0] || null;
+      const examData = resolvedClassId
+        ? mergeExamForClass(examResult.data, resolvedClassId)
+        : examResult.data;
+
       if (examData.visibility && examData.visibility !== 'public') {
         setError('Bài thi này hiện không khả dụng.');
         setLoading(false);
@@ -78,7 +82,6 @@ const StudentExamTake = () => {
         setAttempt(attemptResult.data);
         setAnswers(attemptResult.data.answers || {});
       } else if (canStart) {
-        const resolvedClassId = classId || examResult.data.classIds?.[0] || null;
         const startResult = await startExamAttempt(userProfile.uid, examId, resolvedClassId);
         if (startResult.success) {
           setAttempt(startResult.data);

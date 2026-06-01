@@ -38,6 +38,22 @@ service cloud.firestore {
         get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
     }
 
+    function isExamVisibleToStudent() {
+      return resource.data.visibleToClassIds != null &&
+        resource.data.visibleToClassIds.size() > 0 && (
+          (resource.data.visibleToClassIds.size() >= 1 &&
+            isStudentInClass(resource.data.visibleToClassIds[0])) ||
+          (resource.data.visibleToClassIds.size() >= 2 &&
+            isStudentInClass(resource.data.visibleToClassIds[1])) ||
+          (resource.data.visibleToClassIds.size() >= 3 &&
+            isStudentInClass(resource.data.visibleToClassIds[2])) ||
+          (resource.data.visibleToClassIds.size() >= 4 &&
+            isStudentInClass(resource.data.visibleToClassIds[3])) ||
+          (resource.data.visibleToClassIds.size() >= 5 &&
+            isStudentInClass(resource.data.visibleToClassIds[4]))
+        );
+    }
+
     // =========================
     // USERS (Web App)
     // App web lưu user profile tại: users/{uid}
@@ -197,10 +213,11 @@ service cloud.firestore {
     // =========================
     match /exams/{examId} {
       // Teacher có thể đọc bài thi của mình
-      // Student chỉ đọc bài thi public
+      // Student: bài public toàn cục (legacy) hoặc mở cho lớp đã enroll
       allow read: if signedIn() && (
         resource.data.teacherId == request.auth.uid ||
-        resource.data.visibility == 'public'
+        resource.data.visibility == 'public' ||
+        isExamVisibleToStudent()
       );
 
       allow list: if signedIn();

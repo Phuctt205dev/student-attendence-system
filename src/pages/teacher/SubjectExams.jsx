@@ -2,15 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSubjectById, getSubjectTopics } from '../../services/subject.service';
-import { getExamWithQuestions, getExamsBySubject, setExamVisibility, setExamSchedule } from '../../services/exam.service';
+import { getExamWithQuestions, getExamsBySubject } from '../../services/exam.service';
 import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, BookOpen, AlertCircle, CheckCircle, Lock, Unlock, Calendar } from 'lucide-react';
+import { ChevronLeft, Plus, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import ExamCreationModal from '../../components/teacher/ExamCreationModal';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 
@@ -31,11 +31,6 @@ const SubjectExams = () => {
   const [exams, setExams] = useState([]);
   const [examsLoading, setExamsLoading] = useState(false);
   const [classMap, setClassMap] = useState({});
-  const [scheduleExam, setScheduleExam] = useState(null);
-  const [scheduleStart, setScheduleStart] = useState('');
-  const [scheduleEnd, setScheduleEnd] = useState('');
-  const [scheduleError, setScheduleError] = useState('');
-
   const [pdfExam, setPdfExam] = useState(null);
   const [pdfFaculty, setPdfFaculty] = useState('');
   const [pdfCodeBase, setPdfCodeBase] = useState('');
@@ -130,64 +125,6 @@ const SubjectExams = () => {
         {labels[nextVisibility] || 'Private'}
       </span>
     );
-  };
-
-  const toLocalInputValue = (dateValue) => {
-    if (!dateValue) return '';
-    const date = dateValue?.toDate?.() || new Date(dateValue);
-    const offset = date.getTimezoneOffset();
-    const localDate = new Date(date.getTime() - offset * 60000);
-    return localDate.toISOString().slice(0, 16);
-  };
-
-  const openScheduleModal = (exam) => {
-    setScheduleExam(exam);
-    setScheduleStart(toLocalInputValue(exam.startTime));
-    setScheduleEnd(toLocalInputValue(exam.endTime));
-    setScheduleError('');
-  };
-
-  const handleSaveSchedule = async () => {
-    if (!scheduleExam) return;
-
-    const startDate = scheduleStart ? new Date(scheduleStart) : null;
-    const endDate = scheduleEnd ? new Date(scheduleEnd) : null;
-
-    if (startDate && endDate && endDate <= startDate) {
-      setScheduleError('Thời gian kết thúc phải sau thời gian bắt đầu');
-      return;
-    }
-
-    const result = await setExamSchedule(scheduleExam.id, startDate, endDate);
-    if (result.success) {
-      setScheduleExam(null);
-      setScheduleStart('');
-      setScheduleEnd('');
-      setScheduleError('');
-      loadSubjectExams();
-    } else {
-      setScheduleError(result.error || 'Không thể lưu lịch thi');
-    }
-  };
-
-  const handleToggleVisibility = async (exam) => {
-    const nextVisibility = exam.visibility === 'public' ? 'private' : 'public';
-    const now = new Date();
-    const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
-
-    if (nextVisibility === 'public' && endTime && endTime <= now) {
-      setError('Không thể mở bài thi vì thời gian kết thúc đã qua');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
-    const result = await setExamVisibility(exam.id, nextVisibility);
-    if (result.success) {
-      loadSubjectExams();
-    } else {
-      setError(result.error || 'Không thể cập nhật trạng thái');
-      setTimeout(() => setError(''), 3000);
-    }
   };
 
   const hashToSeed = (value) => {
@@ -410,6 +347,9 @@ const SubjectExams = () => {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">Danh sách bài thi</h2>
             </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Mở khóa và đặt thời gian cho từng lớp tại Chi tiết lớp học → tab Bài thi.
+            </p>
 
             {examsLoading ? (
               <div className="text-center py-12">
@@ -430,10 +370,6 @@ const SubjectExams = () => {
                     .map((id) => classMap[id])
                     .filter(Boolean);
 
-                  const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
-                  const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
-                  const isLocked = endTime && new Date() > endTime;
-
                   return (
                     <Card key={exam.id} className="hover:shadow-lg transition-shadow">
                       <div className="flex items-start justify-between gap-4">
@@ -441,11 +377,6 @@ const SubjectExams = () => {
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-lg font-semibold text-gray-900">{exam.title}</h3>
                             {getStatusBadge(exam.visibility)}
-                            {isLocked && (
-                              <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-200 text-gray-700">
-                                Đã khóa
-                              </span>
-                            )}
                           </div>
 
                           {exam.description && (
@@ -466,17 +397,7 @@ const SubjectExams = () => {
                             </div>
                           </div>
 
-                          <div className="text-xs text-gray-500 space-y-1">
-                            {startTime && endTime && (
-                              <>
-                                <div>
-                                  Bắt đầu: {format(startTime, 'MMM dd, yyyy HH:mm')}
-                                </div>
-                                <div>
-                                  Kết thúc: {format(endTime, 'MMM dd, yyyy HH:mm')}
-                                </div>
-                              </>
-                            )}
+                          <div className="text-xs text-gray-500">
                             <div>
                               Tạo {formatDistanceToNow(exam.createdAt?.toDate?.() || new Date(), {
                                 addSuffix: true
@@ -486,22 +407,6 @@ const SubjectExams = () => {
                         </div>
 
                         <div className="flex flex-col gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={exam.visibility === 'public' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                            onClick={() => handleToggleVisibility(exam)}
-                          >
-                            {exam.visibility === 'public' ? 'Khóa' : 'Mở'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={<Calendar className="w-4 h-4" />}
-                            onClick={() => openScheduleModal(exam)}
-                          >
-                            Đặt thời gian
-                          </Button>
                           <Button
                             variant="primary"
                             size="sm"
@@ -548,64 +453,6 @@ const SubjectExams = () => {
               }}
             />
           )}
-        </Modal>
-
-        <Modal
-          isOpen={!!scheduleExam}
-          onClose={() => {
-            setScheduleExam(null);
-            setScheduleStart('');
-            setScheduleEnd('');
-            setScheduleError('');
-          }}
-          title="Thiết lập thời gian"
-          size="sm"
-        >
-          <div className="space-y-4">
-            {scheduleError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {scheduleError}
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Bắt đầu
-              </label>
-              <input
-                type="datetime-local"
-                value={scheduleStart}
-                onChange={(event) => setScheduleStart(event.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Kết thúc
-              </label>
-              <input
-                type="datetime-local"
-                value={scheduleEnd}
-                onChange={(event) => setScheduleEnd(event.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setScheduleExam(null);
-                  setScheduleStart('');
-                  setScheduleEnd('');
-                  setScheduleError('');
-                }}
-              >
-                Hủy
-              </Button>
-              <Button variant="primary" onClick={handleSaveSchedule}>
-                Lưu
-              </Button>
-            </div>
-          </div>
         </Modal>
 
         <Modal
