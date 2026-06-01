@@ -13,6 +13,7 @@ export const config = {
   aiApiBaseUrl: (process.env.AI_API_BASE_URL || '').replace(/\/$/, ''),
   aiModel: process.env.AI_MODEL || 'gpt-oss-120b',
   aiApiVersion: process.env.AI_API_VERSION || '1',
+  skipApiVersion: process.env.SKIP_API_VERSION === 'true',
   chunkSize: parseIntEnv('AI_CHUNK_SIZE', 4000),
   chunkOverlap: parseIntEnv('AI_CHUNK_OVERLAP', 200),
   maxChunks: parseIntEnv('AI_MAX_CHUNKS', 8),
@@ -26,8 +27,8 @@ export const getChatCompletionsUrl = () => {
 
   let url = base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
 
-  // Azure / Foundry yêu cầu query api-version
-  if (!url.includes('api-version=')) {
+  // Azure / Foundry yêu cầu query api-version (trừ khi đã có hoặc skip)
+  if (!config.skipApiVersion && !url.includes('api-version=')) {
     const separator = url.includes('?') ? '&' : '?';
     url = `${url}${separator}api-version=${encodeURIComponent(config.aiApiVersion)}`;
   }

@@ -112,6 +112,11 @@ ${chunkText}
 
   if (!response.ok) {
     const errText = await response.text();
+    console.error('Azure API Full Error:', {
+      status: response.status,
+      url: url,
+      error: errText
+    });
     throw new Error(`AI API lỗi (${response.status}): ${errText.slice(0, 500)}`);
   }
 
