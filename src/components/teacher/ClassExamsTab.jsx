@@ -165,7 +165,7 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
   const handleRemoveExam = async (exam) => {
     if (!window.confirm(`Gỡ bài thi "${exam.title}" khỏi lớp này?`)) return;
 
-    const result = await removeExamFromClass(exam.id, classId);
+    const result = await removeExamFromClass(classId, exam.id);
     if (result.success) {
       if (onSuccess) onSuccess('Đã gỡ bài thi khỏi lớp');
       loadExams();

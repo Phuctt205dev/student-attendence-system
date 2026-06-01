@@ -5,12 +5,13 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
-  orderBy,
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from './firebase';
+
 const getQuestionFromExam = async (examData, questionId) => {
   const subjectId = examData.subjectId;
   const topicIds = examData.topicIds || [];
@@ -28,18 +29,22 @@ const getQuestionFromExam = async (examData, questionId) => {
   return null;
 };
 
-// Start exam attempt (scoped per class)
-export const startExamAttempt = async (studentId, examId, classId) => {
+// Start exam attempt — scoped per class exam instance
+export const startExamAttempt = async (
+  studentId,
+  sourceExamId,
+  classId,
+  classExamInstanceId
+) => {
   try {
-    if (!classId) {
-      return { success: false, error: 'Class ID is required' };
+    if (!classId || !classExamInstanceId) {
+      return { success: false, error: 'Class exam instance is required' };
     }
 
     const q = query(
       collection(db, 'examAttempts'),
       where('studentId', '==', studentId),
-      where('examId', '==', examId),
-      where('classId', '==', classId),
+      where('classExamInstanceId', '==', classExamInstanceId),
       where('status', '==', 'in-progress')
     );
 
@@ -57,8 +62,9 @@ export const startExamAttempt = async (studentId, examId, classId) => {
 
     const docRef = await addDoc(collection(db, 'examAttempts'), {
       studentId,
-      examId,
+      examId: sourceExamId,
       classId,
+      classExamInstanceId,
       startedAt: serverTimestamp(),
       submittedAt: null,
       answers: {},
@@ -74,8 +80,9 @@ export const startExamAttempt = async (studentId, examId, classId) => {
       data: {
         id: docRef.id,
         studentId,
-        examId,
+        examId: sourceExamId,
         classId,
+        classExamInstanceId,
         startedAt: new Date(),
         status: 'in-progress'
       }
@@ -105,7 +112,7 @@ export const updateAnswer = async (attemptId, questionId, selectedAnswer) => {
     const answers = attemptSnap.data().answers || {};
     answers[questionId] = {
       selected: selectedAnswer,
-      isCorrect: false // Will be calculated on submit
+      isCorrect: false
     };
 
     await updateDoc(attemptRef, {
@@ -145,7 +152,6 @@ export const submitExamAttempt = async (attemptId) => {
     const attemptData = attemptSnap.data();
     const { examId, answers, startedAt } = attemptData;
 
-    // Get exam to fetch questions
     const examSnap = await getDoc(doc(db, 'exams', examId));
     if (!examSnap.exists()) {
       return {
@@ -158,7 +164,6 @@ export const submitExamAttempt = async (attemptId) => {
     const questionRefs = examData.questionIds || [];
     let totalPoints = examData.totalPoints || 0;
 
-    // Calculate score
     let earnedPoints = 0;
     const updatedAnswers = { ...answers };
 
@@ -182,10 +187,9 @@ export const submitExamAttempt = async (attemptId) => {
       totalPoints = questionRefs.reduce((sum, ref) => sum + (ref.points ?? 1), 0);
     }
 
-    // Calculate duration
     const submittedAt = new Date();
     const startedAtDate = startedAt?.toDate?.() || new Date(startedAt);
-    const duration = Math.round((submittedAt - startedAtDate) / (1000 * 60)); // minutes
+    const duration = Math.round((submittedAt - startedAtDate) / (1000 * 60));
 
     await updateDoc(attemptRef, {
       answers: updatedAnswers,
@@ -228,12 +232,12 @@ export const getAttemptById = async (attemptId) => {
           ...docSnap.data()
         }
       };
-    } else {
-      return {
-        success: false,
-        error: 'Attempt not found'
-      };
     }
+
+    return {
+      success: false,
+      error: 'Attempt not found'
+    };
   } catch (error) {
     console.error('Error getting attempt:', error);
     return {
@@ -243,18 +247,17 @@ export const getAttemptById = async (attemptId) => {
   }
 };
 
-// Get student's attempt for exam in a specific class
-export const getStudentExamAttempt = async (studentId, examId, classId) => {
+// Get student's attempt for a class exam instance
+export const getStudentExamAttempt = async (studentId, classExamInstanceId) => {
   try {
-    if (!classId) {
-      return { success: false, error: 'Class ID is required' };
+    if (!classExamInstanceId) {
+      return { success: false, error: 'Class exam instance is required' };
     }
 
     const q = query(
       collection(db, 'examAttempts'),
       where('studentId', '==', studentId),
-      where('examId', '==', examId),
-      where('classId', '==', classId)
+      where('classExamInstanceId', '==', classExamInstanceId)
     );
 
     const querySnapshot = await getDocs(q);
@@ -281,7 +284,7 @@ export const getStudentExamAttempt = async (studentId, examId, classId) => {
   }
 };
 
-// Get all attempts for an exam
+// Get all attempts for an exam (by source exam id — teacher overview)
 export const getExamAttempts = async (examId) => {
   try {
     const q = query(
@@ -314,18 +317,30 @@ export const getExamAttempts = async (examId) => {
   }
 };
 
-export const getExamAttemptsForClass = async (examId, classId) => {
-  const result = await getExamAttempts(examId);
-  if (!result.success) return result;
+export const getExamAttemptsForClass = async (classExamInstanceId) => {
+  try {
+    const q = query(
+      collection(db, 'examAttempts'),
+      where('classExamInstanceId', '==', classExamInstanceId)
+    );
 
-  const data = (result.data || []).filter((attempt) => attempt.classId === classId);
+    const querySnapshot = await getDocs(q);
+    const attempts = querySnapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data()
+    }));
 
-  return { success: true, data };
-};
+    attempts.sort((a, b) => {
+      const aTime = a.submittedAt?.seconds || a.startedAt?.seconds || 0;
+      const bTime = b.submittedAt?.seconds || b.startedAt?.seconds || 0;
+      return bTime - aTime;
+    });
 
-export const countCorrectAnswers = (attempt) => {
-  if (!attempt?.answers) return 0;
-  return Object.values(attempt.answers).filter((answer) => answer?.isCorrect).length;
+    return { success: true, data: attempts };
+  } catch (error) {
+    console.error('Error getting class exam attempts:', error);
+    return { success: false, error: error.message };
+  }
 };
 
 // Get student's all exam attempts
@@ -333,15 +348,20 @@ export const getStudentExamAttempts = async (studentId) => {
   try {
     const q = query(
       collection(db, 'examAttempts'),
-      where('studentId', '==', studentId),
-      orderBy('submittedAt', 'desc')
+      where('studentId', '==', studentId)
     );
 
     const querySnapshot = await getDocs(q);
-    const attempts = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
+    const attempts = querySnapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data()
     }));
+
+    attempts.sort((a, b) => {
+      const aTime = a.submittedAt?.seconds || 0;
+      const bTime = b.submittedAt?.seconds || 0;
+      return bTime - aTime;
+    });
 
     return {
       success: true,
@@ -371,7 +391,6 @@ export const getAttemptWithDetails = async (attemptId) => {
     const attemptData = attemptSnap.data();
     const { examId, answers } = attemptData;
 
-    // Get exam
     const examSnap = await getDoc(doc(db, 'exams', examId));
     if (!examSnap.exists()) {
       return {
@@ -383,7 +402,6 @@ export const getAttemptWithDetails = async (attemptId) => {
     const examData = examSnap.data();
     const questionRefs = examData.questionIds || [];
 
-    // Get questions with answers
     const questionsWithAnswers = [];
     for (const questionRef of questionRefs) {
       const questionId = questionRef.id || questionRef;
@@ -417,4 +435,9 @@ export const getAttemptWithDetails = async (attemptId) => {
       error: error.message
     };
   }
+};
+
+export const countCorrectAnswers = (attempt) => {
+  if (!attempt?.answers) return 0;
+  return Object.values(attempt.answers).filter((answer) => answer?.isCorrect).length;
 };

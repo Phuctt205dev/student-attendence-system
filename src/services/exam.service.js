@@ -115,14 +115,18 @@ const pickExamSnapshotFields = (examId, examData) => ({
 });
 
 export const normalizeClassExamRecord = (record, classId) => {
-  const examId = record.sourceExamId || record.id;
-  const visibility = record.visibility || getClassExamSettings(record, classId).visibility;
+  const instanceId = record.id;
+  const sourceExamId = record.sourceExamId || record.id;
+  const visibility = record.visibility ?? getClassExamSettings(record, classId).visibility;
   const startTime = record.startTime ?? getClassExamSettings(record, classId).startTime;
   const endTime = record.endTime ?? getClassExamSettings(record, classId).endTime;
 
   return {
     ...record,
-    id: examId,
+    id: instanceId,
+    instanceId,
+    sourceExamId,
+    examId: sourceExamId,
     classId,
     visibility,
     startTime,
@@ -194,8 +198,8 @@ const upsertClassExamSnapshot = async (classId, examId, examData, overrides = {}
   );
 };
 
-export const getExamDataForClass = async (classId, examId) => {
-  const classExamRef = doc(db, 'classes', classId, 'classExams', examId);
+export const getExamDataForClass = async (classId, classExamInstanceId) => {
+  const classExamRef = doc(db, 'classes', classId, 'classExams', classExamInstanceId);
   const classExamSnap = await getDoc(classExamRef);
 
   if (classExamSnap.exists()) {
@@ -205,7 +209,7 @@ export const getExamDataForClass = async (classId, examId) => {
     };
   }
 
-  const masterSnap = await getDoc(doc(db, 'exams', examId));
+  const masterSnap = await getDoc(doc(db, 'exams', classExamInstanceId));
   if (masterSnap.exists() && (masterSnap.data().classIds || []).includes(classId)) {
     return {
       success: true,
@@ -669,47 +673,47 @@ export const setExamSchedule = async (examId, startTime, endTime) => {
   }
 };
 
-// Per-class visibility (lock / unlock for one class)
-export const setClassExamVisibility = async (examId, classId, visibility) => {
+// Per-class visibility (lock / unlock) — classExamInstanceId = doc id in classExams
+export const setClassExamVisibility = async (classExamInstanceId, classId, visibility) => {
   try {
-    const examRef = doc(db, 'exams', examId);
-    const examSnap = await getDoc(examRef);
+    const classExamRef = doc(db, 'classes', classId, 'classExams', classExamInstanceId);
+    const classExamSnap = await getDoc(classExamRef);
 
-    if (!examSnap.exists()) {
-      return { success: false, error: 'Exam not found' };
+    if (!classExamSnap.exists()) {
+      return { success: false, error: 'Class exam not found' };
     }
 
-    const examData = examSnap.data();
-    const classSettings = { ...(examData.classSettings || {}) };
-    const existing = classSettings[classId] || {};
+    const instanceData = classExamSnap.data();
+    const sourceExamId = instanceData.sourceExamId;
+    const existingStart = instanceData.startTime ?? null;
+    const existingEnd = instanceData.endTime ?? null;
 
-    classSettings[classId] = {
-      ...existing,
+    await updateDoc(classExamRef, {
       visibility,
-      startTime: existing.startTime ?? null,
-      endTime: existing.endTime ?? null
-    };
-
-    const updates = {
-      classSettings,
       updatedAt: serverTimestamp()
-    };
-
-    if (visibility === 'public') {
-      updates.visibleToClassIds = arrayUnion(classId);
-    } else {
-      updates.visibleToClassIds = arrayRemove(classId);
-    }
-
-    await updateDoc(examRef, updates);
-
-    await upsertClassExamSnapshot(classId, examId, examData, {
-      visibility,
-      startTime: existing.startTime ?? null,
-      endTime: existing.endTime ?? null
     });
 
-    return { success: true, data: { id: examId, classId, visibility } };
+    if (sourceExamId) {
+      const examRef = doc(db, 'exams', sourceExamId);
+      const examSnap = await getDoc(examRef);
+      if (examSnap.exists()) {
+        const classSettings = { ...(examSnap.data().classSettings || {}) };
+        classSettings[classId] = {
+          visibility,
+          startTime: existingStart,
+          endTime: existingEnd
+        };
+        const updates = { classSettings, updatedAt: serverTimestamp() };
+        if (visibility === 'public') {
+          updates.visibleToClassIds = arrayUnion(classId);
+        } else {
+          updates.visibleToClassIds = arrayRemove(classId);
+        }
+        await updateDoc(examRef, updates);
+      }
+    }
+
+    return { success: true, data: { id: classExamInstanceId, classId, visibility } };
   } catch (error) {
     console.error('Error setting class exam visibility:', error);
     return { success: false, error: error.message };
@@ -717,35 +721,44 @@ export const setClassExamVisibility = async (examId, classId, visibility) => {
 };
 
 // Per-class schedule
-export const setClassExamSchedule = async (examId, classId, startTime, endTime) => {
+export const setClassExamSchedule = async (classExamInstanceId, classId, startTime, endTime) => {
   try {
-    const examRef = doc(db, 'exams', examId);
-    const examSnap = await getDoc(examRef);
+    const classExamRef = doc(db, 'classes', classId, 'classExams', classExamInstanceId);
+    const classExamSnap = await getDoc(classExamRef);
 
-    if (!examSnap.exists()) {
-      return { success: false, error: 'Exam not found' };
+    if (!classExamSnap.exists()) {
+      return { success: false, error: 'Class exam not found' };
     }
 
-    const examData = examSnap.data();
-    const classSettings = { ...(examData.classSettings || {}) };
-    const existing = classSettings[classId] || {};
+    const instanceData = classExamSnap.data();
+    const sourceExamId = instanceData.sourceExamId;
+    const visibility = instanceData.visibility || 'private';
 
     const schedule = {
-      visibility: existing.visibility || 'private',
+      visibility,
       startTime: startTime || null,
       endTime: endTime || null
     };
 
-    classSettings[classId] = schedule;
-
-    await updateDoc(examRef, {
-      classSettings,
+    await updateDoc(classExamRef, {
+      ...schedule,
       updatedAt: serverTimestamp()
     });
 
-    await upsertClassExamSnapshot(classId, examId, examData, schedule);
+    if (sourceExamId) {
+      const examRef = doc(db, 'exams', sourceExamId);
+      const examSnap = await getDoc(examRef);
+      if (examSnap.exists()) {
+        const classSettings = { ...(examSnap.data().classSettings || {}) };
+        classSettings[classId] = schedule;
+        await updateDoc(examRef, {
+          classSettings,
+          updatedAt: serverTimestamp()
+        });
+      }
+    }
 
-    return { success: true, data: { id: examId, classId } };
+    return { success: true, data: { id: classExamInstanceId, classId } };
   } catch (error) {
     console.error('Error setting class exam schedule:', error);
     return { success: false, error: error.message };
@@ -753,20 +766,24 @@ export const setClassExamSchedule = async (examId, classId, startTime, endTime) 
 };
 
 // Get exam with questions (fetch question details from subcollections)
-export const getExamWithQuestions = async (examId, classId = null) => {
+export const getExamWithQuestions = async (
+  sourceExamId,
+  classId = null,
+  classExamInstanceId = null
+) => {
   try {
     let examData;
-    let examDocId = examId;
+    let examDocId = sourceExamId;
 
-    if (classId) {
-      const classResult = await getExamDataForClass(classId, examId);
+    if (classId && classExamInstanceId) {
+      const classResult = await getExamDataForClass(classId, classExamInstanceId);
       if (!classResult.success) {
         return classResult;
       }
       examData = classResult.data;
-      examDocId = examId;
+      examDocId = classResult.data.sourceExamId || sourceExamId;
     } else {
-      const examSnap = await getDoc(doc(db, 'exams', examId));
+      const examSnap = await getDoc(doc(db, 'exams', sourceExamId));
       if (!examSnap.exists()) {
         return { success: false, error: 'Exam not found' };
       }
@@ -806,10 +823,10 @@ export const getExamWithQuestions = async (examId, classId = null) => {
   }
 };
 
-// Assign exam to additional classes (independent snapshot per class)
-export const assignExamToClass = async (examId, classId) => {
+// Assign exam — creates a new independent instance per assignment
+export const assignExamToClass = async (sourceExamId, classId) => {
   try {
-    const examRef = doc(db, 'exams', examId);
+    const examRef = doc(db, 'exams', sourceExamId);
     const examSnap = await getDoc(examRef);
 
     if (!examSnap.exists()) {
@@ -825,10 +842,15 @@ export const assignExamToClass = async (examId, classId) => {
       endTime: null
     };
 
-    await upsertClassExamSnapshot(classId, examId, examData, {
+    const instanceRef = await addDoc(collection(db, 'classes', classId, 'classExams'), {
+      ...pickExamSnapshotFields(sourceExamId, examData),
+      sourceExamId,
+      classId,
       visibility: 'private',
       startTime: null,
-      endTime: null
+      endTime: null,
+      assignedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     });
 
     await updateDoc(examRef, {
@@ -837,34 +859,74 @@ export const assignExamToClass = async (examId, classId) => {
       updatedAt: serverTimestamp()
     });
 
-    return { success: true, data: { id: examId } };
+    return {
+      success: true,
+      data: {
+        id: instanceRef.id,
+        instanceId: instanceRef.id,
+        sourceExamId
+      }
+    };
   } catch (error) {
     console.error('Error assigning exam:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Remove exam from class (does not delete master exam or other classes)
-export const removeExamFromClass = async (examId, classId) => {
+// Remove class exam instance and its attempts (fresh state if re-assigned)
+export const removeExamFromClass = async (classId, classExamInstanceId) => {
   try {
-    const examRef = doc(db, 'exams', examId);
-    const examSnap = await getDoc(examRef);
+    const classExamRef = doc(db, 'classes', classId, 'classExams', classExamInstanceId);
+    const classExamSnap = await getDoc(classExamRef);
 
-    if (examSnap.exists()) {
-      const classSettings = { ...(examSnap.data().classSettings || {}) };
-      delete classSettings[classId];
-
-      await updateDoc(examRef, {
-        classIds: arrayRemove(classId),
-        classSettings,
-        visibleToClassIds: arrayRemove(classId),
-        updatedAt: serverTimestamp()
-      });
+    if (!classExamSnap.exists()) {
+      return { success: false, error: 'Class exam not found' };
     }
 
-    await deleteDoc(doc(db, 'classes', classId, 'classExams', examId));
+    const sourceExamId = classExamSnap.data().sourceExamId;
 
-    return { success: true, data: { id: examId } };
+    const attemptsByInstance = query(
+      collection(db, 'examAttempts'),
+      where('classExamInstanceId', '==', classExamInstanceId)
+    );
+    const instanceAttempts = await getDocs(attemptsByInstance);
+
+    const deletePromises = instanceAttempts.docs.map((d) => deleteDoc(d.ref));
+
+    if (sourceExamId) {
+      const legacyAttempts = query(
+        collection(db, 'examAttempts'),
+        where('examId', '==', sourceExamId),
+        where('classId', '==', classId)
+      );
+      const legacySnap = await getDocs(legacyAttempts);
+      legacySnap.docs.forEach((d) => deletePromises.push(deleteDoc(d.ref)));
+    }
+
+    await Promise.all(deletePromises);
+    await deleteDoc(classExamRef);
+
+    const remainingSnap = await getDocs(collection(db, 'classes', classId, 'classExams'));
+    const stillAssigned = remainingSnap.docs.some(
+      (d) => d.data().sourceExamId === sourceExamId
+    );
+
+    if (sourceExamId && !stillAssigned) {
+      const examRef = doc(db, 'exams', sourceExamId);
+      const examSnap = await getDoc(examRef);
+      if (examSnap.exists()) {
+        const classSettings = { ...(examSnap.data().classSettings || {}) };
+        delete classSettings[classId];
+        await updateDoc(examRef, {
+          classIds: arrayRemove(classId),
+          classSettings,
+          visibleToClassIds: arrayRemove(classId),
+          updatedAt: serverTimestamp()
+        });
+      }
+    }
+
+    return { success: true, data: { id: classExamInstanceId, sourceExamId } };
   } catch (error) {
     console.error('Error removing exam from class:', error);
     return { success: false, error: error.message };

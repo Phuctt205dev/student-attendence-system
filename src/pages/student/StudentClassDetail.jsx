@@ -81,7 +81,7 @@ const StudentClassDetail = () => {
     if (result.success) {
       const withAttempts = await Promise.all(
         (result.data || []).map(async (exam) => {
-          const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id, classId);
+          const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id);
           return {
             ...exam,
             classId,
@@ -149,14 +149,26 @@ const StudentClassDetail = () => {
       return;
     }
 
+    const sourceExamId = exam.sourceExamId || exam.examId;
+    const instanceId = exam.id;
+
     if (exam.attempt?.status === 'in-progress') {
-      navigate(`/student/exams/${exam.id}/take`, { state: { classId } });
+      navigate(`/student/exams/${sourceExamId}/take`, {
+        state: { classId, classExamInstanceId: instanceId }
+      });
       return;
     }
 
-    const result = await startExamAttempt(userProfile.uid, exam.id, classId);
+    const result = await startExamAttempt(
+      userProfile.uid,
+      sourceExamId,
+      classId,
+      instanceId
+    );
     if (result.success) {
-      navigate(`/student/exams/${exam.id}/take`, { state: { classId } });
+      navigate(`/student/exams/${sourceExamId}/take`, {
+        state: { classId, classExamInstanceId: instanceId }
+      });
     } else {
       setError(result.error || 'Không thể bắt đầu bài thi');
     }

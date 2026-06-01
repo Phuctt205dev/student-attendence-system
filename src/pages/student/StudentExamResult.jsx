@@ -13,6 +13,7 @@ const StudentExamResult = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const classId = location.state?.classId;
+  const classExamInstanceId = location.state?.classExamInstanceId;
 
   const [attempt, setAttempt] = useState(null);
   const [details, setDetails] = useState(null);
@@ -24,13 +25,16 @@ const StudentExamResult = () => {
       if (!userProfile?.uid || !examId) return;
 
       setLoading(true);
-      if (!classId) {
+      if (!classId || !classExamInstanceId) {
         setError('Thiếu thông tin lớp. Vui lòng mở kết quả từ trang lớp học.');
         setLoading(false);
         return;
       }
 
-      const attemptResult = await getStudentExamAttempt(userProfile.uid, examId, classId);
+      const attemptResult = await getStudentExamAttempt(
+        userProfile.uid,
+        classExamInstanceId
+      );
       if (!attemptResult.success) {
         setError(attemptResult.error || 'Không tìm thấy kết quả');
         setLoading(false);
@@ -47,7 +51,7 @@ const StudentExamResult = () => {
     };
 
     loadResult();
-  }, [userProfile?.uid, examId]);
+  }, [userProfile?.uid, examId, classId, classExamInstanceId]);
 
   const score = attempt?.score ?? 0;
   const totalScore = attempt?.totalScore ?? details?.exam?.totalPoints ?? 0;

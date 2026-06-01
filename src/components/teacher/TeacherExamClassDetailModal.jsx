@@ -14,7 +14,7 @@ const TeacherExamClassDetailModal = ({ exam, classId, isOpen, onClose }) => {
     setLoading(true);
     const [studentsResult, attemptsResult] = await Promise.all([
       getClassStudents(classId),
-      getExamAttemptsForClass(exam.id, classId)
+      getExamAttemptsForClass(exam.id)
     ]);
 
     if (studentsResult.success) {

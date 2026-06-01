@@ -58,11 +58,7 @@ const StudentExams = () => {
       if (examsResult.success && examsResult.data) {
         // Get student's attempt if exists
         for (const exam of examsResult.data) {
-          const attemptResult = await getStudentExamAttempt(
-            userProfile.uid,
-            exam.id,
-            classId
-          );
+          const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id);
           allExams.push({
             ...exam,
             classId,
@@ -74,7 +70,7 @@ const StudentExams = () => {
 
     // Remove duplicates (same exam from different classes)
     const uniqueExams = Array.from(
-      new Map(allExams.map(exam => [exam.id, exam])).values()
+      new Map(allExams.map((exam) => [`${exam.classId}-${exam.id}`, exam])).values()
     );
 
     setExams(uniqueExams);
@@ -89,16 +85,27 @@ const StudentExams = () => {
     }
 
     // Check if already has in-progress attempt
+    const sourceExamId = exam.sourceExamId || exam.examId;
+    const instanceId = exam.id;
+
     if (exam.attempt && exam.attempt.status === 'in-progress') {
-      navigate(`/student/exams/${exam.id}/take`, { state: { classId: exam.classId } });
+      navigate(`/student/exams/${sourceExamId}/take`, {
+        state: { classId: exam.classId, classExamInstanceId: instanceId }
+      });
       return;
     }
 
-    // Start new attempt
-    const result = await startExamAttempt(userProfile.uid, exam.id, exam.classId);
+    const result = await startExamAttempt(
+      userProfile.uid,
+      sourceExamId,
+      exam.classId,
+      instanceId
+    );
 
     if (result.success) {
-      navigate(`/student/exams/${exam.id}/take`, { state: { classId: exam.classId } });
+      navigate(`/student/exams/${sourceExamId}/take`, {
+        state: { classId: exam.classId, classExamInstanceId: instanceId }
+      });
     } else {
       setError(result.error);
     }
@@ -224,7 +231,11 @@ const StudentExams = () => {
               <Button
                 variant="primary"
                 icon={<PlayCircle className="w-4 h-4" />}
-                onClick={() => navigate(`/student/exams/${exam.id}/take`, { state: { classId: exam.classId } })}
+                onClick={() =>
+                  navigate(`/student/exams/${exam.sourceExamId || exam.examId}/take`, {
+                    state: { classId: exam.classId, classExamInstanceId: exam.id }
+                  })
+                }
               >
                 Continue
               </Button>
@@ -234,7 +245,11 @@ const StudentExams = () => {
               <Button
                 variant="outline"
                 icon={<ChevronRight className="w-4 h-4" />}
-                onClick={() => navigate(`/student/exams/${exam.id}/result`)}
+                onClick={() =>
+                  navigate(`/student/exams/${exam.sourceExamId || exam.examId}/result`, {
+                    state: { classId: exam.classId, classExamInstanceId: exam.id }
+                  })
+                }
               >
                 View Result
               </Button>
@@ -244,7 +259,11 @@ const StudentExams = () => {
               <Button
                 variant="outline"
                 icon={<ChevronRight className="w-4 h-4" />}
-                onClick={() => navigate(`/student/exams/${exam.id}/take`, { state: { classId: exam.classId } })}
+                onClick={() =>
+                  navigate(`/student/exams/${exam.sourceExamId || exam.examId}/take`, {
+                    state: { classId: exam.classId, classExamInstanceId: exam.id }
+                  })
+                }
               >
                 View Details
               </Button>

@@ -34,6 +34,7 @@ const StudentExamTake = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const classId = location.state?.classId || null;
+  const classExamInstanceId = location.state?.classExamInstanceId || null;
 
   const startTime = exam?.startTime?.toDate?.() || (exam?.startTime ? new Date(exam.startTime) : null);
   const endTime = exam?.endTime?.toDate?.() || (exam?.endTime ? new Date(exam.endTime) : null);
@@ -57,13 +58,19 @@ const StudentExamTake = () => {
       setError('');
 
       const resolvedClassId = classId || null;
-      if (!resolvedClassId) {
-        setError('Thiếu thông tin lớp học. Vui lòng vào bài thi từ trang lớp.');
+      const resolvedInstanceId = classExamInstanceId || null;
+
+      if (!resolvedClassId || !resolvedInstanceId) {
+        setError('Thiếu thông tin lớp học. Vui lòng vào bài thi từ trang lớp học.');
         setLoading(false);
         return;
       }
 
-      const examResult = await getExamWithQuestions(examId, resolvedClassId);
+      const examResult = await getExamWithQuestions(
+        examId,
+        resolvedClassId,
+        resolvedInstanceId
+      );
       if (!examResult.success) {
         setError(examResult.error || 'Không tải được bài thi');
         setLoading(false);
@@ -78,14 +85,18 @@ const StudentExamTake = () => {
 
       const attemptResult = await getStudentExamAttempt(
         userProfile.uid,
-        examId,
-        resolvedClassId
+        resolvedInstanceId
       );
       if (attemptResult.success) {
         setAttempt(attemptResult.data);
         setAnswers(attemptResult.data.answers || {});
       } else if (access.allowed) {
-        const startResult = await startExamAttempt(userProfile.uid, examId, resolvedClassId);
+        const startResult = await startExamAttempt(
+          userProfile.uid,
+          examId,
+          resolvedClassId,
+          resolvedInstanceId
+        );
         if (startResult.success) {
           setAttempt(startResult.data);
         } else {
@@ -99,7 +110,7 @@ const StudentExamTake = () => {
     };
 
     loadExam();
-  }, [userProfile?.uid, examId, classId]);
+  }, [userProfile?.uid, examId, classId, classExamInstanceId]);
 
   const handleSelectAnswer = async (questionId, selected) => {
     if (!attempt?.id) return;
@@ -121,7 +132,9 @@ const StudentExamTake = () => {
     setSubmitting(false);
 
     if (result.success) {
-      navigate(`/student/exams/${examId}/result`);
+      navigate(`/student/exams/${examId}/result`, {
+        state: { classId, classExamInstanceId }
+      });
     } else {
       setError(result.error || 'Không thể nộp bài');
     }
@@ -165,7 +178,14 @@ const StudentExamTake = () => {
                   <p className="text-gray-900 font-semibold">Bạn đã nộp bài.</p>
                   <p className="text-sm text-gray-600">Xem lại kết quả của bạn.</p>
                 </div>
-                <Button variant="primary" onClick={() => navigate(`/student/exams/${examId}/result`)}>
+                <Button
+                  variant="primary"
+                  onClick={() =>
+                    navigate(`/student/exams/${examId}/result`, {
+                      state: { classId, classExamInstanceId }
+                    })
+                  }
+                >
                   Xem kết quả
                 </Button>
               </div>

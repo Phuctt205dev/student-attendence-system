@@ -269,8 +269,9 @@ service cloud.firestore {
       allow update: if signedIn() &&
         resource.data.studentId == request.auth.uid;
 
-      // Không cho phép xóa attempts
-      allow delete: if false;
+      // Giáo viên chủ bài thi có thể xóa attempt (vd. gỡ bài khỏi lớp)
+      allow delete: if signedIn() &&
+        get(/databases/$(database)/documents/exams/$(resource.data.examId)).data.teacherId == request.auth.uid;
     }
 
     // =========================

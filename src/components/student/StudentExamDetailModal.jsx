@@ -25,7 +25,7 @@ const StudentExamDetailModal = ({ exam, classId, studentId, isOpen, onClose }) =
       return;
     }
 
-    const attemptResult = await getStudentExamAttempt(studentId, exam.id, classId);
+    const attemptResult = await getStudentExamAttempt(studentId, exam.id);
 
     if (attemptResult.success) {
       setAttempt(attemptResult.data);
@@ -134,7 +134,9 @@ const StudentExamDetailModal = ({ exam, classId, studentId, isOpen, onClose }) =
                     icon={<PlayCircle className="w-4 h-4" />}
                     onClick={() => {
                       onClose();
-                      navigate(`/student/exams/${exam.id}/take`, { state: { classId } });
+                      navigate(`/student/exams/${exam.sourceExamId || exam.examId}/take`, {
+                        state: { classId, classExamInstanceId: exam.id }
+                      });
                     }}
                   >
                     Tiếp tục làm bài
@@ -146,7 +148,9 @@ const StudentExamDetailModal = ({ exam, classId, studentId, isOpen, onClose }) =
                     icon={<ChevronRight className="w-4 h-4" />}
                     onClick={() => {
                       onClose();
-                      navigate(`/student/exams/${exam.id}/result`, { state: { classId } });
+                      navigate(`/student/exams/${exam.sourceExamId || exam.examId}/result`, {
+                        state: { classId, classExamInstanceId: exam.id }
+                      });
                     }}
                   >
                     Xem chi tiết đầy đủ
