@@ -29,6 +29,7 @@ import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import QuestionForm from '../../components/teacher/QuestionForm';
+import GenerateQuestionsFromFileModal from '../../components/teacher/GenerateQuestionsFromFileModal';
 
 const TopicDetail = () => {
   const { userProfile } = useAuth();
