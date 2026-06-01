@@ -77,9 +77,13 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
     setAvailableLoading(true);
     const result = await getExamsBySubject(subjectId, teacherId);
     if (result.success) {
-      const notInClass = (result.data || []).filter(
-        (exam) => !(exam.classIds || []).includes(classId)
+      const assignedResult = await getExamsByClassForTeacher(classId, teacherId);
+      const assignedSourceIds = new Set(
+        (assignedResult.success ? assignedResult.data || [] : []).map(
+          (e) => e.sourceExamId || e.id
+        )
       );
+      const notInClass = (result.data || []).filter((exam) => !assignedSourceIds.has(exam.id));
       setAvailableExams(notInClass);
     } else if (onError) {
       onError(result.error || 'Không thể tải bài thi');

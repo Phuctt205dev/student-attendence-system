@@ -4,7 +4,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import StudentLayout from '../../layouts/StudentLayout';
 import {
   getExamWithQuestions,
-  mergeExamForClass,
   canStudentTakeClassExam
 } from '../../services/exam.service';
 import {
@@ -77,7 +76,7 @@ const StudentExamTake = () => {
         return;
       }
 
-      const examData = mergeExamForClass(examResult.data, resolvedClassId);
+      const examData = examResult.data;
       const access = canStudentTakeClassExam(examData, resolvedClassId);
 
       setExam(examData);
