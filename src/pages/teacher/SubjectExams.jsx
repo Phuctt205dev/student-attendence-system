@@ -140,9 +140,13 @@ const SubjectExams = () => {
     setDeletingId(exam.id);
     const result = await deleteExam(exam.id);
     if (result.success) {
-      setSuccess('Đã xóa bài thi');
+      setSuccess(
+        result.data?.detached
+          ? 'Đã xóa khỏi môn học. Bài thi tại các lớp đã gán vẫn giữ nguyên.'
+          : 'Đã xóa bài thi'
+      );
       loadSubjectExams();
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
     } else {
       setError(result.error || 'Không thể xóa bài thi');
       setTimeout(() => setError(''), 3000);

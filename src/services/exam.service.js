@@ -4,6 +4,7 @@ import {
   getDoc,
   getDocs,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -82,9 +83,123 @@ export const mergeExamForClass = (exam, classId) => {
 
 const isExamExpired = (exam) => isScheduleExpired(exam.endTime);
 
-const isClassExamActiveForStudents = (exam, classId) => {
+const pickExamSnapshotFields = (examId, examData) => ({
+  sourceExamId: examId,
+  subjectId: examData.subjectId,
+  teacherId: examData.teacherId,
+  title: examData.title,
+  description: examData.description || '',
+  questionIds: examData.questionIds || [],
+  topicIds: examData.topicIds || [],
+  totalQuestions: examData.totalQuestions,
+  durationMinutes: examData.durationMinutes,
+  totalPoints: examData.totalPoints,
+  passingScore: examData.passingScore,
+  visibility: 'private',
+  startTime: null,
+  endTime: null
+});
+
+export const normalizeClassExamRecord = (record, classId) => {
+  const examId = record.sourceExamId || record.id;
+  const visibility = record.visibility || getClassExamSettings(record, classId).visibility;
+  const startTime = record.startTime ?? getClassExamSettings(record, classId).startTime;
+  const endTime = record.endTime ?? getClassExamSettings(record, classId).endTime;
+
+  return {
+    ...record,
+    id: examId,
+    classId,
+    visibility,
+    startTime,
+    endTime
+  };
+};
+
+export const isClassExamVisibleInList = (exam, classId) => {
   const settings = getClassExamSettings(exam, classId);
-  return settings.visibility === 'public' && !isScheduleExpired(settings.endTime);
+  if (settings.visibility !== 'public') return false;
+  if (settings.endTime && isScheduleExpired(settings.endTime)) return false;
+  return true;
+};
+
+export const canStudentTakeClassExam = (exam, classId) => {
+  const settings = getClassExamSettings(exam, classId);
+
+  if (settings.visibility !== 'public') {
+    return { allowed: false, message: 'Bài thi chưa được mở cho lớp này' };
+  }
+
+  const start = toDateValue(settings.startTime);
+  const end = toDateValue(settings.endTime);
+
+  if (!start || !end) {
+    return {
+      allowed: false,
+      message: 'Giáo viên chưa thiết lập thời gian làm bài (bắt đầu và kết thúc)'
+    };
+  }
+
+  const now = new Date();
+  if (now < start) {
+    return { allowed: false, message: 'Bài thi chưa đến giờ bắt đầu' };
+  }
+  if (now > end) {
+    return { allowed: false, message: 'Bài thi đã hết thời gian làm bài' };
+  }
+
+  return { allowed: true, message: '' };
+};
+
+const isClassExamActiveForStudents = (exam, classId) => isClassExamVisibleInList(exam, classId);
+
+const getClassExamsSnapshot = async (classId) => {
+  const snapshot = await getDocs(collection(db, 'classes', classId, 'classExams'));
+  return snapshot.docs.map((docSnap) =>
+    normalizeClassExamRecord({ id: docSnap.id, ...docSnap.data() }, classId)
+  );
+};
+
+const upsertClassExamSnapshot = async (classId, examId, examData, overrides = {}) => {
+  const classExamRef = doc(db, 'classes', classId, 'classExams', examId);
+  const existing = await getDoc(classExamRef);
+  const base = existing.exists()
+    ? existing.data()
+    : pickExamSnapshotFields(examId, examData);
+
+  await setDoc(
+    classExamRef,
+    {
+      ...base,
+      ...pickExamSnapshotFields(examId, examData),
+      ...overrides,
+      updatedAt: serverTimestamp(),
+      ...(existing.exists() ? {} : { assignedAt: serverTimestamp() })
+    },
+    { merge: true }
+  );
+};
+
+export const getExamDataForClass = async (classId, examId) => {
+  const classExamRef = doc(db, 'classes', classId, 'classExams', examId);
+  const classExamSnap = await getDoc(classExamRef);
+
+  if (classExamSnap.exists()) {
+    return {
+      success: true,
+      data: normalizeClassExamRecord({ id: classExamSnap.id, ...classExamSnap.data() }, classId)
+    };
+  }
+
+  const masterSnap = await getDoc(doc(db, 'exams', examId));
+  if (masterSnap.exists() && (masterSnap.data().classIds || []).includes(classId)) {
+    return {
+      success: true,
+      data: mergeExamForClass({ id: masterSnap.id, ...masterSnap.data() }, classId)
+    };
+  }
+
+  return { success: false, error: 'Exam not found for this class' };
 };
 
 // Create exam with topic-based question selection
@@ -265,29 +380,31 @@ export const closeExam = async (examId) => {
   }
 };
 
-// Delete exam (only draft exams)
+// Delete exam from subject list (class copies in classExams are kept)
 export const deleteExam = async (examId) => {
   try {
-    const exam = await getDoc(doc(db, 'exams', examId));
+    const examRef = doc(db, 'exams', examId);
+    const exam = await getDoc(examRef);
 
     if (!exam.exists()) {
       return { success: false, error: 'Exam not found' };
     }
 
-    const visibility = normalizeExamVisibility(exam.data());
-    const hasPublicClass = (exam.data().visibleToClassIds || []).length > 0;
-    if (visibility !== 'private' || hasPublicClass) {
-      return {
-        success: false,
-        error: 'Chỉ xóa được bài thi chưa mở cho lớp nào. Hãy khóa tất cả lớp trước.'
-      };
+    const classIds = exam.data().classIds || [];
+
+    if (classIds.length > 0) {
+      await updateDoc(examRef, {
+        hiddenFromSubject: true,
+        updatedAt: serverTimestamp()
+      });
+      return { success: true, data: { id: examId, detached: true } };
     }
 
-    const q = query(
+    const attemptsQuery = query(
       collection(db, 'examAttempts'),
       where('examId', '==', examId)
     );
-    const attempts = await getDocs(q);
+    const attempts = await getDocs(attemptsQuery);
 
     if (attempts.size > 0) {
       return {
@@ -296,9 +413,9 @@ export const deleteExam = async (examId) => {
       };
     }
 
-    await deleteDoc(doc(db, 'exams', examId));
+    await deleteDoc(examRef);
 
-    return { success: true, data: { id: examId } };
+    return { success: true, data: { id: examId, detached: false } };
   } catch (error) {
     console.error('Error deleting exam:', error);
     return { success: false, error: error.message };
@@ -347,37 +464,27 @@ export const getTeacherExams = async (teacherId) => {
   }
 };
 
-// Get exams assigned to a class (student view — only published for this class)
+// Get exams assigned to a class (student view)
 export const getExamsByClass = async (classId) => {
   try {
-    const examMap = new Map();
+    let exams = await getClassExamsSnapshot(classId);
 
-    const publishedQuery = query(
-      collection(db, 'exams'),
-      where('visibleToClassIds', 'array-contains', classId)
-    );
-    const publishedSnapshot = await getDocs(publishedQuery);
-    publishedSnapshot.docs.forEach((docSnap) => {
-      examMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
-    });
+    if (exams.length === 0) {
+      const legacyQuery = query(
+        collection(db, 'exams'),
+        where('classIds', 'array-contains', classId)
+      );
+      const legacySnapshot = await getDocs(legacyQuery);
+      exams = legacySnapshot.docs.map((docSnap) =>
+        mergeExamForClass({ id: docSnap.id, ...docSnap.data() }, classId)
+      );
+    }
 
-    const legacyQuery = query(
-      collection(db, 'exams'),
-      where('classIds', 'array-contains', classId)
-    );
-    const legacySnapshot = await getDocs(legacyQuery);
-    legacySnapshot.docs.forEach((docSnap) => {
-      if (!examMap.has(docSnap.id)) {
-        examMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
-      }
-    });
-
-    const exams = Array.from(examMap.values())
+    exams = exams
       .filter((exam) => isClassExamActiveForStudents(exam, classId))
-      .map((exam) => mergeExamForClass(exam, classId))
       .sort((a, b) => {
-        const aTime = a.createdAt?.seconds || 0;
-        const bTime = b.createdAt?.seconds || 0;
+        const aTime = a.assignedAt?.seconds || a.createdAt?.seconds || 0;
+        const bTime = b.assignedAt?.seconds || b.createdAt?.seconds || 0;
         return bTime - aTime;
       });
 
@@ -391,23 +498,24 @@ export const getExamsByClass = async (classId) => {
 // Get all exams assigned to a class (teacher view)
 export const getExamsByClassForTeacher = async (classId, teacherId) => {
   try {
-    const q = query(
-      collection(db, 'exams'),
-      where('classIds', 'array-contains', classId)
-    );
+    let exams = await getClassExamsSnapshot(classId);
 
-    const querySnapshot = await getDocs(q);
-    const exams = querySnapshot.docs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-        visibility: normalizeExamVisibility(docSnap.data())
-      }))
+    if (exams.length === 0) {
+      const q = query(
+        collection(db, 'exams'),
+        where('classIds', 'array-contains', classId)
+      );
+      const querySnapshot = await getDocs(q);
+      exams = querySnapshot.docs.map((docSnap) =>
+        mergeExamForClass({ id: docSnap.id, ...docSnap.data() }, classId)
+      );
+    }
+
+    exams = exams
       .filter((exam) => !teacherId || exam.teacherId === teacherId)
-      .map((exam) => mergeExamForClass(exam, classId))
       .sort((a, b) => {
-        const aTime = a.createdAt?.seconds || 0;
-        const bTime = b.createdAt?.seconds || 0;
+        const aTime = a.assignedAt?.seconds || a.createdAt?.seconds || 0;
+        const bTime = b.assignedAt?.seconds || b.createdAt?.seconds || 0;
         return bTime - aTime;
       });
 
@@ -456,11 +564,13 @@ export const getExamsBySubject = async (subjectId, teacherId) => {
     );
 
     const querySnapshot = await getDocs(q);
-    let exams = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      visibility: normalizeExamVisibility(doc.data())
-    }));
+    let exams = querySnapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        visibility: normalizeExamVisibility(docSnap.data())
+      }))
+      .filter((exam) => !exam.hiddenFromSubject);
 
     if (teacherId) {
       exams = exams.filter((exam) => exam.teacherId === teacherId);
@@ -544,6 +654,12 @@ export const setClassExamVisibility = async (examId, classId, visibility) => {
 
     await updateDoc(examRef, updates);
 
+    await upsertClassExamSnapshot(classId, examId, examData, {
+      visibility,
+      startTime: existing.startTime ?? null,
+      endTime: existing.endTime ?? null
+    });
+
     return { success: true, data: { id: examId, classId, visibility } };
   } catch (error) {
     console.error('Error setting class exam visibility:', error);
@@ -565,16 +681,20 @@ export const setClassExamSchedule = async (examId, classId, startTime, endTime) 
     const classSettings = { ...(examData.classSettings || {}) };
     const existing = classSettings[classId] || {};
 
-    classSettings[classId] = {
+    const schedule = {
       visibility: existing.visibility || 'private',
       startTime: startTime || null,
       endTime: endTime || null
     };
 
+    classSettings[classId] = schedule;
+
     await updateDoc(examRef, {
       classSettings,
       updatedAt: serverTimestamp()
     });
+
+    await upsertClassExamSnapshot(classId, examId, examData, schedule);
 
     return { success: true, data: { id: examId, classId } };
   } catch (error) {
@@ -584,15 +704,25 @@ export const setClassExamSchedule = async (examId, classId, startTime, endTime) 
 };
 
 // Get exam with questions (fetch question details from subcollections)
-export const getExamWithQuestions = async (examId, subjectId) => {
+export const getExamWithQuestions = async (examId, classId = null) => {
   try {
-    const examSnap = await getDoc(doc(db, 'exams', examId));
+    let examData;
+    let examDocId = examId;
 
-    if (!examSnap.exists()) {
-      return { success: false, error: 'Exam not found' };
+    if (classId) {
+      const classResult = await getExamDataForClass(classId, examId);
+      if (!classResult.success) {
+        return classResult;
+      }
+      examData = classResult.data;
+      examDocId = examId;
+    } else {
+      const examSnap = await getDoc(doc(db, 'exams', examId));
+      if (!examSnap.exists()) {
+        return { success: false, error: 'Exam not found' };
+      }
+      examData = examSnap.data();
     }
-
-    const examData = examSnap.data();
     const questions = [];
 
     // Fetch each question from the new hierarchical structure
@@ -616,7 +746,7 @@ export const getExamWithQuestions = async (examId, subjectId) => {
     return {
       success: true,
       data: {
-        id: examSnap.id,
+        id: examDocId,
         ...examData,
         questions
       }
@@ -627,7 +757,7 @@ export const getExamWithQuestions = async (examId, subjectId) => {
   }
 };
 
-// Assign exam to additional classes
+// Assign exam to additional classes (independent snapshot per class)
 export const assignExamToClass = async (examId, classId) => {
   try {
     const examRef = doc(db, 'exams', examId);
@@ -640,13 +770,17 @@ export const assignExamToClass = async (examId, classId) => {
     const examData = examSnap.data();
     const classSettings = { ...(examData.classSettings || {}) };
 
-    if (!classSettings[classId]) {
-      classSettings[classId] = {
-        visibility: 'private',
-        startTime: null,
-        endTime: null
-      };
-    }
+    classSettings[classId] = {
+      visibility: 'private',
+      startTime: null,
+      endTime: null
+    };
+
+    await upsertClassExamSnapshot(classId, examId, examData, {
+      visibility: 'private',
+      startTime: null,
+      endTime: null
+    });
 
     await updateDoc(examRef, {
       classIds: arrayUnion(classId),
@@ -661,25 +795,25 @@ export const assignExamToClass = async (examId, classId) => {
   }
 };
 
-// Remove exam from class
+// Remove exam from class (does not delete master exam or other classes)
 export const removeExamFromClass = async (examId, classId) => {
   try {
     const examRef = doc(db, 'exams', examId);
     const examSnap = await getDoc(examRef);
 
-    if (!examSnap.exists()) {
-      return { success: false, error: 'Exam not found' };
+    if (examSnap.exists()) {
+      const classSettings = { ...(examSnap.data().classSettings || {}) };
+      delete classSettings[classId];
+
+      await updateDoc(examRef, {
+        classIds: arrayRemove(classId),
+        classSettings,
+        visibleToClassIds: arrayRemove(classId),
+        updatedAt: serverTimestamp()
+      });
     }
 
-    const classSettings = { ...(examSnap.data().classSettings || {}) };
-    delete classSettings[classId];
-
-    await updateDoc(examRef, {
-      classIds: arrayRemove(classId),
-      classSettings,
-      visibleToClassIds: arrayRemove(classId),
-      updatedAt: serverTimestamp()
-    });
+    await deleteDoc(doc(db, 'classes', classId, 'classExams', examId));
 
     return { success: true, data: { id: examId } };
   } catch (error) {

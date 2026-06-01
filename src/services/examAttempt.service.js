@@ -28,14 +28,18 @@ const getQuestionFromExam = async (examData, questionId) => {
   return null;
 };
 
-// Start exam attempt
+// Start exam attempt (scoped per class)
 export const startExamAttempt = async (studentId, examId, classId) => {
   try {
-    // Check if student already has an in-progress attempt
+    if (!classId) {
+      return { success: false, error: 'Class ID is required' };
+    }
+
     const q = query(
       collection(db, 'examAttempts'),
       where('studentId', '==', studentId),
       where('examId', '==', examId),
+      where('classId', '==', classId),
       where('status', '==', 'in-progress')
     );
 
@@ -51,7 +55,6 @@ export const startExamAttempt = async (studentId, examId, classId) => {
       };
     }
 
-    // Create new attempt
     const docRef = await addDoc(collection(db, 'examAttempts'), {
       studentId,
       examId,
@@ -240,38 +243,41 @@ export const getAttemptById = async (attemptId) => {
   }
 };
 
-// Get student's attempt for exam
-export const getStudentExamAttempt = async (studentId, examId) => {
+// Get student's attempt for exam in a specific class
+export const getStudentExamAttempt = async (studentId, examId, classId) => {
   try {
+    if (!classId) {
+      return { success: false, error: 'Class ID is required' };
+    }
+
     const q = query(
       collection(db, 'examAttempts'),
       where('studentId', '==', studentId),
-      where('examId', '==', examId)
+      where('examId', '==', examId),
+      where('classId', '==', classId)
     );
 
     const querySnapshot = await getDocs(q);
 
-    if (querySnapshot.size > 0) {
-      const doc = querySnapshot.docs[0];
-      return {
-        success: true,
-        data: {
-          id: doc.id,
-          ...doc.data()
-        }
-      };
-    } else {
-      return {
-        success: false,
-        error: 'No attempt found'
-      };
+    if (querySnapshot.size === 0) {
+      return { success: false, error: 'No attempt found' };
     }
+
+    const attempts = querySnapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data()
+    }));
+
+    attempts.sort((a, b) => {
+      const aTime = a.submittedAt?.seconds || a.startedAt?.seconds || 0;
+      const bTime = b.submittedAt?.seconds || b.startedAt?.seconds || 0;
+      return bTime - aTime;
+    });
+
+    return { success: true, data: attempts[0] };
   } catch (error) {
     console.error('Error getting student exam attempt:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 };
 
@@ -312,9 +318,7 @@ export const getExamAttemptsForClass = async (examId, classId) => {
   const result = await getExamAttempts(examId);
   if (!result.success) return result;
 
-  const data = (result.data || []).filter(
-    (attempt) => !classId || attempt.classId === classId
-  );
+  const data = (result.data || []).filter((attempt) => attempt.classId === classId);
 
   return { success: true, data };
 };

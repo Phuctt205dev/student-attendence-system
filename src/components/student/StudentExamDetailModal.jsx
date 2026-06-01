@@ -20,7 +20,12 @@ const StudentExamDetailModal = ({ exam, classId, studentId, isOpen, onClose }) =
     if (!exam?.id || !studentId) return;
 
     setLoading(true);
-    const attemptResult = await getStudentExamAttempt(studentId, exam.id);
+    if (!classId) {
+      setLoading(false);
+      return;
+    }
+
+    const attemptResult = await getStudentExamAttempt(studentId, exam.id, classId);
 
     if (attemptResult.success) {
       setAttempt(attemptResult.data);

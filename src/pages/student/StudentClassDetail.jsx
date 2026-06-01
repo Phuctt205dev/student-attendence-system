@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import StudentLayout from '../../layouts/StudentLayout';
 import { getClassById } from '../../services/class.service';
 import { getStudentClassAttendance } from '../../services/attendance.service';
-import { getExamsByClass } from '../../services/exam.service';
+import { getExamsByClass, canStudentTakeClassExam } from '../../services/exam.service';
 import { getStudentExamAttempt, startExamAttempt } from '../../services/examAttempt.service';
 import { getStudentTagsWithDetails, getTagColor, formatPoints } from '../../services/tag.service';
 import {
@@ -81,7 +81,7 @@ const StudentClassDetail = () => {
     if (result.success) {
       const withAttempts = await Promise.all(
         (result.data || []).map(async (exam) => {
-          const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id);
+          const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id, classId);
           return {
             ...exam,
             classId,
@@ -142,16 +142,10 @@ const StudentClassDetail = () => {
   };
 
   const handleStartExam = async (exam) => {
-    const now = new Date();
-    const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
-    const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
-
-    if (startTime && isBefore(now, startTime)) {
-      setError('Bài thi chưa bắt đầu');
-      return;
-    }
-    if (endTime && isAfter(now, endTime)) {
-      setError('Bài thi đã kết thúc');
+    const access = canStudentTakeClassExam(exam, classId);
+    if (!access.allowed) {
+      setError(access.message);
+      setTimeout(() => setError(''), 4000);
       return;
     }
 
@@ -396,7 +390,11 @@ const StudentClassDetail = () => {
               </button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  {loading ? 'Đang tải...' : classInfo ? `${classInfo.classCode} - ${classInfo.className}` : 'Chi tiết lớp'}
+                  {loading
+                    ? 'Đang tải...'
+                    : classInfo
+                      ? `${classInfo.classCode} - ${classInfo.className || classInfo.name || ''}`
+                      : 'Chi tiết lớp'}
                 </h1>
                 <p className="text-gray-600 text-sm">Chi tiết lớp học</p>
               </div>

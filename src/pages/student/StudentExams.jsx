@@ -6,7 +6,8 @@ import {
   getClassesByStudent
 } from '../../services/class.service';
 import {
-  getExamsByClass
+  getExamsByClass,
+  canStudentTakeClassExam
 } from '../../services/exam.service';
 import {
   getStudentExamAttempt,
@@ -57,7 +58,11 @@ const StudentExams = () => {
       if (examsResult.success && examsResult.data) {
         // Get student's attempt if exists
         for (const exam of examsResult.data) {
-          const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id);
+          const attemptResult = await getStudentExamAttempt(
+            userProfile.uid,
+            exam.id,
+            classId
+          );
           allExams.push({
             ...exam,
             classId,
@@ -77,18 +82,9 @@ const StudentExams = () => {
   };
 
   const handleStartExam = async (exam) => {
-    // Check if exam is currently active
-    const now = new Date();
-    const startTime = exam.startTime?.toDate?.() || (exam.startTime ? new Date(exam.startTime) : null);
-    const endTime = exam.endTime?.toDate?.() || (exam.endTime ? new Date(exam.endTime) : null);
-
-    if (startTime && isBefore(now, startTime)) {
-      setError('Exam has not started yet');
-      return;
-    }
-
-    if (endTime && isAfter(now, endTime)) {
-      setError('Exam has ended');
+    const access = canStudentTakeClassExam(exam, exam.classId);
+    if (!access.allowed) {
+      setError(access.message);
       return;
     }
 

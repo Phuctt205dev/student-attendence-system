@@ -24,7 +24,13 @@ const StudentExamResult = () => {
       if (!userProfile?.uid || !examId) return;
 
       setLoading(true);
-      const attemptResult = await getStudentExamAttempt(userProfile.uid, examId);
+      if (!classId) {
+        setError('Thiếu thông tin lớp. Vui lòng mở kết quả từ trang lớp học.');
+        setLoading(false);
+        return;
+      }
+
+      const attemptResult = await getStudentExamAttempt(userProfile.uid, examId, classId);
       if (!attemptResult.success) {
         setError(attemptResult.error || 'Không tìm thấy kết quả');
         setLoading(false);

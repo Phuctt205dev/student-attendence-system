@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import StudentLayout from '../../layouts/StudentLayout';
-import { getExamWithQuestions, mergeExamForClass } from '../../services/exam.service';
+import {
+  getExamWithQuestions,
+  mergeExamForClass,
+  canStudentTakeClassExam
+} from '../../services/exam.service';
 import {
   getStudentExamAttempt,
   startExamAttempt,
@@ -52,42 +56,43 @@ const StudentExamTake = () => {
       setLoading(true);
       setError('');
 
-      const examResult = await getExamWithQuestions(examId);
+      const resolvedClassId = classId || null;
+      if (!resolvedClassId) {
+        setError('Thiếu thông tin lớp học. Vui lòng vào bài thi từ trang lớp.');
+        setLoading(false);
+        return;
+      }
+
+      const examResult = await getExamWithQuestions(examId, resolvedClassId);
       if (!examResult.success) {
         setError(examResult.error || 'Không tải được bài thi');
         setLoading(false);
         return;
       }
 
-      const resolvedClassId = classId || examResult.data.classIds?.[0] || null;
-      const examData = resolvedClassId
-        ? mergeExamForClass(examResult.data, resolvedClassId)
-        : examResult.data;
+      const examData = mergeExamForClass(examResult.data, resolvedClassId);
+      const access = canStudentTakeClassExam(examData, resolvedClassId);
 
-      if (examData.visibility && examData.visibility !== 'public') {
-        setError('Bài thi này hiện không khả dụng.');
-        setLoading(false);
-        return;
-      }
       setExam(examData);
       setQuestions(examData.questions || []);
 
-      const examStart = examData.startTime?.toDate?.() || (examData.startTime ? new Date(examData.startTime) : null);
-      const examEnd = examData.endTime?.toDate?.() || (examData.endTime ? new Date(examData.endTime) : null);
-      const now = new Date();
-      const canStart = (!examStart || !isBefore(now, examStart)) && (!examEnd || !isAfter(now, examEnd));
-
-      const attemptResult = await getStudentExamAttempt(userProfile.uid, examId);
+      const attemptResult = await getStudentExamAttempt(
+        userProfile.uid,
+        examId,
+        resolvedClassId
+      );
       if (attemptResult.success) {
         setAttempt(attemptResult.data);
         setAnswers(attemptResult.data.answers || {});
-      } else if (canStart) {
+      } else if (access.allowed) {
         const startResult = await startExamAttempt(userProfile.uid, examId, resolvedClassId);
         if (startResult.success) {
           setAttempt(startResult.data);
         } else {
           setError(startResult.error || 'Không thể bắt đầu bài thi');
         }
+      } else if (!access.allowed) {
+        setError(access.message);
       }
 
       setLoading(false);

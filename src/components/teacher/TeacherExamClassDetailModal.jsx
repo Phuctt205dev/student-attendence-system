@@ -24,7 +24,11 @@ const TeacherExamClassDetailModal = ({ exam, classId, isOpen, onClose }) => {
     if (attemptsResult.success) {
       const map = {};
       (attemptsResult.data || []).forEach((attempt) => {
-        if (!map[attempt.studentId] || attempt.submittedAt) {
+        const prev = map[attempt.studentId];
+        const isSubmitted = attempt.status === 'submitted' || attempt.status === 'graded';
+        const prevSubmitted = prev && (prev.status === 'submitted' || prev.status === 'graded');
+
+        if (!prev || (isSubmitted && !prevSubmitted)) {
           map[attempt.studentId] = attempt;
         }
       });
