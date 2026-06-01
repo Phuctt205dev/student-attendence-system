@@ -85,7 +85,9 @@ const StudentExamTake = () => {
 
       const attemptResult = await getStudentExamAttempt(
         userProfile.uid,
-        resolvedInstanceId
+        resolvedInstanceId,
+        resolvedClassId,
+        examId
       );
       if (attemptResult.success) {
         setAttempt(attemptResult.data);

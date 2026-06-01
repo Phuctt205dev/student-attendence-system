@@ -25,7 +25,12 @@ const StudentExamDetailModal = ({ exam, classId, studentId, isOpen, onClose }) =
       return;
     }
 
-    const attemptResult = await getStudentExamAttempt(studentId, exam.id);
+    const attemptResult = await getStudentExamAttempt(
+      studentId,
+      exam.id,
+      classId,
+      exam.sourceExamId || exam.examId
+    );
 
     if (attemptResult.success) {
       setAttempt(attemptResult.data);

@@ -33,7 +33,9 @@ const StudentExamResult = () => {
 
       const attemptResult = await getStudentExamAttempt(
         userProfile.uid,
-        classExamInstanceId
+        classExamInstanceId,
+        classId,
+        examId
       );
       if (!attemptResult.success) {
         setError(attemptResult.error || 'Không tìm thấy kết quả');

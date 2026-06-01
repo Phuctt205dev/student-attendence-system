@@ -81,7 +81,12 @@ const StudentClassDetail = () => {
     if (result.success) {
       const withAttempts = await Promise.all(
         (result.data || []).map(async (exam) => {
-          const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id);
+          const attemptResult = await getStudentExamAttempt(
+            userProfile.uid,
+            exam.id,
+            classId,
+            exam.sourceExamId || exam.examId
+          );
           return {
             ...exam,
             classId,

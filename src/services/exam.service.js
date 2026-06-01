@@ -887,6 +887,7 @@ export const removeExamFromClass = async (classId, classExamInstanceId) => {
 
     const attemptsByInstance = query(
       collection(db, 'examAttempts'),
+      where('classId', '==', classId),
       where('classExamInstanceId', '==', classExamInstanceId)
     );
     const instanceAttempts = await getDocs(attemptsByInstance);

@@ -58,7 +58,12 @@ const StudentExams = () => {
       if (examsResult.success && examsResult.data) {
         // Get student's attempt if exists
         for (const exam of examsResult.data) {
-          const attemptResult = await getStudentExamAttempt(userProfile.uid, exam.id);
+          const attemptResult = await getStudentExamAttempt(
+            userProfile.uid,
+            exam.id,
+            classId,
+            exam.sourceExamId || exam.examId
+          );
           allExams.push({
             ...exam,
             classId,

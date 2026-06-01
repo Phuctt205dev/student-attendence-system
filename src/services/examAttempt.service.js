@@ -44,6 +44,7 @@ export const startExamAttempt = async (
     const q = query(
       collection(db, 'examAttempts'),
       where('studentId', '==', studentId),
+      where('classId', '==', classId),
       where('classExamInstanceId', '==', classExamInstanceId),
       where('status', '==', 'in-progress')
     );
@@ -247,20 +248,37 @@ export const getAttemptById = async (attemptId) => {
   }
 };
 
-// Get student's attempt for a class exam instance
-export const getStudentExamAttempt = async (studentId, classExamInstanceId) => {
+// Get student's attempt for one class assignment (scoped by class + instance)
+export const getStudentExamAttempt = async (
+  studentId,
+  classExamInstanceId,
+  classId,
+  sourceExamId = null
+) => {
   try {
-    if (!classExamInstanceId) {
-      return { success: false, error: 'Class exam instance is required' };
+    if (!classExamInstanceId || !classId) {
+      return { success: false, error: 'Class and exam instance are required' };
     }
 
-    const q = query(
+    const byInstance = query(
       collection(db, 'examAttempts'),
       where('studentId', '==', studentId),
+      where('classId', '==', classId),
       where('classExamInstanceId', '==', classExamInstanceId)
     );
 
-    const querySnapshot = await getDocs(q);
+    let querySnapshot = await getDocs(byInstance);
+
+    // Legacy attempts (examId + classId only, no classExamInstanceId)
+    if (querySnapshot.size === 0 && sourceExamId) {
+      const legacyQ = query(
+        collection(db, 'examAttempts'),
+        where('studentId', '==', studentId),
+        where('classId', '==', classId),
+        where('examId', '==', sourceExamId)
+      );
+      querySnapshot = await getDocs(legacyQ);
+    }
 
     if (querySnapshot.size === 0) {
       return { success: false, error: 'No attempt found' };
@@ -317,10 +335,15 @@ export const getExamAttempts = async (examId) => {
   }
 };
 
-export const getExamAttemptsForClass = async (classExamInstanceId) => {
+export const getExamAttemptsForClass = async (classExamInstanceId, classId) => {
   try {
+    if (!classExamInstanceId || !classId) {
+      return { success: false, error: 'Class and exam instance are required' };
+    }
+
     const q = query(
       collection(db, 'examAttempts'),
+      where('classId', '==', classId),
       where('classExamInstanceId', '==', classExamInstanceId)
     );
 
