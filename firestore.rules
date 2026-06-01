@@ -124,8 +124,11 @@ service cloud.firestore {
       // Web dùng: classes/{classId}/tags/{tagId}
       // =========================
       match /tags/{tagId} {
-        // Chỉ teacher owner của class mới được đọc/ghi tags
-        allow read, create, update, delete: if isClassOwner(classId);
+        allow read: if signedIn() && (
+          isClassOwner(classId) ||
+          isStudentInClass(classId)
+        );
+        allow create, update, delete: if isClassOwner(classId);
       }
 
       // =========================
@@ -133,8 +136,11 @@ service cloud.firestore {
       // Web dùng: classes/{classId}/studentTags/{docId}
       // =========================
       match /studentTags/{docId} {
-        // Chỉ teacher owner của class mới được đọc/ghi student tags
-        allow read, create, update, delete: if isClassOwner(classId);
+        allow read: if signedIn() && (
+          isClassOwner(classId) ||
+          (isStudentInClass(classId) && resource.data.studentId == request.auth.uid)
+        );
+        allow create, update, delete: if isClassOwner(classId);
       }
     }
 
@@ -143,27 +149,27 @@ service cloud.firestore {
     // App dùng: attendanceSessions/{sessionId}
     // =========================
     match /attendanceSessions/{sessionId} {
-      // Đọc session: chỉ giáo viên tạo session đó
-      allow read: if signedIn() &&
-        resource.data.teacherId == request.auth.uid;
+      // Giáo viên hoặc sinh viên trong lớp được xem buổi điểm danh
+      allow read: if signedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isStudentInClass(resource.data.classId)
+      );
 
-      // Cho phép list/query sessions
       allow list: if signedIn();
 
-      // Tạo session: teacherId phải là user hiện tại
       allow create: if signedIn() &&
         request.resource.data.teacherId == request.auth.uid;
 
-      // Cập nhật/xóa session: chỉ chủ session
       allow update, delete: if signedIn() &&
         resource.data.teacherId == request.auth.uid;
 
-      // =========================
-      // RECORDS SUBCOLLECTION
-      // App dùng: attendanceSessions/{sessionId}/records/{studentId}
-      // =========================
       match /records/{studentId} {
-        allow read, create, update, delete: if signedIn() &&
+        allow read: if signedIn() && (
+          sessionDoc(sessionId).data.teacherId == request.auth.uid ||
+          (studentId == request.auth.uid &&
+            isStudentInClass(sessionDoc(sessionId).data.classId))
+        );
+        allow create, update, delete: if signedIn() &&
           sessionDoc(sessionId).data.teacherId == request.auth.uid;
       }
     }

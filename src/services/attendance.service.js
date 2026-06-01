@@ -208,36 +208,112 @@ export const batchUpdateManualAttendance = async (sessionId, studentRecords) => 
   }
 };
 
-// Get student's attendance history
-export const getStudentAttendanceHistory = async (studentId, classId = null) => {
+const normalizeAttendanceStatus = (rawStatus) => {
+  const status = (rawStatus || '').toUpperCase();
+  if (status === 'PRESENT') return 'present';
+  if (status === 'LATE') return 'late';
+  return 'absent';
+};
+
+// All sessions for a class with this student's status only
+export const getStudentClassAttendance = async (studentId, classId) => {
   try {
-    let q;
-    if (classId) {
-      q = query(
-        collection(db, 'attendanceSessions'),
-        where('classId', '==', classId)
-      );
-    } else {
-      q = query(collection(db, 'attendanceSessions'));
-    }
+    const q = query(
+      collection(db, 'attendanceSessions'),
+      where('classId', '==', classId)
+    );
 
     const sessionsSnapshot = await getDocs(q);
+    const sessions = [];
+
+    for (const sessionDoc of sessionsSnapshot.docs) {
+      const sessionData = sessionDoc.data();
+      const recordDoc = await getDoc(
+        doc(db, 'attendanceSessions', sessionDoc.id, 'records', studentId)
+      );
+
+      const record = recordDoc.exists() ? recordDoc.data() : null;
+      const status = record ? normalizeAttendanceStatus(record.status) : 'absent';
+
+      sessions.push({
+        id: sessionDoc.id,
+        classId: sessionData.classId,
+        className: sessionData.className,
+        date: sessionData.date,
+        sessionNumber: sessionData.sessionNumber,
+        status,
+        timestamp: record?.timestamp || null,
+        method: record?.method || null,
+        lateMinutes: record?.lateMinutes ?? null
+      });
+    }
+
+    sessions.sort((a, b) => {
+      const dateA = a.date?.seconds || 0;
+      const dateB = b.date?.seconds || 0;
+      return dateB - dateA;
+    });
+
+    let present = 0;
+    let late = 0;
+    let absent = 0;
+
+    sessions.forEach((session) => {
+      if (session.status === 'present') present += 1;
+      else if (session.status === 'late') late += 1;
+      else absent += 1;
+    });
+
+    const total = sessions.length;
+
+    return {
+      success: true,
+      sessions,
+      stats: {
+        total,
+        present,
+        late,
+        absent,
+        attendanceRate: total > 0 ? (((present + late) / total) * 100).toFixed(1) : 0
+      }
+    };
+  } catch (error) {
+    console.error('Error getting student class attendance:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Get student's attendance history (all classes or one class)
+export const getStudentAttendanceHistory = async (studentId, classId = null) => {
+  try {
+    if (classId) {
+      const result = await getStudentClassAttendance(studentId, classId);
+      if (!result.success) return result;
+      return { success: true, attendances: result.sessions };
+    }
+
+    const sessionsSnapshot = await getDocs(query(collection(db, 'attendanceSessions')));
     const studentAttendances = [];
 
     for (const sessionDoc of sessionsSnapshot.docs) {
       const sessionData = sessionDoc.data();
-      const recordDoc = await getDoc(doc(db, 'attendanceSessions', sessionDoc.id, 'records', studentId));
+      const recordDoc = await getDoc(
+        doc(db, 'attendanceSessions', sessionDoc.id, 'records', studentId)
+      );
 
-      if (recordDoc.exists()) {
-        studentAttendances.push({
-          id: sessionDoc.id,
-          classId: sessionData.classId,
-          className: sessionData.className,
-          date: sessionData.date,
-          sessionNumber: sessionData.sessionNumber,
-          ...recordDoc.data()
-        });
-      }
+      const record = recordDoc.exists() ? recordDoc.data() : null;
+      const status = record ? normalizeAttendanceStatus(record.status) : 'absent';
+
+      studentAttendances.push({
+        id: sessionDoc.id,
+        classId: sessionData.classId,
+        className: sessionData.className,
+        date: sessionData.date,
+        sessionNumber: sessionData.sessionNumber,
+        status,
+        timestamp: record?.timestamp || null,
+        method: record?.method || null
+      });
     }
 
     studentAttendances.sort((a, b) => {
@@ -284,45 +360,9 @@ export const validateQRCode = async (qrData) => {
 // Get attendance statistics for a student
 export const getStudentAttendanceStats = async (studentId, classId) => {
   try {
-    const q = query(
-      collection(db, 'attendanceSessions'),
-      where('classId', '==', classId)
-    );
-
-    const sessionsSnapshot = await getDocs(q);
-    let present = 0;
-    let late = 0;
-    let absent = 0;
-    let total = 0;
-
-    for (const sessionDoc of sessionsSnapshot.docs) {
-      total++;
-      const recordDoc = await getDoc(doc(db, 'attendanceSessions', sessionDoc.id, 'records', studentId));
-
-      if (recordDoc.exists()) {
-        const status = recordDoc.data().status;
-        if (status === 'PRESENT') {
-          present++;
-        } else if (status === 'LATE') {
-          late++;
-        } else {
-          absent++;
-        }
-      } else {
-        absent++;
-      }
-    }
-
-    return {
-      success: true,
-      stats: {
-        total,
-        present,
-        late,
-        absent,
-        attendanceRate: total > 0 ? (((present + late) / total) * 100).toFixed(1) : 0
-      }
-    };
+    const result = await getStudentClassAttendance(studentId, classId);
+    if (!result.success) return result;
+    return { success: true, stats: result.stats };
   } catch (error) {
     console.error('Error getting attendance stats:', error);
     return { success: false, error: error.message };

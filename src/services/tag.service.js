@@ -137,6 +137,45 @@ export const getTagsForStudent = async (classId, studentId) => {
   }
 };
 
+// Get tag definitions merged with this student's assignments
+export const getStudentTagsWithDetails = async (classId, studentId) => {
+  try {
+    const [classTagsResult, assignmentsResult] = await Promise.all([
+      getClassTags(classId),
+      getTagsForStudent(classId, studentId)
+    ]);
+
+    if (!classTagsResult.success) {
+      return classTagsResult;
+    }
+    if (!assignmentsResult.success) {
+      return assignmentsResult;
+    }
+
+    const tagMap = (classTagsResult.tags || []).reduce((acc, tag) => {
+      acc[tag.id] = tag;
+      return acc;
+    }, {});
+
+    const tags = (assignmentsResult.tags || [])
+      .map((assignment) => {
+        const tag = tagMap[assignment.tagId];
+        if (!tag) return null;
+        return {
+          ...tag,
+          assignmentId: assignment.id,
+          assignedAt: assignment.assignedAt || null
+        };
+      })
+      .filter(Boolean);
+
+    return { success: true, tags };
+  } catch (error) {
+    console.error('Error getting student tags with details:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Get students for a specific tag
 export const getStudentsForTag = async (classId, tagId) => {
   try {
