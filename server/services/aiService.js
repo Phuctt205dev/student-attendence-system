@@ -99,17 +99,35 @@ Yêu cầu:
 - Không bịa thông tin ngoài văn bản được cung cấp
 - Trả về JSON thuần theo schema: {"questions":[{"questionText":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correctAnswer":"A","points":1}]}`;
 
-  const openaiClient = projectClient.getOpenAIClient();
-
-  const response = await openaiClient.chat.completions.create({
-    model: config.azureAgentName,
-    messages: [
-      { role: 'user', content: userPrompt }
-    ],
-    temperature: 0.4
+  const openaiClient = projectClient.getOpenAIClient({
+    azureConfig: {
+      agentName: config.azureAgentName,
+      allowPreview: true
+    }
   });
 
-  const content = response.choices[0].message.content;
+  const conversation = await openaiClient.conversations.create({
+    items: [
+      { type: 'message', role: 'user', content: userPrompt }
+    ]
+  });
+
+  const response = await openaiClient.responses.create(
+    {
+      conversation: conversation.id,
+    },
+    {
+      body: {
+        agent: {
+          name: config.azureAgentName,
+          type: 'agent_reference',
+          version: config.azureAgentVersion
+        }
+      },
+    }
+  );
+
+  const content = response.output_text;
 
   return parseQuestionsFromContent(content);
 };
