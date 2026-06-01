@@ -33,6 +33,11 @@ service cloud.firestore {
         sessionDoc(sessionId).data.teacherId == request.auth.uid;
     }
 
+    function isSubjectOwner(subjectId) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
+    }
+
     // =========================
     // USERS (Web App)
     // App web lưu user profile tại: users/{uid}
@@ -165,19 +170,15 @@ service cloud.firestore {
       // TOPICS SUBCOLLECTION
       // =========================
       match /topics/{topicId} {
-        // Teacher owner có thể đọc/ghi topics, student chỉ đọc
         allow read: if signedIn();
-        allow create, update, delete: if signedIn() &&
-          get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
+        allow create, update, delete: if isSubjectOwner(subjectId);
 
         // =========================
         // QUESTIONS SUBCOLLECTION
         // =========================
         match /questions/{questionId} {
-          // Teacher owner có thể đọc/ghi questions, student chỉ đọc
           allow read: if signedIn();
-          allow create, update, delete: if signedIn() &&
-            get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
+          allow create, update, delete: if isSubjectOwner(subjectId);
         }
 
         // =========================
@@ -185,8 +186,7 @@ service cloud.firestore {
         // =========================
         match /attachments/{attachmentId} {
           allow read: if signedIn();
-          allow create, update, delete: if signedIn() &&
-            get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
+          allow create, update, delete: if isSubjectOwner(subjectId);
         }
       }
     }
@@ -237,5 +237,14 @@ service cloud.firestore {
       // Không cho phép xóa attempts
       allow delete: if false;
     }
+
+    // =========================
+    // QUESTIONS (Collection Group Fallback)
+    // Ensures collectionGroup("questions") reads honor the same signed-in rule
+    // =========================
+    match /{path=**}/questions/{questionId} {
+      allow read: if signedIn();
+    }
   }
 }
+
