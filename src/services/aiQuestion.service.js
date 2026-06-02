@@ -52,3 +52,36 @@ export const generateQuestionsFromFile = async ({
     };
   }
 };
+
+export const extractQuestionsFromFile = async ({
+  file,
+  defaultPoints = 1
+}) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('defaultPoints', String(defaultPoints));
+
+    const response = await fetch(buildUrl('/api/ai/extract-questions'), {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      return {
+        success: false,
+        error: result.error || `Lỗi server (${response.status})`
+      };
+    }
+
+    return { success: true, data: result.data };
+  } catch (error) {
+    console.error('extractQuestionsFromFile:', error);
+    return {
+      success: false,
+      error: error.message || 'Không kết nối được máy chủ. Hãy chạy server/backend.'
+    };
+  }
+};

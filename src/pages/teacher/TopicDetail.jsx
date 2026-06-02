@@ -26,6 +26,7 @@ import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import QuestionForm from '../../components/teacher/QuestionForm';
 import GenerateQuestionsFromFileModal from '../../components/teacher/GenerateQuestionsFromFileModal';
+import ExtractQuestionsFromFileModal from '../../components/teacher/ExtractQuestionsFromFileModal';
 
 
 const TopicDetail = () => {
@@ -42,6 +43,7 @@ const TopicDetail = () => {
 
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [showAiGenerateModal, setShowAiGenerateModal] = useState(false);
+  const [showExtractModal, setShowExtractModal] = useState(false);
 
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -175,6 +177,14 @@ const TopicDetail = () => {
                   onClick={handleOpenCreateQuestionModal}
                 >
                   Thêm câu hỏi
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2 border-primary-500 text-primary-600 hover:bg-primary-50"
+                  icon={<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>}
+                  onClick={() => setShowExtractModal(true)}
+                >
+                  Nhập từ File
                 </Button>
                 <Button
                   variant="outline"
@@ -322,6 +332,30 @@ const TopicDetail = () => {
               setSuccess(
                 `Đã tạo ${saved}/${total} câu hỏi từ ${chunksProcessed} đoạn nội dung${failNote}`
               );
+              const questionsResult = await getTopicQuestions(subjectId, topicId);
+              if (questionsResult.success) {
+                setQuestions(questionsResult.data);
+              }
+              setTimeout(() => setSuccess(''), 5000);
+            }}
+          />
+        </Modal>
+
+        <Modal
+          isOpen={showExtractModal}
+          onClose={() => setShowExtractModal(false)}
+          title="Nhập câu hỏi từ File (Regex)"
+          size="md"
+        >
+          <ExtractQuestionsFromFileModal
+            subjectId={subjectId}
+            topicId={topicId}
+            createdBy={userProfile?.uid}
+            onCancel={() => setShowExtractModal(false)}
+            onSuccess={async ({ saved, total, failed }) => {
+              setShowExtractModal(false);
+              const failNote = failed > 0 ? ` (${failed} câu lỗi)` : '';
+              setSuccess(`Đã trích xuất và lưu ${saved}/${total} câu hỏi${failNote}`);
               const questionsResult = await getTopicQuestions(subjectId, topicId);
               if (questionsResult.success) {
                 setQuestions(questionsResult.data);

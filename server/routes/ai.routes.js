@@ -4,6 +4,7 @@ import { uploadDocument } from '../middleware/upload.js';
 import { extractTextFromFile } from '../services/textExtractor.js';
 import { chunkText } from '../services/textChunker.js';
 import { dedupeQuestions, generateQuestionsForChunk } from '../services/aiService.js';
+import { extractQuestionsRegex } from '../services/questionParser.js';
 
 const router = Router();
 
@@ -92,6 +93,53 @@ router.post('/generate-questions', handleUpload, async (req, res) => {
     return res.status(500).json({
       success: false,
       error: error.message || 'Lỗi khi tạo câu hỏi từ file'
+    });
+  }
+});
+
+router.post('/extract-questions', handleUpload, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Vui lòng chọn file để tải lên' });
+    }
+
+    const defaultPoints = Math.min(
+      100,
+      Math.max(1, parseInt(req.body.defaultPoints, 10) || 1)
+    );
+
+    const extractedText = await extractTextFromFile(req.file);
+
+    if (!extractedText || extractedText.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Không trích xuất được đủ nội dung từ file'
+      });
+    }
+
+    const questions = extractQuestionsRegex(extractedText, defaultPoints);
+
+    if (questions.length === 0) {
+      return res.status(422).json({
+        success: false,
+        error: 'Không tìm thấy câu hỏi nào hợp lệ trong file. Vui lòng kiểm tra định dạng (Câu 1: ... A. ... B. ... C. ... D. ...).'
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        questions,
+        chunksProcessed: 1,
+        textLength: extractedText.length,
+        totalQuestions: questions.length
+      }
+    });
+  } catch (error) {
+    console.error('extract-questions error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Lỗi khi trích xuất câu hỏi từ file'
     });
   }
 });
