@@ -1,6 +1,4 @@
-import { config } from '../config.js';
-import { ClientSecretCredential } from '@azure/identity';
-import { AIProjectClient } from '@azure/ai-projects/client';
+import { config, getChatCompletionsUrl } from '../config.js';
 
 const parseQuestionsFromContent = (content) => {
   if (!content || typeof content !== 'string') {
@@ -66,24 +64,14 @@ export const generateQuestionsForChunk = async ({
   subjectName,
   topicName
 }) => {
-  if (!config.azureClientId || !config.azureClientSecret || !config.azureTenantId) {
-    throw new Error('Thiếu cấu hình Azure credentials (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)');
+  if (!config.aiApiKey) {
+    throw new Error('Thiếu cấu hình API Key cho AI (AI_API_KEY)');
   }
 
-  if (!config.azureAiEndpoint) {
-    throw new Error('Thiếu cấu hình AZURE_AI_ENDPOINT');
+  const url = getChatCompletionsUrl();
+  if (!url) {
+    throw new Error('Thiếu cấu hình AI_API_BASE_URL (Azure OpenAI endpoint)');
   }
-
-  const credential = new ClientSecretCredential(
-    config.azureTenantId,
-    config.azureClientId,
-    config.azureClientSecret
-  );
-
-  const projectClient = new AIProjectClient(
-    config.azureAiEndpoint,
-    credential
-  );
 
   const userPrompt = `Môn học: ${subjectName || 'N/A'}
 Chủ đề: ${topicName || 'N/A'}
@@ -99,35 +87,38 @@ Yêu cầu:
 - Không bịa thông tin ngoài văn bản được cung cấp
 - Trả về JSON thuần theo schema: {"questions":[{"questionText":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correctAnswer":"A","points":1}]}`;
 
-  const openaiClient = projectClient.getOpenAIClient({
-    azureConfig: {
-      agentName: config.azureAgentName,
-      allowPreview: true
-    }
-  });
-
-  const conversation = await openaiClient.conversations.create({
-    items: [
-      { type: 'message', role: 'user', content: userPrompt }
-    ]
-  });
-
-  const response = await openaiClient.responses.create(
-    {
-      conversation: conversation.id,
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': config.aiApiKey,
+      'Authorization': \`Bearer \${config.aiApiKey}\` // Fallback for some non-Azure deployments
     },
-    {
-      body: {
-        agent: {
-          name: config.azureAgentName,
-          type: 'agent_reference',
-          version: config.azureAgentVersion
+    body: JSON.stringify({
+      model: config.aiModel || 'gpt-oss-120b',
+      messages: [
+        {
+          role: 'system',
+          content: 'Bạn là chuyên gia giáo dục. Nhiệm vụ của bạn là đọc kỹ tài liệu và tạo ra các câu hỏi trắc nghiệm chính xác, khách quan dựa trên nội dung được cung cấp. Chỉ trả về JSON hợp lệ, không kèm văn bản giải thích.'
+        },
+        {
+          role: 'user',
+          content: userPrompt
         }
-      },
-    }
-  );
+      ],
+      temperature: 0.3,
+      max_tokens: 2000
+    })
+  });
 
-  const content = response.output_text;
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('AI API Error:', errorText);
+    throw new Error(\`Lỗi gọi AI: \${response.statusText} (\${response.status})\`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
 
   return parseQuestionsFromContent(content);
 };

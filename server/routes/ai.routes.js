@@ -100,13 +100,11 @@ router.get('/health', (_req, res) => {
   res.json({
     success: true,
     configured: Boolean(
-      config.azureClientId &&
-      config.azureClientSecret &&
-      config.azureTenantId &&
-      config.azureAiEndpoint
+      config.aiApiKey &&
+      config.aiApiBaseUrl
     ),
-    agent: config.azureAgentName,
-    agentVersion: config.azureAgentVersion
+    model: config.aiModel || 'gpt-oss-120b',
+    apiVersion: config.aiApiVersion
   });
 });
 
