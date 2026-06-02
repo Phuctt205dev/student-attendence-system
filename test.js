@@ -1,9 +1,22 @@
+const text = `Câu 1: Phương thức HTTP nào thường được sử dụng để lấy dữ liệu từ server?
+A. POST
+B. GET
+C. DELETE
+D. PUT
+Câu 2: Mã trạng thái HTTP nào biểu thị yêu cầu thành công?
+A. 404
+B. 403
+C. 500
+D. 200`;
+
+const textWithWindowsNewlines = text.replace(/\n/g, '\r\n');
+
 export const extractQuestionsRegex = (rawText, defaultPoints = 1) => {
   const questions = [];
   
-  // Chuẩn hóa line endings (Windows \r\n -> \n)
+  // Normalize newlines
   const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  
+
   // Tách văn bản thành các block dựa trên từ khóa "Câu 1:", "Câu 2:", "Question 1:" v.v.
   const splitByQuestion = text.split(/(?:^|\n)\s*(?:Câu\s*\d+\s*:|Question\s*\d+\s*:)/i);
   
@@ -41,3 +54,5 @@ export const extractQuestionsRegex = (rawText, defaultPoints = 1) => {
   
   return questions;
 };
+
+console.log(extractQuestionsRegex(textWithWindowsNewlines));
