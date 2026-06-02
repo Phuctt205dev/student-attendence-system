@@ -27,6 +27,7 @@ import Modal from '../../components/common/Modal';
 import QuestionForm from '../../components/teacher/QuestionForm';
 import GenerateQuestionsFromFileModal from '../../components/teacher/GenerateQuestionsFromFileModal';
 
+
 const TopicDetail = () => {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ const TopicDetail = () => {
 
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [showAiGenerateModal, setShowAiGenerateModal] = useState(false);
+
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [lastQuestionPoints, setLastQuestionPoints] = useState(1);
@@ -182,6 +184,7 @@ const TopicDetail = () => {
                 >
                   Tạo câu hỏi bằng AI
                 </Button>
+
               </div>
             </div>
             {topic?.description && (

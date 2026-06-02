@@ -1,41 +1,41 @@
+import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
-
-const EXTENSIONS = {
-  '.pdf': 'pdf',
-  '.docx': 'docx',
-  '.doc': 'docx',
-  '.txt': 'text',
-  '.md': 'text'
-};
+import path from 'path';
 
 export const getFileType = (filename) => {
-  const lower = filename.toLowerCase();
-  const ext = Object.keys(EXTENSIONS).find((e) => lower.endsWith(e));
-  return ext ? EXTENSIONS[ext] : null;
+  const ext = path.extname(filename).toLowerCase();
+  switch (ext) {
+    case '.pdf':
+      return 'pdf';
+    case '.docx':
+    case '.doc':
+      return 'docx';
+    case '.txt':
+    case '.md':
+      return 'text';
+    default:
+      return null;
+  }
 };
 
 export const extractTextFromFile = async (file) => {
-  const type = getFileType(file.originalname || file.name || '');
+  const type = getFileType(file.originalname);
+  if (!type) throw new Error('Định dạng file không hỗ trợ');
 
-  if (!type) {
-    throw new Error('Định dạng không hỗ trợ. Vui lòng tải file PDF, DOCX hoặc TXT.');
+  let text = '';
+  switch (type) {
+    case 'pdf':
+      const pdfData = await pdfParse(file.buffer);
+      text = pdfData.text;
+      break;
+    case 'docx':
+      const docxData = await mammoth.extractRawText({ buffer: file.buffer });
+      text = docxData.value;
+      break;
+    case 'text':
+      text = file.buffer.toString('utf8');
+      break;
   }
 
-  const buffer = file.buffer;
-
-  if (type === 'pdf') {
-    const data = await pdfParse(buffer);
-    return (data.text || '').trim();
-  }
-
-  if (type === 'docx') {
-    const result = await mammoth.extractRawText({ buffer });
-    return (result.value || '').trim();
-  }
-
-  return buffer.toString('utf8').trim();
+  return text.trim();
 };

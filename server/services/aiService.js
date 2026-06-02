@@ -92,7 +92,7 @@ Yêu cầu:
     headers: {
       'Content-Type': 'application/json',
       'api-key': config.aiApiKey,
-      'Authorization': \`Bearer \${config.aiApiKey}\` // Fallback for some non-Azure deployments
+      'Authorization': `Bearer ${config.aiApiKey}` // Fallback for some non-Azure deployments
     },
     body: JSON.stringify({
       model: config.aiModel || 'gpt-oss-120b',
@@ -114,7 +114,7 @@ Yêu cầu:
   if (!response.ok) {
     const errorText = await response.text();
     console.error('AI API Error:', errorText);
-    throw new Error(\`Lỗi gọi AI: \${response.statusText} (\${response.status})\`);
+    throw new Error(`Lỗi gọi AI: ${response.statusText} (${response.status})`);
   }
 
   const data = await response.json();

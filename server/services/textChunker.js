@@ -1,37 +1,31 @@
-/**
- * Split long text into overlapping chunks for AI processing.
- */
-export const chunkText = (text, chunkSize, overlap, maxChunks) => {
-  const normalized = text.replace(/\r\n/g, '\n').trim();
-  if (!normalized) return [];
-
-  if (normalized.length <= chunkSize) {
-    return [normalized];
-  }
+export const chunkText = (text, chunkSize = 4000, overlap = 200, maxChunks = 8) => {
+  if (!text) return [];
 
   const chunks = [];
-  let start = 0;
+  let startIndex = 0;
 
-  while (start < normalized.length && chunks.length < maxChunks) {
-    let end = Math.min(start + chunkSize, normalized.length);
+  while (startIndex < text.length && chunks.length < maxChunks) {
+    let endIndex = startIndex + chunkSize;
 
-    if (end < normalized.length) {
-      const slice = normalized.slice(start, end);
-      const lastBreak = Math.max(
-        slice.lastIndexOf('\n\n'),
-        slice.lastIndexOf('\n'),
-        slice.lastIndexOf('. ')
-      );
-      if (lastBreak > chunkSize * 0.5) {
-        end = start + lastBreak + 1;
+    if (endIndex < text.length) {
+      const nextNewline = text.indexOf('\n', endIndex);
+      const nextPeriod = text.indexOf('. ', endIndex);
+
+      if (nextNewline !== -1 && nextNewline - endIndex < 200) {
+        endIndex = nextNewline + 1;
+      } else if (nextPeriod !== -1 && nextPeriod - endIndex < 100) {
+        endIndex = nextPeriod + 2;
       }
+    } else {
+      endIndex = text.length;
     }
 
-    const chunk = normalized.slice(start, end).trim();
-    if (chunk) chunks.push(chunk);
+    chunks.push(text.substring(startIndex, endIndex).trim());
 
-    if (end >= normalized.length) break;
-    start = Math.max(end - overlap, start + 1);
+    if (endIndex >= text.length) break;
+
+    startIndex = endIndex - overlap;
+    if (startIndex < 0) startIndex = 0;
   }
 
   return chunks;

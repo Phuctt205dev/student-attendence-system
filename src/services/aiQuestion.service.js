@@ -14,9 +14,6 @@ export const checkAiServerHealth = async () => {
   }
 };
 
-/**
- * Upload document and generate MCQ questions via backend AI service.
- */
 export const generateQuestionsFromFile = async ({
   file,
   subjectName,

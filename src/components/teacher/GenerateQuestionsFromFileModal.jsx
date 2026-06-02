@@ -115,7 +115,7 @@ const GenerateQuestionsFromFileModal = ({
       )}
 
       <div
-        className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors"
+        className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
         onClick={() => fileInputRef.current?.click()}
         onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
         role="button"
@@ -175,7 +175,7 @@ const GenerateQuestionsFromFileModal = ({
 
       <p className="text-xs text-gray-500 flex items-start gap-2">
         <Sparkles className="w-4 h-4 text-primary-600 flex-shrink-0 mt-0.5" />
-        Hệ thống trích xuất nội dung, gửi lên model AI (gpt-oss-120b) và tự động thêm câu hỏi
+        Hệ thống trích xuất nội dung, gửi lên model AI và tự động thêm câu hỏi
         vào chủ đề &quot;{topicName}&quot;.
       </p>
 

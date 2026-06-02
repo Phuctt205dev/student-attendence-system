@@ -43,6 +43,7 @@ app.use(express.json());
 
 app.use('/api/ai', aiRoutes);
 
+
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, service: 'ai-question-generator' });
 });
@@ -53,7 +54,7 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(config.port, () => {
-  console.log(`AI question server listening on port ${config.port}`);
+  console.log(`Server listening on port ${config.port}`);
   console.log(`CORS_ORIGIN: ${config.corsOrigin}`);
   if (!config.aiApiKey || !config.aiApiBaseUrl) {
     console.warn('Warning: Set AI_API_KEY and AI_API_BASE_URL');
