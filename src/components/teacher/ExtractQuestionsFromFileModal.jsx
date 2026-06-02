@@ -163,7 +163,7 @@ const ExtractQuestionsFromFileModal = ({
           D. Đáp án 4
         </pre>
         <p className="text-xs text-yellow-700 mt-2">
-          * Đáp án đúng mặc định sẽ là A, bạn có thể chỉnh sửa lại sau khi import.
+          * Đáp án đúng sẽ được tự động nhận diện nếu bạn để chữ in đậm (bold). Nếu không tìm thấy, mặc định sẽ là A.
         </p>
       </div>
 

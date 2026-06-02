@@ -34,7 +34,8 @@ router.post('/generate-questions', handleUpload, async (req, res) => {
       Math.max(1, parseInt(req.body.defaultPoints, 10) || 1)
     );
 
-    const extractedText = await extractTextFromFile(req.file);
+    const extractedResult = await extractTextFromFile(req.file);
+    const extractedText = extractedResult.plainText;
 
     if (!extractedText || extractedText.length < 50) {
       return res.status(400).json({
@@ -108,7 +109,8 @@ router.post('/extract-questions', handleUpload, async (req, res) => {
       Math.max(1, parseInt(req.body.defaultPoints, 10) || 1)
     );
 
-    const extractedText = await extractTextFromFile(req.file);
+    const extractedResult = await extractTextFromFile(req.file);
+    const extractedText = extractedResult.plainText;
 
     if (!extractedText || extractedText.length < 10) {
       return res.status(400).json({
@@ -117,7 +119,7 @@ router.post('/extract-questions', handleUpload, async (req, res) => {
       });
     }
 
-    const questions = extractQuestionsRegex(extractedText, defaultPoints);
+    const questions = extractQuestionsRegex(extractedResult, defaultPoints);
 
     if (questions.length === 0) {
       return res.status(422).json({
