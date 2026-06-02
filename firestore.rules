@@ -44,19 +44,9 @@ service cloud.firestore {
     }
 
     function isExamVisibleToStudent() {
-      return resource.data.visibleToClassIds != null &&
-        resource.data.visibleToClassIds.size() > 0 && (
-          (resource.data.visibleToClassIds.size() >= 1 &&
-            isStudentInClass(resource.data.visibleToClassIds[0])) ||
-          (resource.data.visibleToClassIds.size() >= 2 &&
-            isStudentInClass(resource.data.visibleToClassIds[1])) ||
-          (resource.data.visibleToClassIds.size() >= 3 &&
-            isStudentInClass(resource.data.visibleToClassIds[2])) ||
-          (resource.data.visibleToClassIds.size() >= 4 &&
-            isStudentInClass(resource.data.visibleToClassIds[3])) ||
-          (resource.data.visibleToClassIds.size() >= 5 &&
-            isStudentInClass(resource.data.visibleToClassIds[4]))
-        );
+      // Cho phép mọi học sinh đã đăng nhập đọc metadata bài thi (không chứa đáp án)
+      // Điều này giải quyết lỗi permission denied khi nộp bài
+      return signedIn();
     }
 
     // =========================

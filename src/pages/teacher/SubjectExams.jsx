@@ -120,9 +120,22 @@ const SubjectExams = () => {
   };
 
   const isAllQuestionsSelectedInTopic = (topic) => {
-    const questionIds = (topic.questions || []).map(q => q.id);
+    const questionIds = (topic.questions || []).map((q) => q.id);
     if (questionIds.length === 0) return false;
-    return questionIds.every(id => selectedQuestionIds.has(id));
+    return questionIds.every((id) => selectedQuestionIds.has(id));
+  };
+
+  const isSomeQuestionsSelectedInTopic = (topic) => {
+    const questionIds = (topic.questions || []).map((q) => q.id);
+    if (questionIds.length === 0) return false;
+    const selectedCount = questionIds.filter((id) => selectedQuestionIds.has(id)).length;
+    return selectedCount > 0 && selectedCount < questionIds.length;
+  };
+
+  const setTopicCheckboxIndeterminate = (el, topic) => {
+    if (el) {
+      el.indeterminate = isSomeQuestionsSelectedInTopic(topic);
+    }
   };
 
   const handleOpenExamModal = () => {
@@ -422,28 +435,33 @@ const SubjectExams = () => {
               <div className="space-y-4">
                 {topics.map((topic) => (
                   <Card key={topic.id} className="hover:shadow-lg transition-shadow">
-                    <div
-                      className="flex items-start gap-3 cursor-pointer"
-                      onClick={() => toggleTopicExpansion(topic.id)}
-                    >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        ref={(el) => setTopicCheckboxIndeterminate(el, topic)}
+                        checked={isAllQuestionsSelectedInTopic(topic)}
+                        disabled={topic.questions.length === 0}
+                        onChange={() => toggleAllQuestionsInTopic(topic)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-5 h-5 mt-1 rounded border-gray-300 cursor-pointer shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+                        title={
+                          topic.questions.length === 0
+                            ? 'Chủ đề chưa có câu hỏi'
+                            : 'Chọn tất cả câu hỏi trong chủ đề'
+                        }
+                      />
                       <div
-                        className="w-5 h-5 mt-1 rounded border-gray-300 cursor-pointer flex items-center justify-center"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleAllQuestionsInTopic(topic);
+                        className="flex-1 cursor-pointer min-w-0"
+                        onClick={() => toggleTopicExpansion(topic.id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleTopicExpansion(topic.id);
+                          }
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isAllQuestionsSelectedInTopic(topic)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleAllQuestionsInTopic(topic);
-                          }}
-                          className="w-5 h-5 rounded border-gray-300 cursor-pointer"
-                        />
-                      </div>
-                      <div className="flex-1">
                         <div className="flex items-center justify-between">
                           <div>
                             <h3 className="text-lg font-semibold text-gray-900">{topic.name}</h3>
@@ -453,7 +471,8 @@ const SubjectExams = () => {
                             <div className="mt-3 text-sm text-gray-500">
                               <span className="font-semibold text-gray-900">
                                 {topic.questions.length}
-                              </span> câu hỏi
+                              </span>{' '}
+                              câu hỏi
                             </div>
                           </div>
                           <div>
