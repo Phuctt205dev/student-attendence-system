@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Download } from 'lucide-react';
 import Button from '../common/Button';
-import { getClassStudents } from '../../services/class.service';
+import { getClassById, getClassStudents } from '../../services/class.service';
 import { getExamAttemptsForClass } from '../../services/examAttempt.service';
 import TeacherGradeEssayModal from './TeacherGradeEssayModal';
 import {
@@ -8,21 +9,32 @@ import {
   getAttemptScoreBreakdown,
   getPassingScale10
 } from '../../utils/examScoring';
+import {
+  exportExamGradesToExcel,
+  sortStudentsByStudentId
+} from '../../utils/exportExamGradesExcel';
 
-const TeacherExamClassDetailContent = ({ exam, classId }) => {
+const TeacherExamClassDetailContent = ({ exam, classId, onNotify }) => {
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
   const [attemptMap, setAttemptMap] = useState({});
+  const [classInfo, setClassInfo] = useState(null);
   const [gradingStudent, setGradingStudent] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!exam?.id || !classId) return;
 
     setLoading(true);
-    const [studentsResult, attemptsResult] = await Promise.all([
+    const [studentsResult, attemptsResult, classResult] = await Promise.all([
       getClassStudents(classId),
-      getExamAttemptsForClass(exam.id, classId)
+      getExamAttemptsForClass(exam.id, classId),
+      getClassById(classId)
     ]);
+
+    if (classResult.success) {
+      setClassInfo(classResult.data);
+    }
 
     if (studentsResult.success) {
       setStudents(studentsResult.students || []);
@@ -60,18 +72,28 @@ const TeacherExamClassDetailContent = ({ exam, classId }) => {
     [attemptMap]
   );
 
-  const sortedStudents = useMemo(() => {
-    return [...students].sort((a, b) => {
-      const idA = String(a.studentId || '').trim();
-      const idB = String(b.studentId || '').trim();
-      const numA = parseInt(idA, 10);
-      const numB = parseInt(idB, 10);
-      if (!Number.isNaN(numA) && !Number.isNaN(numB) && idA === String(numA) && idB === String(numB)) {
-        return numA - numB;
+  const sortedStudents = useMemo(() => sortStudentsByStudentId(students), [students]);
+
+  const handleExportExcel = () => {
+    setExporting(true);
+    try {
+      const result = exportExamGradesToExcel({
+        exam,
+        classInfo,
+        students: sortedStudents,
+        attemptMap
+      });
+      if (result.success) {
+        onNotify?.(`Đã xuất file ${result.filename}`, 'success');
+      } else {
+        onNotify?.(result.error || 'Không thể xuất Excel', 'error');
       }
-      return idA.localeCompare(idB, 'vi', { numeric: true, sensitivity: 'base' });
-    });
-  }, [students]);
+    } catch (err) {
+      onNotify?.(err.message || 'Không thể xuất Excel', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const avgScale10 = useMemo(() => {
     const scales = submittedAttempts
@@ -143,7 +165,18 @@ const TeacherExamClassDetailContent = ({ exam, classId }) => {
       </div>
 
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Danh sách điểm</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="text-lg font-semibold text-gray-900">Danh sách điểm</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Download className="w-4 h-4" />}
+            onClick={handleExportExcel}
+            disabled={loading || exporting || students.length === 0}
+          >
+            {exporting ? 'Đang xuất...' : 'Xuất Excel'}
+          </Button>
+        </div>
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto" />

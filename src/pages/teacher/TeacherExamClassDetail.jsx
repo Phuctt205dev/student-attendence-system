@@ -12,6 +12,7 @@ const TeacherExamClassDetail = () => {
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -66,12 +67,32 @@ const TeacherExamClassDetail = () => {
             </div>
           )}
 
+          {success && (
+            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+              {success}
+            </div>
+          )}
+
           {loading ? (
             <div className="text-center py-16">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" />
             </div>
           ) : exam ? (
-            <TeacherExamClassDetailContent exam={exam} classId={classId} />
+            <TeacherExamClassDetailContent
+              exam={exam}
+              classId={classId}
+              onNotify={(message, type) => {
+                if (type === 'success') {
+                  setSuccess(message);
+                  setError('');
+                  setTimeout(() => setSuccess(''), 4000);
+                } else {
+                  setError(message);
+                  setSuccess('');
+                  setTimeout(() => setError(''), 4000);
+                }
+              }}
+            />
           ) : (
             !error && <p className="text-gray-600">Không tìm thấy bài thi.</p>
           )}
