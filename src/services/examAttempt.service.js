@@ -11,6 +11,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { isEssayQuestion, sortQuestionsByType } from '../utils/questionTypes';
 
 const getQuestionFromExam = async (examData, questionId) => {
   const subjectId = examData.subjectId;
@@ -97,8 +98,8 @@ export const startExamAttempt = async (
   }
 };
 
-// Update answer (student selecting an option)
-export const updateAnswer = async (attemptId, questionId, selectedAnswer) => {
+// Update answer — MCQ: { selected }, essay: { textAnswer }
+export const updateAnswer = async (attemptId, questionId, answerPayload) => {
   try {
     const attemptRef = doc(db, 'examAttempts', attemptId);
     const attemptSnap = await getDoc(attemptRef);
@@ -110,11 +111,20 @@ export const updateAnswer = async (attemptId, questionId, selectedAnswer) => {
       };
     }
 
+    const prev = attemptSnap.data().answers?.[questionId] || {};
     const answers = attemptSnap.data().answers || {};
-    answers[questionId] = {
-      selected: selectedAnswer,
-      isCorrect: false
-    };
+
+    if (typeof answerPayload === 'string') {
+      answers[questionId] = { ...prev, selected: answerPayload, isCorrect: false };
+    } else if (answerPayload?.textAnswer !== undefined) {
+      answers[questionId] = {
+        ...prev,
+        textAnswer: answerPayload.textAnswer,
+        isCorrect: false
+      };
+    } else {
+      answers[questionId] = { ...prev, ...answerPayload, isCorrect: false };
+    }
 
     await updateDoc(attemptRef, {
       answers,
@@ -163,52 +173,76 @@ export const submitExamAttempt = async (attemptId) => {
 
     const examData = examSnap.data();
     const questionRefs = examData.questionIds || [];
-    let totalPoints = examData.totalPoints || 0;
 
-    let earnedPoints = 0;
+    let mcqEarned = 0;
+    let mcqTotal = 0;
+    let essayTotal = 0;
+    let hasEssay = false;
     const updatedAnswers = { ...answers };
 
     for (const questionRef of questionRefs) {
       const questionId = questionRef.id || questionRef;
-      if (!answers[questionId]) continue;
-
       const question = await getQuestionFromExam(examData, questionId);
       if (!question) continue;
 
+      const points = questionRef.points ?? question.points ?? 1;
+
+      if (isEssayQuestion(question)) {
+        hasEssay = true;
+        essayTotal += points;
+        if (updatedAnswers[questionId]) {
+          updatedAnswers[questionId].pendingGrade = true;
+        }
+        continue;
+      }
+
+      mcqTotal += points;
+      if (!answers[questionId]?.selected) continue;
+
       const isCorrect = answers[questionId].selected === question.correctAnswer;
-      updatedAnswers[questionId].isCorrect = isCorrect;
+      updatedAnswers[questionId] = {
+        ...updatedAnswers[questionId],
+        isCorrect
+      };
 
       if (isCorrect) {
-        const points = questionRef.points ?? question.points ?? 1;
-        earnedPoints += points;
+        mcqEarned += points;
       }
     }
 
-    if (!totalPoints) {
-      totalPoints = questionRefs.reduce((sum, ref) => sum + (ref.points ?? 1), 0);
-    }
-
+    const fullTotal = mcqTotal + essayTotal;
+    const mcqScore = Math.round(mcqEarned * 100) / 100;
     const submittedAt = new Date();
     const startedAtDate = startedAt?.toDate?.() || new Date(startedAt);
     const duration = Math.round((submittedAt - startedAtDate) / (1000 * 60));
 
-    await updateDoc(attemptRef, {
+    const updatePayload = {
       answers: updatedAnswers,
-      score: Math.round(earnedPoints * 100) / 100,
-      totalScore: totalPoints,
+      mcqScore,
+      mcqTotalPoints: mcqTotal,
+      essayTotalPoints: essayTotal,
+      essayScore: hasEssay ? null : 0,
+      score: mcqScore,
+      totalScore: fullTotal,
+      essayPending: hasEssay,
       submittedAt: serverTimestamp(),
       duration,
-      status: 'submitted',
-      gradedAt: serverTimestamp()
-    });
+      status: hasEssay ? 'submitted' : 'graded',
+      gradedAt: hasEssay ? null : serverTimestamp()
+    };
+
+    await updateDoc(attemptRef, updatePayload);
 
     return {
       success: true,
       data: {
         id: attemptId,
-        score: Math.round(earnedPoints * 100) / 100,
-        totalScore: totalPoints,
-        percentage: Math.round((earnedPoints / totalPoints) * 100)
+        score: mcqScore,
+        totalScore: fullTotal,
+        mcqScore,
+        mcqTotalPoints: mcqTotal,
+        essayPending: hasEssay,
+        percentage: mcqTotal ? Math.round((mcqEarned / mcqTotal) * 100) : 0
       }
     };
   } catch (error) {
@@ -431,11 +465,17 @@ export const getAttemptWithDetails = async (attemptId) => {
       const question = await getQuestionFromExam(examData, questionId);
       if (!question) continue;
 
+      const answer = answers[questionId] || {};
       questionsWithAnswers.push({
         id: questionId,
         ...question,
-        studentAnswer: answers[questionId]?.selected || null,
-        isCorrect: answers[questionId]?.isCorrect || false
+        maxPoints: questionRef.points ?? question.points ?? 1,
+        studentAnswer: isEssayQuestion(question)
+          ? answer.textAnswer || null
+          : answer.selected || null,
+        essayScore: answer.essayScore ?? null,
+        isCorrect: answer.isCorrect || false,
+        pendingGrade: answer.pendingGrade || false
       });
     }
 
@@ -448,7 +488,7 @@ export const getAttemptWithDetails = async (attemptId) => {
           id: examSnap.id,
           ...examData
         },
-        questions: questionsWithAnswers
+        questions: sortQuestionsByType(questionsWithAnswers)
       }
     };
   } catch (error) {
@@ -463,4 +503,67 @@ export const getAttemptWithDetails = async (attemptId) => {
 export const countCorrectAnswers = (attempt) => {
   if (!attempt?.answers) return 0;
   return Object.values(attempt.answers).filter((answer) => answer?.isCorrect).length;
+};
+
+export const gradeEssayAttempt = async (attemptId, essayScores) => {
+  try {
+    const attemptRef = doc(db, 'examAttempts', attemptId);
+    const attemptSnap = await getDoc(attemptRef);
+
+    if (!attemptSnap.exists()) {
+      return { success: false, error: 'Attempt not found' };
+    }
+
+    const attemptData = attemptSnap.data();
+    const examSnap = await getDoc(doc(db, 'exams', attemptData.examId));
+    if (!examSnap.exists()) {
+      return { success: false, error: 'Exam not found' };
+    }
+
+    const examData = examSnap.data();
+    const answers = { ...attemptData.answers };
+    let essayEarned = 0;
+
+    for (const questionRef of examData.questionIds || []) {
+      const questionId = questionRef.id || questionRef;
+      const question = await getQuestionFromExam(examData, questionId);
+      if (!question || !isEssayQuestion(question)) continue;
+
+      const maxPoints = questionRef.points ?? question.points ?? 1;
+      const raw = essayScores[questionId];
+      const earned = Math.min(Math.max(Number(raw) || 0, 0), maxPoints);
+
+      answers[questionId] = {
+        ...(answers[questionId] || {}),
+        essayScore: earned,
+        pendingGrade: false,
+        graded: true
+      };
+      essayEarned += earned;
+    }
+
+    const mcqScore = attemptData.mcqScore ?? attemptData.score ?? 0;
+    const mcqTotal = attemptData.mcqTotalPoints ?? 0;
+    const essayTotal = attemptData.essayTotalPoints ?? 0;
+    const totalScore = mcqTotal + essayTotal;
+    const finalScore = Math.round((mcqScore + essayEarned) * 100) / 100;
+
+    await updateDoc(attemptRef, {
+      answers,
+      essayScore: Math.round(essayEarned * 100) / 100,
+      score: finalScore,
+      totalScore,
+      essayPending: false,
+      status: 'graded',
+      gradedAt: serverTimestamp()
+    });
+
+    return {
+      success: true,
+      data: { score: finalScore, totalScore, essayScore: essayEarned }
+    };
+  } catch (error) {
+    console.error('Error grading essay attempt:', error);
+    return { success: false, error: error.message };
+  }
 };

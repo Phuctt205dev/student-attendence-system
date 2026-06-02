@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import Modal from '../common/Modal';
+import Button from '../common/Button';
 import { getClassStudents } from '../../services/class.service';
 import { getExamAttemptsForClass, countCorrectAnswers } from '../../services/examAttempt.service';
+import TeacherGradeEssayModal from './TeacherGradeEssayModal';
 
 const TeacherExamClassDetailModal = ({ exam, classId, isOpen, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
   const [attemptMap, setAttemptMap] = useState({});
+  const [gradingStudent, setGradingStudent] = useState(null);
 
   const loadData = useCallback(async () => {
     if (!exam?.id || !classId) return;
@@ -115,6 +118,7 @@ const TeacherExamClassDetailModal = ({ exam, classId, isOpen, onClose }) => {
                       <th className="px-3 py-2 text-left font-medium text-gray-700">Trạng thái</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-700">Đúng / Tổng</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-700">Điểm</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-700">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -124,12 +128,18 @@ const TeacherExamClassDetailModal = ({ exam, classId, isOpen, onClose }) => {
                       const correct = attempt ? countCorrectAnswers(attempt) : 0;
                       const score = attempt?.score ?? '—';
                       const totalScore = attempt?.totalScore || exam.totalPoints || totalQuestions;
+                      const canGradeEssay =
+                        attempt &&
+                        (attempt.status === 'submitted' || attempt.status === 'graded') &&
+                        attempt.essayPending;
 
                       return (
                         <tr key={student.uid} className="hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-600">{student.studentId || '—'}</td>
                           <td className="px-3 py-2 font-medium text-gray-900">{student.fullName}</td>
-                          <td className={`px-3 py-2 ${status.className}`}>{status.text}</td>
+                          <td className={`px-3 py-2 ${status.className}`}>
+                            {attempt?.essayPending ? 'Đã nộp — chờ chấm TL' : status.text}
+                          </td>
                           <td className="px-3 py-2 text-gray-700">
                             {attempt && (attempt.status === 'submitted' || attempt.status === 'graded')
                               ? `${correct} / ${totalQuestions}`
@@ -139,6 +149,19 @@ const TeacherExamClassDetailModal = ({ exam, classId, isOpen, onClose }) => {
                             {attempt && (attempt.status === 'submitted' || attempt.status === 'graded')
                               ? `${score} / ${totalScore}`
                               : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {canGradeEssay && (
+                              <Button
+                                variant="outline"
+                                className="text-xs py-1 px-2"
+                                onClick={() =>
+                                  setGradingStudent({ attempt, name: student.fullName })
+                                }
+                              >
+                                Chấm tự luận
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -150,6 +173,13 @@ const TeacherExamClassDetailModal = ({ exam, classId, isOpen, onClose }) => {
           </div>
         </div>
       )}
+      <TeacherGradeEssayModal
+        isOpen={Boolean(gradingStudent)}
+        attempt={gradingStudent?.attempt}
+        studentName={gradingStudent?.name}
+        onClose={() => setGradingStudent(null)}
+        onGraded={loadData}
+      />
     </Modal>
   );
 };

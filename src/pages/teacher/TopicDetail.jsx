@@ -25,6 +25,7 @@ import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import QuestionForm from '../../components/teacher/QuestionForm';
+import { isEssayQuestion } from '../../utils/questionTypes';
 import GenerateQuestionsFromFileModal from '../../components/teacher/GenerateQuestionsFromFileModal';
 import ExtractQuestionsFromFileModal from '../../components/teacher/ExtractQuestionsFromFileModal';
 
@@ -262,25 +263,40 @@ const TopicDetail = () => {
                           <Card key={question.id} className="p-4">
                             <div className="flex justify-between items-start gap-4">
                               <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">{question.questionText}</p>
-                                <div className="mt-2 space-y-1 text-xs text-gray-600">
-                                  <div>
-                                    <span className="font-semibold">A:</span> {question.options?.A}
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold">B:</span> {question.options?.B}
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold">C:</span> {question.options?.C}
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold">D:</span> {question.options?.D}
-                                  </div>
-                                </div>
-                                <div className="mt-2 flex gap-3 text-xs text-gray-600">
-                                  <span>
-                                    <span className="font-semibold">Đáp án:</span> {question.correctAnswer}
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span
+                                    className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                      isEssayQuestion(question)
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-blue-100 text-blue-800'
+                                    }`}
+                                  >
+                                    {isEssayQuestion(question) ? 'Tự luận' : 'Trắc nghiệm'}
                                   </span>
+                                </div>
+                                <p className="text-sm font-medium text-gray-900">{question.questionText}</p>
+                                {!isEssayQuestion(question) && (
+                                  <div className="mt-2 space-y-1 text-xs text-gray-600">
+                                    <div>
+                                      <span className="font-semibold">A:</span> {question.options?.A}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold">B:</span> {question.options?.B}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold">C:</span> {question.options?.C}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold">D:</span> {question.options?.D}
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="mt-2 flex gap-3 text-xs text-gray-600">
+                                  {!isEssayQuestion(question) && (
+                                    <span>
+                                      <span className="font-semibold">Đáp án:</span> {question.correctAnswer}
+                                    </span>
+                                  )}
                                   <span>
                                     <span className="font-semibold">Điểm:</span> {question.points}
                                   </span>

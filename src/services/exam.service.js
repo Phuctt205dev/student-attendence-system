@@ -20,6 +20,7 @@ import {
   calculateTotalPoints,
   calculatePassingScore
 } from './subject.service';
+import { sortQuestionsByType } from '../utils/questionTypes';
 
 const normalizeExamVisibility = (exam) => {
   if (exam.visibility) {
@@ -298,6 +299,8 @@ export const createExam = async (examData) => {
         };
       }
     }
+
+    selectedQuestions = sortQuestionsByType(selectedQuestions);
 
     // Calculate total points from questions
     const totalPoints = calculateTotalPoints(selectedQuestions);
@@ -752,7 +755,7 @@ export const getExamWithQuestions = async (
       data: {
         id: examDocId,
         ...examData,
-        questions
+        questions: sortQuestionsByType(questions)
       }
     };
   } catch (error) {

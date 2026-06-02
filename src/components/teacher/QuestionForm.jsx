@@ -2,8 +2,15 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import Button from '../common/Button';
 import { AlertCircle } from 'lucide-react';
+import { QUESTION_TYPE_ESSAY, QUESTION_TYPE_MCQ } from '../../utils/questionTypes';
 
 const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1, loading = false }) => {
+  const initialType =
+    initialData?.type === QUESTION_TYPE_ESSAY ? QUESTION_TYPE_ESSAY : QUESTION_TYPE_MCQ;
+
+  const [questionType, setQuestionType] = useState(initialType);
+  const isEditing = Boolean(initialData?.id);
+
   const { register, handleSubmit, formState: { errors }, watch } = useForm({
     defaultValues: {
       questionText: initialData?.questionText || '',
@@ -18,22 +25,35 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
 
   const [error, setError] = useState('');
   const correctAnswer = watch('correctAnswer');
+  const isMcq = questionType === QUESTION_TYPE_MCQ;
+
+  const handleTypeChange = (nextType) => {
+    if (isEditing) return;
+    setQuestionType(nextType);
+  };
 
   const onSubmitForm = async (data) => {
     try {
       setError('');
 
       const questionData = {
+        type: questionType,
         questionText: data.questionText,
-        options: {
+        points: parseInt(data.points, 10) || 1
+      };
+
+      if (isMcq) {
+        questionData.options = {
           A: data.optionA,
           B: data.optionB,
           C: data.optionC,
           D: data.optionD
-        },
-        correctAnswer: data.correctAnswer,
-        points: parseInt(data.points) || 1
-      };
+        };
+        questionData.correctAnswer = data.correctAnswer;
+      } else {
+        questionData.options = null;
+        questionData.correctAnswer = null;
+      }
 
       if (onSubmit) {
         const result = await onSubmit(questionData);
@@ -55,21 +75,52 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
         </div>
       )}
 
-      {/* Question Text */}
+      <div className="flex items-center justify-between gap-4 p-1 bg-gray-100 rounded-lg">
+        <button
+          type="button"
+          disabled={isEditing}
+          onClick={() => handleTypeChange(QUESTION_TYPE_MCQ)}
+          className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            isMcq
+              ? 'bg-white text-primary-700 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          } ${isEditing ? 'cursor-not-allowed opacity-60' : ''}`}
+        >
+          Trắc nghiệm
+        </button>
+        <button
+          type="button"
+          disabled={isEditing}
+          onClick={() => handleTypeChange(QUESTION_TYPE_ESSAY)}
+          className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            !isMcq
+              ? 'bg-white text-primary-700 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          } ${isEditing ? 'cursor-not-allowed opacity-60' : ''}`}
+        >
+          Tự luận
+        </button>
+      </div>
+      {isEditing && (
+        <p className="text-xs text-gray-500 -mt-2">
+          Không thể đổi loại câu hỏi khi chỉnh sửa.
+        </p>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Question Text *
+          Nội dung câu hỏi *
         </label>
         <textarea
           {...register('questionText', {
-            required: 'Question is required',
+            required: 'Vui lòng nhập câu hỏi',
             minLength: {
               value: 10,
-              message: 'Question must be at least 10 characters'
+              message: 'Câu hỏi phải có ít nhất 10 ký tự'
             }
           })}
           rows="4"
-          placeholder="Enter the question..."
+          placeholder={isMcq ? 'Nhập câu hỏi trắc nghiệm...' : 'Nhập đề bài tự luận...'}
           className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
         />
         {errors.questionText && (
@@ -77,81 +128,82 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
         )}
       </div>
 
-      {/* Options */}
-      <div className="space-y-4">
-        <p className="text-sm font-medium text-gray-700">Options *</p>
+      {isMcq && (
+        <div className="space-y-4">
+          <p className="text-sm font-medium text-gray-700">Các đáp án *</p>
 
-        {['A', 'B', 'C', 'D'].map((option) => (
-          <div key={option}>
-            <label className="block text-sm text-gray-600 mb-1">Option {option}</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="radio"
-                value={option}
-                {...register('correctAnswer')}
-                className="w-4 h-4 cursor-pointer"
-              />
-              <input
-                type="text"
-                {...register(`option${option}`, {
-                  required: `Option ${option} is required`,
-                  minLength: {
-                    value: 2,
-                    message: 'Option must be at least 2 characters'
-                  }
-                })}
-                placeholder={`Enter option ${option}...`}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              {correctAnswer === option && (
-                <span className="text-green-600 text-sm font-medium">✓ Correct</span>
+          {['A', 'B', 'C', 'D'].map((option) => (
+            <div key={option}>
+              <label className="block text-sm text-gray-600 mb-1">Đáp án {option}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  value={option}
+                  {...register('correctAnswer')}
+                  className="w-4 h-4 cursor-pointer"
+                />
+                <input
+                  type="text"
+                  {...register(`option${option}`, {
+                    required: `Vui lòng nhập đáp án ${option}`,
+                    minLength: {
+                      value: 2,
+                      message: 'Đáp án phải có ít nhất 2 ký tự'
+                    }
+                  })}
+                  placeholder={`Nhập đáp án ${option}...`}
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                {correctAnswer === option && (
+                  <span className="text-green-600 text-sm font-medium">✓ Đúng</span>
+                )}
+              </div>
+              {errors[`option${option}`] && (
+                <p className="text-red-600 text-sm mt-1">{errors[`option${option}`].message}</p>
               )}
             </div>
-            {errors[`option${option}`] && (
-              <p className="text-red-600 text-sm mt-1">{errors[`option${option}`].message}</p>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Points */}
+      {!isMcq && (
+        <p className="text-sm text-gray-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          Câu tự luận do giáo viên chấm điểm sau khi sinh viên nộp bài. Sinh viên sẽ trả lời bằng văn bản khi làm bài thi.
+        </p>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Points *
+          Điểm *
         </label>
         <input
           type="number"
           {...register('points', {
-            required: 'Points is required',
+            required: 'Vui lòng nhập điểm',
             min: {
               value: 1,
-              message: 'Points must be at least 1'
+              message: 'Điểm tối thiểu là 1'
             },
             max: {
               value: 100,
-              message: 'Points cannot exceed 100'
+              message: 'Điểm tối đa là 100'
             }
           })}
           min="1"
           max="100"
-          placeholder="Enter points for this question"
           className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         {errors.points && (
           <p className="text-red-600 text-sm mt-1">{errors.points.message}</p>
         )}
-        <p className="text-xs text-gray-500 mt-1">
-          Default will be set to this value for the next question
-        </p>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center justify-end gap-3 pt-6 border-t">
         <Button variant="outline" onClick={onCancel} disabled={loading}>
-          Cancel
+          Hủy
         </Button>
         <Button variant="primary" type="submit" disabled={loading}>
-          {loading ? 'Saving...' : initialData ? 'Update Question' : 'Create Question'}
+          {loading ? 'Đang lưu...' : initialData ? 'Cập nhật' : 'Tạo câu hỏi'}
         </Button>
       </div>
     </form>

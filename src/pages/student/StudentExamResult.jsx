@@ -6,6 +6,7 @@ import { getStudentExamAttempt, getAttemptWithDetails } from '../../services/exa
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import { isEssayQuestion } from '../../utils/questionTypes';
 
 const StudentExamResult = () => {
   const { userProfile } = useAuth();
@@ -55,9 +56,16 @@ const StudentExamResult = () => {
     loadResult();
   }, [userProfile?.uid, examId, classId, classExamInstanceId]);
 
-  const score = attempt?.score ?? 0;
+  const mcqScore = attempt?.mcqScore ?? attempt?.score ?? 0;
+  const mcqTotal = attempt?.mcqTotalPoints ?? 0;
+  const essayScore = attempt?.essayScore;
+  const essayTotal = attempt?.essayTotalPoints ?? 0;
+  const essayPending = attempt?.essayPending === true;
+  const finalScore = attempt?.score ?? 0;
   const totalScore = attempt?.totalScore ?? details?.exam?.totalPoints ?? 0;
-  const percentage = totalScore ? Math.round((score / totalScore) * 100) : 0;
+
+  const mcqQuestions = details?.questions?.filter((q) => !isEssayQuestion(q)) || [];
+  const essayQuestions = details?.questions?.filter(isEssayQuestion) || [];
 
   return (
     <StudentLayout>
@@ -99,24 +107,79 @@ const StudentExamResult = () => {
               <Card>
                 <div className="flex items-center gap-3">
                   <CheckCircle className="w-6 h-6 text-green-600" />
-                  <div>
-                    <p className="text-sm text-gray-600">Điểm của bạn</p>
-                    <p className="text-2xl font-bold text-gray-900">{score} / {totalScore}</p>
-                    <p className="text-sm text-gray-500">{percentage}%</p>
+                  <div className="space-y-1">
+                    {mcqTotal > 0 && (
+                      <p className="text-sm text-gray-600">
+                        Điểm trắc nghiệm:{' '}
+                        <span className="font-bold text-gray-900">
+                          {mcqScore} / {mcqTotal}
+                        </span>
+                      </p>
+                    )}
+                    {essayTotal > 0 && (
+                      <p className="text-sm text-gray-600">
+                        Điểm tự luận:{' '}
+                        {essayPending ? (
+                          <span className="font-medium text-amber-700">Chờ giáo viên chấm</span>
+                        ) : (
+                          <span className="font-bold text-gray-900">
+                            {essayScore ?? 0} / {essayTotal}
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    <p className="text-lg font-bold text-gray-900">
+                      Tổng điểm: {essayPending && essayTotal > 0
+                        ? `${mcqScore} / ${totalScore} (chưa gồm tự luận)`
+                        : `${finalScore} / ${totalScore}`}
+                    </p>
                   </div>
                 </div>
               </Card>
 
-              {details?.questions?.length > 0 && (
+              {mcqQuestions.length > 0 && (
                 <Card>
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Chi tiết câu hỏi</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Phần I — Trắc nghiệm</h3>
                   <div className="space-y-4">
-                    {details.questions.map((question, index) => (
-                      <div key={question.id} className="border-b border-gray-100 pb-4">
-                        <p className="text-sm font-semibold text-gray-900">{index + 1}. {question.questionText}</p>
-                        <p className="text-sm text-gray-600 mt-1">Đáp án của bạn: {question.studentAnswer || 'Chưa trả lời'}</p>
-                        <p className={`text-sm mt-1 ${question.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                    {mcqQuestions.map((question, index) => (
+                      <div key={question.id} className="border-b border-gray-100 pb-4 last:border-0">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {index + 1}. {question.questionText}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Đáp án của bạn: {question.studentAnswer || 'Chưa trả lời'}
+                        </p>
+                        <p
+                          className={`text-sm mt-1 ${question.isCorrect ? 'text-green-600' : 'text-red-600'}`}
+                        >
                           {question.isCorrect ? 'Đúng' : 'Sai'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {essayQuestions.length > 0 && (
+                <Card>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Phần II — Tự luận</h3>
+                  <div className="space-y-4">
+                    {essayQuestions.map((question, index) => (
+                      <div key={question.id} className="border-b border-gray-100 pb-4 last:border-0">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {index + 1}. {question.questionText}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">
+                          Bài làm: {question.studentAnswer?.trim() || 'Chưa trả lời'}
+                        </p>
+                        <p className="text-sm mt-1 text-gray-600">
+                          {essayPending || question.pendingGrade ? (
+                            <span className="text-amber-700">Chờ giáo viên chấm điểm</span>
+                          ) : (
+                            <span>
+                              Điểm: {question.essayScore ?? 0} / {question.maxPoints ?? question.points}
+                            </span>
+                          )}
                         </p>
                       </div>
                     ))}

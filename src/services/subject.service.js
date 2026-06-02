@@ -217,22 +217,31 @@ export const deleteTopic = async (subjectId, topicId) => {
 
 export const createQuestion = async (subjectId, topicId, questionData) => {
   try {
+    const type = questionData.type === 'essay' ? 'essay' : 'mcq';
+    const payload = {
+      questionText: questionData.questionText,
+      type,
+      points: questionData.points || 1,
+      createdBy: questionData.createdBy,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      isActive: true
+    };
+
+    if (type === 'essay') {
+      payload.options = null;
+      payload.correctAnswer = null;
+    } else {
+      payload.options = questionData.options;
+      payload.correctAnswer = questionData.correctAnswer;
+    }
+
     const questionRef = await addDoc(
       collection(db, 'subjects', subjectId, 'topics', topicId, 'questions'),
-      {
-        questionText: questionData.questionText,
-        type: 'mcq',
-        options: questionData.options,
-        correctAnswer: questionData.correctAnswer,
-        points: questionData.points || 1,
-        createdBy: questionData.createdBy,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        isActive: true
-      }
+      payload
     );
 
-    return { success: true, data: { id: questionRef.id, ...questionData } };
+    return { success: true, data: { id: questionRef.id, ...payload } };
   } catch (error) {
     console.error('Error creating question:', error);
     return { success: false, error: error.message };
