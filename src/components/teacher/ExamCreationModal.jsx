@@ -25,7 +25,7 @@ const ExamCreationModal = ({
     return '';
   }))).filter(Boolean);
 
-  const { register, handleSubmit, formState: { errors }, watch } = useForm({
+  const { register, handleSubmit, formState: { errors }, watch, setValue, getValues } = useForm({
     defaultValues: {
       title: `${subject?.name} - ${topicNames.length > 0 ? topicNames.join(', ') : 'Bài thi mới'}`,
       description: '',
@@ -39,8 +39,15 @@ const ExamCreationModal = ({
   const [classesLoading, setClassesLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const questionCount = watch('questionCount');
-  const classIds = watch('classIds') || [];
+  const selectedClassIds = watch('classIds') || [];
+
+  const toggleClassSelection = (classId) => {
+    const current = getValues('classIds') || [];
+    const next = current.includes(classId)
+      ? current.filter((id) => id !== classId)
+      : [...current, classId];
+    setValue('classIds', next, { shouldDirty: true });
+  };
 
   useEffect(() => {
     loadClasses();
@@ -182,7 +189,7 @@ const ExamCreationModal = ({
       <div className="border-b pb-4">
         <h3 className="text-sm font-semibold text-gray-900 mb-1">Gán lớp (tùy chọn)</h3>
         <p className="text-xs text-gray-500 mb-3">
-          Có thể gán lớp sau tại Chi tiết lớp học → Bài thi
+          Các lớp được chọn sẽ được gán ngay khi tạo bài thi
         </p>
 
         {classesLoading ? (
@@ -195,8 +202,8 @@ const ExamCreationModal = ({
               <label key={cls.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
                 <input
                   type="checkbox"
-                  value={cls.id}
-                  {...register('classIds')}
+                  checked={selectedClassIds.includes(cls.id)}
+                  onChange={() => toggleClassSelection(cls.id)}
                   className="w-4 h-4 rounded border-gray-300 cursor-pointer"
                 />
                 <span className="text-sm text-gray-900">{cls.className || cls.name}</span>

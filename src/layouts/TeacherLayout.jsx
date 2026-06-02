@@ -79,13 +79,13 @@ const TeacherLayout = ({ children }) => {
           {!collapsed && <h2 className="text-xl font-bold text-gray-900">Teacher Panel</h2>}
           <button
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-2 rounded-md text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="lg:hidden icon-nav-btn"
           >
             <X className="w-5 h-5" />
           </button>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:block p-2 rounded-md text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 ml-auto"
+            className="hidden lg:block icon-nav-btn ml-auto"
             title={collapsed ? 'Mở rộng' : 'Thu gọn'}
           >
             {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
@@ -173,7 +173,7 @@ const TeacherLayout = ({ children }) => {
           <div className="flex items-center justify-between h-16 px-4">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-md text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="icon-nav-btn"
             >
               <Menu className="w-6 h-6" />
             </button>

@@ -311,21 +311,13 @@ export const createExam = async (examData) => {
     }));
 
     const classIdsArray = Array.isArray(classIds) ? classIds : classIds ? [classIds] : [];
-    const classSettings = {};
-    classIdsArray.forEach((id) => {
-      classSettings[id] = {
-        visibility: 'private',
-        startTime: null,
-        endTime: null
-      };
-    });
 
-    // Create exam document
+    // Create exam document (class assignment via assignExamToClass → classExams)
     const docRef = await addDoc(collection(db, 'exams'), {
       title,
       description: description || '',
       teacherId,
-      classIds: classIdsArray,
+      classIds: [],
       durationMinutes: parseInt(durationMinutes),
       subjectId,
       topicIds: usedTopicIds,
@@ -334,7 +326,7 @@ export const createExam = async (examData) => {
       totalPoints,
       passingScore,
       visibility: 'private',
-      classSettings,
+      classSettings: {},
       visibleToClassIds: [],
       startTime: null,
       endTime: null,
@@ -342,6 +334,14 @@ export const createExam = async (examData) => {
       updatedAt: serverTimestamp(),
       publishedAt: null
     });
+
+    const assignWarnings = [];
+    for (const classId of classIdsArray) {
+      const assignResult = await assignExamToClass(docRef.id, classId);
+      if (!assignResult.success) {
+        assignWarnings.push(assignResult.error || `Không gán được lớp ${classId}`);
+      }
+    }
 
     return {
       success: true,
@@ -351,7 +351,9 @@ export const createExam = async (examData) => {
         description,
         totalQuestions: selectedQuestions.length,
         totalPoints,
-        passingScore
+        passingScore,
+        assignedClassCount: classIdsArray.length - assignWarnings.length,
+        assignWarnings
       }
     };
   } catch (error) {

@@ -117,7 +117,7 @@ const TeacherSubjectExamDetail = () => {
               <button
                 type="button"
                 onClick={() => navigate(`/teacher/subjects/${subjectId}/exams`)}
-                className="p-2 hover:bg-gray-100 rounded-lg text-gray-700"
+                className="icon-nav-btn"
               >
                 <ArrowLeft className="w-6 h-6" />
               </button>

@@ -40,7 +40,7 @@ const TeacherExamClassDetail = () => {
               <button
                 type="button"
                 onClick={() => navigate(`/teacher/classes/${classId}`)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700"
+                className="icon-nav-btn"
               >
                 <ArrowLeft className="w-6 h-6" />
               </button>

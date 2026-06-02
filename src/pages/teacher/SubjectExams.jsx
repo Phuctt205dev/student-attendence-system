@@ -205,8 +205,15 @@ const SubjectExams = () => {
     setShowExamModal(true);
   };
 
-  const handleExamCreated = () => {
-    setSuccess('Bài thi được tạo thành công!');
+  const handleExamCreated = (data) => {
+    let message = 'Bài thi được tạo thành công!';
+    if (data?.assignedClassCount > 0) {
+      message += ` Đã gán vào ${data.assignedClassCount} lớp.`;
+    }
+    if (data?.assignWarnings?.length > 0) {
+      message += ` Lưu ý: ${data.assignWarnings.join('; ')}`;
+    }
+    setSuccess(message);
     setShowExamModal(false);
     setSelectedQuestionIds(new Set());
     setExpandedTopicIds([]);
@@ -433,7 +440,7 @@ const SubjectExams = () => {
               <div className="flex items-center gap-4">
                 <button
                 onClick={() => navigate(`/teacher/subjects/${subjectId}`)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-gray-700 dark:text-gray-200"
+                className="icon-nav-btn"
               >
                 <ArrowLeft className="w-6 h-6" />
               </button>
@@ -670,16 +677,6 @@ const SubjectExams = () => {
                         </div>
 
                         <div className="flex flex-col gap-2 shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/teacher/subjects/${subjectId}/exams/${exam.id}`);
-                            }}
-                          >
-                            Chi tiết
-                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
