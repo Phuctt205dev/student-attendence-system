@@ -122,7 +122,8 @@ router.post('/extract-questions', handleUpload, async (req, res) => {
     if (questions.length === 0) {
       return res.status(422).json({
         success: false,
-        error: 'Không tìm thấy câu hỏi nào hợp lệ trong file. Vui lòng kiểm tra định dạng (Câu 1: ... A. ... B. ... C. ... D. ...).'
+        error: 'Không tìm thấy câu hỏi nào hợp lệ trong file. Vui lòng kiểm tra định dạng (Câu 1: ... A. ... B. ... C. ... D. ...).',
+        debugText: extractedText.substring(0, 500) + '...' // Trả về 500 ký tự đầu tiên để debug
       });
     }
 
