@@ -26,12 +26,13 @@ Trình duyệt → GitHub Pages (frontend)
 
 ## Bước 2: Deploy backend lên Railway
 
-Chi tiết: **[RAILWAY_DEPLOY.md](./RAILWAY_DEPLOY.md)**
+Chi tiết: **[RAILWAY_DEPLOY.md](./RAILWAY_DEPLOY.md)** — mục **4.1** nếu Variables vẫn là bộ Azure cũ.
 
 Tóm tắt:
 
 1. [railway.app](https://railway.app) → Deploy repo → **Root Directory** = `server`
-2. Tab **Variables** — dán:
+2. Tab **Variables** — **xóa** `AI_API_BASE_URL`, `AI_API_KEY`, `AI_API_VERSION`, `AI_MODEL` và mọi `VITE_*` trên Railway
+3. **Thêm**:
 
 ```env
 AI_PROVIDER=gemini
@@ -91,6 +92,7 @@ Workflow `.github/workflows/deploy.yml` sẽ build frontend với `VITE_API_URL`
 | CORS error trong Console | `CORS_ORIGIN` sai | Trên Railway: `https://phuctt205dev.github.io` (không có path `/student-attendence-system`) |
 | BadRequest Azure 400 | Vẫn dùng Azure cũ | Đổi sang `AI_PROVIDER=gemini` |
 | Backend sleep (Render free) | Cold start | Đợi 30–60s, thử lại |
+| **429 Too Many Requests** | Gemini free tier — quá nhiều request/phút | Đợi 1–2 phút; Railway: `GEMINI_MODEL=gemini-2.0-flash-lite`, `AI_MAX_CHUNKS=2`, `GEMINI_CHUNK_DELAY_MS=3000`; redeploy |
 | Ollama / localhost | Cấu hình local trên cloud | Trên Railway **không** dùng Ollama |
 
 ---

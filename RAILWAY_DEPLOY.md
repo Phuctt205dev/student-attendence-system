@@ -67,8 +67,52 @@ MAX_FILE_SIZE_MB=10
 **Lưu ý:**
 
 - **Không** set `PORT` — Railway tự gán; app đọc `process.env.PORT`.
-- `AI_API_BASE_URL` **không** có `/chat/completions` ở cuối.
 - `CORS_ORIGIN`: origin GitHub Pages là `https://phuctt205dev.github.io` (không kèm path `/student-attendence-system/`).
+
+---
+
+## 4.1. Railway đang có biến Azure cũ — chuyển sang Gemini
+
+Nếu tab **Variables** giống ảnh cũ (`AI_API_BASE_URL`, `AI_API_KEY`, `AI_API_VERSION`, `AI_MODEL`…) thì backend **chưa** dùng Gemini. Làm lần lượt:
+
+### Trên Railway (chỉ backend `server/`)
+
+| Hành động | Tên biến |
+|-----------|----------|
+| **Thêm mới** | `AI_PROVIDER` = `gemini` |
+| **Thêm mới** | `GEMINI_API_KEY` = key từ [AI Studio](https://aistudio.google.com/apikey) |
+| **Thêm mới** | `GEMINI_MODEL` = `gemini-2.0-flash` |
+| **Giữ** | `CORS_ORIGIN`, `AI_CHUNK_SIZE`, `AI_CHUNK_OVERLAP`, `AI_MAX_CHUNKS`, `MAX_FILE_SIZE_MB` |
+| **Xóa** (Azure, không dùng nữa) | `AI_API_BASE_URL`, `AI_API_KEY`, `AI_API_VERSION`, `AI_MODEL`, `SKIP_API_VERSION` |
+| **Xóa trên Railway** | Mọi biến `VITE_*` — backend **không đọc** các biến này |
+
+Raw Editor sau khi dọn (ví dụ):
+
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=<key của bạn>
+GEMINI_MODEL=gemini-2.0-flash
+CORS_ORIGIN=http://localhost:5173,https://phuctt205dev.github.io
+AI_CHUNK_SIZE=4000
+AI_CHUNK_OVERLAP=200
+AI_MAX_CHUNKS=6
+MAX_FILE_SIZE_MB=10
+```
+
+→ **Redeploy** service → mở `https://<railway>/api/ai/health` → `"provider": "gemini", "configured": true`.
+
+### Trên GitHub (frontend GitHub Pages) — **khác** Railway
+
+Repo → **Settings** → **Secrets and variables** → **Actions**:
+
+| Secret | Mục đích |
+|--------|----------|
+| `VITE_API_URL` | URL Railway, vd. `https://xxx.up.railway.app` |
+| `VITE_FIREBASE_*` | Firebase cho React (build Pages) |
+
+`VITE_FIREBASE_*` đặt trên **GitHub Actions**, không cần (và không có tác dụng) trên Railway cho API AI.
+
+Sau khi thêm/sửa `VITE_API_URL` → chạy lại workflow **Deploy to GitHub Pages**.
 
 ---
 
@@ -230,6 +274,7 @@ Hoặc: push bất kỳ commit nào lên `master` cũng kích hoạt deploy.
 | Frontend không gọi Railway | Thiếu `VITE_API_URL` hoặc chưa build lại Pages |
 | AI 400 `Missing ... api-version` | Thêm `AI_API_VERSION=2024-10-21` trên Railway (hoặc version Azure Portal ghi) → Redeploy |
 | AI 401/404 | Kiểm tra endpoint Azure trong Portal |
+| **Gemini 429** Too Many Requests | Free tier giới hạn/phút. Đợi 1–2 phút. Variables: `GEMINI_MODEL=gemini-2.0-flash-lite`, `AI_MAX_CHUNKS=2`, `GEMINI_CHUNK_DELAY_MS=3000` → Redeploy. Code mới tự retry 3 lần. |
 | Deploy hết credit (free) | Nạp credit hoặc nâng plan Railway |
 
 ### 9.1. Lỗi CORS: `Failed to fetch` / blocked by CORS policy

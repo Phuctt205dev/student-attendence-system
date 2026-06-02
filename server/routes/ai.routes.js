@@ -5,6 +5,9 @@ import { uploadDocument } from '../middleware/upload.js';
 import { extractTextFromFile } from '../services/textExtractor.js';
 import { chunkText } from '../services/textChunker.js';
 import { dedupeQuestions, generateQuestionsForChunk } from '../services/aiService.js';
+import { geminiInterChunkDelayMs } from '../services/geminiService.js';
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 import { extractQuestionsRegex } from '../services/questionParser.js';
 
 const router = Router();
@@ -55,6 +58,13 @@ router.post('/generate-questions', handleUpload, async (req, res) => {
     const allQuestions = [];
 
     for (let i = 0; i < chunks.length; i++) {
+      if (i > 0 && isGemini()) {
+        const delayMs = geminiInterChunkDelayMs();
+        if (delayMs > 0) {
+          await sleep(delayMs);
+        }
+      }
+
       const chunkQuestions = await generateQuestionsForChunk({
         chunkText: chunks[i],
         chunkIndex: i,
@@ -92,7 +102,9 @@ router.post('/generate-questions', handleUpload, async (req, res) => {
     });
   } catch (error) {
     console.error('generate-questions error:', error);
-    return res.status(500).json({
+    const isRateLimit =
+      error.message?.includes('429') || error.message?.includes('giới hạn tần suất');
+    return res.status(isRateLimit ? 429 : 500).json({
       success: false,
       error: error.message || 'Lỗi khi tạo câu hỏi từ file'
     });

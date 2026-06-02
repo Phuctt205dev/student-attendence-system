@@ -66,7 +66,10 @@ export const config = {
   aiApiBaseUrl: resolveApiBaseUrl(),
   aiModel: resolveModel(),
   geminiApiKey: resolveGeminiApiKey(),
-  geminiModel: process.env.GEMINI_MODEL || process.env.AI_MODEL || 'gemini-2.0-flash',
+  geminiModel:
+    process.env.GEMINI_MODEL || process.env.AI_MODEL || 'gemini-2.0-flash-lite',
+  geminiMaxRetries: parseIntEnv('GEMINI_MAX_RETRIES', 3),
+  geminiInterChunkDelayMs: parseIntEnv('GEMINI_CHUNK_DELAY_MS', isGeminiProvider ? 2500 : 0),
   aiApiVersion: process.env.AI_API_VERSION || '2024-08-01-preview',
   skipApiVersion:
     process.env.SKIP_API_VERSION === 'true' ||
