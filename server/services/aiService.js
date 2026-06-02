@@ -1,119 +1,98 @@
-import { config, getChatCompletionsUrl } from '../config.js';
+import {
+  config,
+  getChatCompletionsUrl,
+  isAiConfigured,
+  isGemini,
+  isOllama
+} from '../config.js';
+import { generateQuestionsForChunkGemini } from './geminiService.js';
+import { SYSTEM_PROMPT, buildChunkPrompt, parseQuestionsFromContent } from './questionGeneration.js';
 
-const parseQuestionsFromContent = (content) => {
-  if (!content || typeof content !== 'string') {
-    throw new Error('AI không trả về nội dung hợp lệ');
+const buildAuthHeaders = () => {
+  const headers = { 'Content-Type': 'application/json' };
+  if (config.aiApiKey) {
+    headers['api-key'] = config.aiApiKey;
+    headers.Authorization = `Bearer ${config.aiApiKey}`;
   }
-
-  let jsonText = content.trim();
-
-  const fenced = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced) {
-    jsonText = fenced[1].trim();
-  }
-
-  const parsed = JSON.parse(jsonText);
-  const list = parsed.questions ?? parsed;
-  if (!Array.isArray(list)) {
-    throw new Error('Định dạng câu hỏi từ AI không hợp lệ');
-  }
-
-  return list
-    .map(normalizeQuestion)
-    .filter(Boolean);
+  return headers;
 };
 
-const normalizeQuestion = (raw) => {
-  const questionText = String(raw.questionText || raw.question || '').trim();
-  const options = raw.options || {};
-  const correctAnswer = String(raw.correctAnswer || '').toUpperCase();
-
-  const normalizedOptions = {
-    A: String(options.A || raw.optionA || '').trim(),
-    B: String(options.B || raw.optionB || '').trim(),
-    C: String(options.C || raw.optionC || '').trim(),
-    D: String(options.D || raw.optionD || '').trim()
-  };
-
-  if (
-    questionText.length < 10 ||
-    !normalizedOptions.A ||
-    !normalizedOptions.B ||
-    !normalizedOptions.C ||
-    !normalizedOptions.D ||
-    !['A', 'B', 'C', 'D'].includes(correctAnswer)
-  ) {
-    return null;
+const mapFetchError = (error) => {
+  if (error.name === 'AbortError') {
+    return new Error(
+      `Hết thời gian chờ AI (${Math.round(config.aiRequestTimeoutMs / 1000)}s). ` +
+        (isOllama()
+          ? 'Model local có thể đang tải lần đầu — thử lại hoặc giảm AI_MAX_CHUNKS.'
+          : 'Thử lại sau.')
+    );
   }
 
-  const points = Math.min(100, Math.max(1, parseInt(raw.points, 10) || 1));
+  if (isOllama() && (error.cause?.code === 'ECONNREFUSED' || error.message?.includes('fetch failed'))) {
+    return new Error(
+      'Không kết nối được Ollama. Mở app Ollama hoặc chạy: ollama serve — sau đó: ollama pull ' +
+        config.aiModel
+    );
+  }
 
-  return {
-    questionText,
-    options: normalizedOptions,
-    correctAnswer,
-    points
-  };
+  return error;
 };
 
-export const generateQuestionsForChunk = async ({
-  chunkText,
-  chunkIndex,
-  totalChunks,
-  questionsPerChunk,
-  subjectName,
-  topicName
-}) => {
-  if (!config.aiApiKey) {
-    throw new Error('Thiếu cấu hình API Key cho AI (AI_API_KEY)');
+const generateQuestionsForChunkOpenAI = async (params) => {
+  if (!isAiConfigured()) {
+    throw new Error('Thiếu cấu hình AI_API_KEY và AI_API_BASE_URL (hoặc dùng AI_PROVIDER=gemini)');
   }
 
   const url = getChatCompletionsUrl();
   if (!url) {
-    throw new Error('Thiếu cấu hình AI_API_BASE_URL (Azure OpenAI endpoint)');
+    throw new Error('Thiếu cấu hình AI_API_BASE_URL');
   }
 
-  const userPrompt = `Môn học: ${subjectName || 'N/A'}
-Chủ đề: ${topicName || 'N/A'}
-Đoạn ${chunkIndex + 1}/${totalChunks} — tạo đúng ${questionsPerChunk} câu hỏi trắc nghiệm 4 đáp án A, B, C, D từ nội dung sau:
+  const userPrompt = buildChunkPrompt(params);
 
----
-${chunkText}
----
+  const body = {
+    model: config.aiModel,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.3,
+    stream: false
+  };
 
-Yêu cầu:
-- Mỗi câu phải có đúng một đáp án đúng (correctAnswer: "A"|"B"|"C"|"D")
-- Câu hỏi và đáp án phải bằng tiếng Việt
-- Không bịa thông tin ngoài văn bản được cung cấp
-- Trả về JSON thuần theo schema: {"questions":[{"questionText":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correctAnswer":"A","points":1}]}`;
+  if (isOllama()) {
+    body.format = 'json';
+    body.options = { num_predict: 2048 };
+  } else {
+    body.max_tokens = 2000;
+  }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': config.aiApiKey,
-      'Authorization': `Bearer ${config.aiApiKey}` // Fallback for some non-Azure deployments
-    },
-    body: JSON.stringify({
-      model: config.aiModel || 'gpt-oss-120b',
-      messages: [
-        {
-          role: 'system',
-          content: 'Bạn là chuyên gia giáo dục. Nhiệm vụ của bạn là đọc kỹ tài liệu và tạo ra các câu hỏi trắc nghiệm chính xác, khách quan dựa trên nội dung được cung cấp. Chỉ trả về JSON hợp lệ, không kèm văn bản giải thích.'
-        },
-        {
-          role: 'user',
-          content: userPrompt
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 2000
-    })
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.aiRequestTimeoutMs);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: buildAuthHeaders(),
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+  } catch (error) {
+    throw mapFetchError(error);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
     console.error('AI API Error:', errorText);
+
+    if (isOllama() && response.status === 404) {
+      throw new Error(
+        `Model "${config.aiModel}" chưa có trên Ollama. Chạy: ollama pull ${config.aiModel}`
+      );
+    }
+
     throw new Error(`Lỗi gọi AI: ${response.statusText} (${response.status})`);
   }
 
@@ -121,6 +100,18 @@ Yêu cầu:
   const content = data.choices?.[0]?.message?.content || '';
 
   return parseQuestionsFromContent(content);
+};
+
+export const generateQuestionsForChunk = async (params) => {
+  if (isGemini()) {
+    return generateQuestionsForChunkGemini(params);
+  }
+
+  if (isOllama() && !isAiConfigured()) {
+    throw new Error('Thiếu AI_API_BASE_URL. Đặt AI_PROVIDER=ollama trong server/.env');
+  }
+
+  return generateQuestionsForChunkOpenAI(params);
 };
 
 export const dedupeQuestions = (questions) => {

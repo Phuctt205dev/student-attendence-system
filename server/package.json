@@ -8,7 +8,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "setup:ollama": "node scripts/setup-ollama-env.js",
+    "setup:gemini": "node scripts/setup-gemini-env.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -7,6 +7,8 @@
     "dev": "vite",
     "dev:server": "npm run dev --prefix server",
     "dev:all": "concurrently -n server,web -c blue,green \"npm run dev:server\" \"npm run dev\"",
+    "setup:ollama": "npm run setup:ollama --prefix server",
+    "setup:gemini": "npm run setup:gemini --prefix server",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

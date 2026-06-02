@@ -1,5 +1,9 @@
 # Tạo câu hỏi tự động từ tệp (AI)
 
+> **Dùng trên GitHub Pages (production):** xem **[GITHUB_PAGES_AI.md](./GITHUB_PAGES_AI.md)** — Railway + Gemini + secret `VITE_API_URL`.
+>
+> **Chạy local miễn phí:** xem **[OLLAMA_SETUP.md](./OLLAMA_SETUP.md)** — Ollama trên máy dev.
+
 ## Kiến trúc
 
 1. **Frontend** (`TopicDetail`): giáo viên tải file tại trang chủ đề → gọi API backend.

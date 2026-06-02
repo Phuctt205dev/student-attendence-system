@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import { config } from './config.js';
+import { config, isAiConfigured, isGemini, isOllama } from './config.js';
+import { checkOllamaReachable } from './services/ollamaService.js';
 import aiRoutes from './routes/ai.routes.js';
 
 const app = express();
@@ -53,10 +54,39 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ success: false, error: err.message || 'Internal server error' });
 });
 
-app.listen(config.port, () => {
+app.listen(config.port, async () => {
   console.log(`Server listening on port ${config.port}`);
   console.log(`CORS_ORIGIN: ${config.corsOrigin}`);
-  if (!config.aiApiKey || !config.aiApiBaseUrl) {
-    console.warn('Warning: Set AI_API_KEY and AI_API_BASE_URL');
+
+  if (!isAiConfigured()) {
+    console.warn('Warning: AI chưa cấu hình. Production: GITHUB_PAGES_AI.md | Local: OLLAMA_SETUP.md');
+    return;
+  }
+
+  if (config.isProduction && isOllama()) {
+    console.warn(
+      'Cảnh báo: AI_PROVIDER=ollama trên production — GitHub Pages KHÔNG dùng được. Đặt AI_PROVIDER=gemini trên Railway.'
+    );
+  }
+
+  console.log(
+    `AI provider: ${config.aiProvider}, model: ${isGemini() ? config.geminiModel : config.aiModel}`
+  );
+
+  if (isGemini()) {
+    console.log('Gemini OK — phù hợp deploy GitHub Pages + Railway');
+  }
+
+  if (isOllama()) {
+    const ollama = await checkOllamaReachable();
+    if (!ollama.reachable) {
+      console.warn(`Ollama: ${ollama.error}`);
+    } else if (!ollama.modelInstalled) {
+      console.warn(
+        `Ollama đang chạy nhưng chưa có model "${config.aiModel}". Chạy: ollama pull ${config.aiModel}`
+      );
+    } else {
+      console.log(`Ollama OK — model "${config.aiModel}" sẵn sàng`);
+    }
   }
 });

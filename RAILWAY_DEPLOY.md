@@ -9,7 +9,7 @@ Frontend vẫn trên **GitHub Pages**: `https://phuctt205dev.github.io/student-a
 ## 1. Chuẩn bị
 
 - [ ] Code đã push lên GitHub (`master`), **không** có API key trong commit (`server/.env` không lên Git).
-- [ ] Có `AI_API_KEY` và `AI_API_BASE_URL` từ Azure (Foundry / OpenAI-compatible).
+- [ ] Có API key **Gemini** (khuyên dùng) hoặc Groq — xem [GITHUB_PAGES_AI.md](./GITHUB_PAGES_AI.md).
 - [ ] Tài khoản [railway.app](https://railway.app) (đăng nhập bằng GitHub).
 
 ---
@@ -47,12 +47,13 @@ File `server/railway.toml` trong repo đã khai báo `npm start` và health chec
 Tab **Variables** → **Add variables** (hoặc Raw Editor):
 
 ```env
-AI_API_KEY=<key Azure của bạn>
-AI_API_BASE_URL=https://<resource>.services.ai.azure.com/api/projects/<project>/openai/v1
-AI_MODEL=gpt-oss-120b
-AI_API_VERSION=2024-10-21
+AI_PROVIDER=gemini
+GEMINI_API_KEY=<key từ https://aistudio.google.com/apikey>
+GEMINI_MODEL=gemini-2.0-flash
 CORS_ORIGIN=http://localhost:5173,https://phuctt205dev.github.io
 ```
+
+(Hoặc Groq: `AI_PROVIDER=groq`, `AI_API_KEY`, `AI_API_BASE_URL=https://api.groq.com/openai/v1`, `SKIP_API_VERSION=true` — xem `server/.env.production.example`.)
 
 Tuỳ chọn:
 

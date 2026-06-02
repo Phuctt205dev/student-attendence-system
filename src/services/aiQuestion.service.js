@@ -5,6 +5,16 @@ const buildUrl = (path) => {
   return base ? `${base}${path}` : path;
 };
 
+export const getAiConnectionHint = () => {
+  if (import.meta.env.PROD && !API_BASE) {
+    return 'Trang GitHub Pages chưa có VITE_API_URL. Thêm secret trên GitHub và build lại (xem GITHUB_PAGES_AI.md).';
+  }
+  if (import.meta.env.PROD) {
+    return 'Không kết nối được backend AI trên cloud. Kiểm tra Railway đang chạy và CORS_ORIGIN đúng domain github.io.';
+  }
+  return 'Không kết nối được backend. Chạy: cd server && npm run dev (hoặc npm run dev:all).';
+};
+
 export const checkAiServerHealth = async () => {
   try {
     const response = await fetch(buildUrl('/api/ai/health'));
@@ -48,7 +58,7 @@ export const generateQuestionsFromFile = async ({
     console.error('generateQuestionsFromFile:', error);
     return {
       success: false,
-      error: error.message || 'Không kết nối được máy chủ AI. Hãy chạy server/backend.'
+      error: error.message || getAiConnectionHint()
     };
   }
 };

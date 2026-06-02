@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { config } from '../config.js';
+import { config, isAiConfigured, isGemini, isOllama } from '../config.js';
+import { checkOllamaReachable } from '../services/ollamaService.js';
 import { uploadDocument } from '../middleware/upload.js';
 import { extractTextFromFile } from '../services/textExtractor.js';
 import { chunkText } from '../services/textChunker.js';
@@ -147,16 +148,33 @@ router.post('/extract-questions', handleUpload, async (req, res) => {
   }
 });
 
-router.get('/health', (_req, res) => {
-  res.json({
+router.get('/health', async (_req, res) => {
+  const payload = {
     success: true,
-    configured: Boolean(
-      config.aiApiKey &&
-      config.aiApiBaseUrl
-    ),
-    model: config.aiModel || 'gpt-oss-120b',
+    provider: config.aiProvider,
+    configured: isAiConfigured(),
+    model: config.aiModel,
+    baseUrl: config.aiApiBaseUrl,
+    skipApiVersion: config.skipApiVersion,
     apiVersion: config.aiApiVersion
-  });
+  };
+
+  if (isGemini()) {
+    payload.model = config.geminiModel;
+    payload.hint =
+      payload.configured
+        ? 'Gemini — sẵn sàng cho GitHub Pages + Railway'
+        : 'Thiếu GEMINI_API_KEY trên backend';
+  }
+
+  if (isOllama()) {
+    const ollama = await checkOllamaReachable();
+    payload.ollama = ollama;
+    payload.configured = payload.configured && ollama.reachable;
+    payload.hint = 'Ollama chỉ dùng khi dev local — không hoạt động từ GitHub Pages';
+  }
+
+  res.json(payload);
 });
 
 export default router;

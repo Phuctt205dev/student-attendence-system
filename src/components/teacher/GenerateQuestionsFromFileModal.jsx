@@ -1,7 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, AlertCircle, Sparkles, FileText } from 'lucide-react';
 import Button from '../common/Button';
-import { generateQuestionsFromFile } from '../../services/aiQuestion.service';
+import {
+  checkAiServerHealth,
+  generateQuestionsFromFile
+} from '../../services/aiQuestion.service';
 import { createQuestion } from '../../services/subject.service';
 
 const ACCEPT = '.pdf,.docx,.doc,.txt,.md';
@@ -22,6 +25,39 @@ const GenerateQuestionsFromFileModal = ({
   const [step, setStep] = useState('form');
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
+  const [serverHint, setServerHint] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const check = async () => {
+      const health = await checkAiServerHealth();
+      if (cancelled) return;
+
+      if (!health?.configured) {
+        setServerHint(
+          import.meta.env.PROD
+            ? 'Backend AI chưa sẵn sàng. Cần deploy Railway + GEMINI_API_KEY + secret VITE_API_URL (GITHUB_PAGES_AI.md).'
+            : 'Backend chưa cấu hình AI. Chạy server với Gemini hoặc Ollama (xem GITHUB_PAGES_AI.md / OLLAMA_SETUP.md).'
+        );
+        return;
+      }
+
+      if (health.provider === 'ollama' && import.meta.env.PROD) {
+        setServerHint(
+          'Backend đang dùng Ollama — không hoạt động từ GitHub Pages. Trên Railway đặt AI_PROVIDER=gemini.'
+        );
+        return;
+      }
+
+      setServerHint('');
+    };
+
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0];
@@ -107,6 +143,13 @@ const GenerateQuestionsFromFileModal = ({
 
   return (
     <div className="space-y-5">
+      {serverHint && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-amber-800 text-sm">{serverHint}</p>
+        </div>
+      )}
+
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
