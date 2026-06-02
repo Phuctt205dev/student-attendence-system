@@ -38,6 +38,11 @@ service cloud.firestore {
         get(/databases/$(database)/documents/subjects/$(subjectId)).data.createdBy == request.auth.uid;
     }
 
+    function isAdmin() {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     function isExamVisibleToStudent() {
       return resource.data.visibleToClassIds != null &&
         resource.data.visibleToClassIds.size() > 0 && (
@@ -67,11 +72,13 @@ service cloud.firestore {
         // User tự tạo profile của mình
         isSelf(uid) ||
         // HOẶC: Cho phép tạo student profile (role == 'student')
-        request.resource.data.role == 'student'
+        request.resource.data.role == 'student' ||
+        // Admin có thể tạo user nào
+        isAdmin()
       );
 
-      // Chỉ cho phép user tự chỉnh sửa/xóa profile của mình
-      allow update, delete: if isSelf(uid);
+      // Chỉ cho phép user tự chỉnh sửa/xóa profile của mình, hoặc admin
+      allow update, delete: if isSelf(uid) || isAdmin();
     }
 
     // =========================
@@ -79,7 +86,7 @@ service cloud.firestore {
     // App mobile đọc tại: teachers/{uid}
     // =========================
     match /teachers/{uid} {
-      allow read, write: if isSelf(uid);
+      allow read, write: if isSelf(uid) || isAdmin();
     }
 
     // =========================
@@ -90,23 +97,29 @@ service cloud.firestore {
       // Đọc lớp:
       // - Teacher có thể đọc lớp của mình
       // - Student có thể đọc lớp mà mình được enroll
+      // - Admin có thể đọc tất cả lớp
       // - Cho phép query khi filter theo teacherId hoặc students array
       allow read: if signedIn() && (
         // Đọc document cụ thể: kiểm tra ownership
         resource.data.teacherId == request.auth.uid ||
-        isStudentInClass(classId)
+        isStudentInClass(classId) ||
+        isAdmin()
       );
 
       // Cho phép list/query classes
       allow list: if signedIn();
 
-      // Tạo lớp: teacherId phải là UID đang đăng nhập
-      allow create: if signedIn() &&
-        request.resource.data.teacherId == request.auth.uid;
+      // Tạo lớp: teacherId phải là UID đang đăng nhập, hoặc admin
+      allow create: if signedIn() && (
+        request.resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
 
-      // Sửa/xóa lớp: chỉ chủ lớp
-      allow update, delete: if signedIn() &&
-        resource.data.teacherId == request.auth.uid;
+      // Sửa/xóa lớp: chỉ chủ lớp hoặc admin
+      allow update, delete: if signedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
 
       // =========================
       // STUDENTS SUBCOLLECTION
@@ -115,7 +128,8 @@ service cloud.firestore {
       match /students/{studentId} {
         allow read, create, update, delete: if signedIn() && (
           classDoc(classId).data.teacherId == request.auth.uid ||
-          isSelf(studentId)
+          isSelf(studentId) ||
+          isAdmin()
         );
       }
 
@@ -126,9 +140,10 @@ service cloud.firestore {
       match /tags/{tagId} {
         allow read: if signedIn() && (
           isClassOwner(classId) ||
-          isStudentInClass(classId)
+          isStudentInClass(classId) ||
+          isAdmin()
         );
-        allow create, update, delete: if isClassOwner(classId);
+        allow create, update, delete: if isClassOwner(classId) || isAdmin();
       }
 
       // =========================
@@ -138,9 +153,10 @@ service cloud.firestore {
       match /studentTags/{docId} {
         allow read: if signedIn() && (
           isClassOwner(classId) ||
-          (isStudentInClass(classId) && resource.data.studentId == request.auth.uid)
+          (isStudentInClass(classId) && resource.data.studentId == request.auth.uid) ||
+          isAdmin()
         );
-        allow create, update, delete: if isClassOwner(classId);
+        allow create, update, delete: if isClassOwner(classId) || isAdmin();
       }
 
       // =========================
@@ -150,9 +166,10 @@ service cloud.firestore {
       match /classExams/{examId} {
         allow read: if signedIn() && (
           isClassOwner(classId) ||
-          isStudentInClass(classId)
+          isStudentInClass(classId) ||
+          isAdmin()
         );
-        allow create, update, delete: if isClassOwner(classId);
+        allow create, update, delete: if isClassOwner(classId) || isAdmin();
       }
     }
 
@@ -161,28 +178,36 @@ service cloud.firestore {
     // App dùng: attendanceSessions/{sessionId}
     // =========================
     match /attendanceSessions/{sessionId} {
-      // Giáo viên hoặc sinh viên trong lớp được xem buổi điểm danh
+      // Giáo viên hoặc sinh viên trong lớp được xem buổi điểm danh, hoặc admin
       allow read: if signedIn() && (
         resource.data.teacherId == request.auth.uid ||
-        isStudentInClass(resource.data.classId)
+        isStudentInClass(resource.data.classId) ||
+        isAdmin()
       );
 
       allow list: if signedIn();
 
-      allow create: if signedIn() &&
-        request.resource.data.teacherId == request.auth.uid;
+      allow create: if signedIn() && (
+        request.resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
 
-      allow update, delete: if signedIn() &&
-        resource.data.teacherId == request.auth.uid;
+      allow update, delete: if signedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
 
       match /records/{studentId} {
         allow read: if signedIn() && (
           sessionDoc(sessionId).data.teacherId == request.auth.uid ||
           (studentId == request.auth.uid &&
-            isStudentInClass(sessionDoc(sessionId).data.classId))
+            isStudentInClass(sessionDoc(sessionId).data.classId)) ||
+          isAdmin()
         );
-        allow create, update, delete: if signedIn() &&
-          sessionDoc(sessionId).data.teacherId == request.auth.uid;
+        allow create, update, delete: if signedIn() && (
+          sessionDoc(sessionId).data.teacherId == request.auth.uid ||
+          isAdmin()
+        );
       }
     }
 

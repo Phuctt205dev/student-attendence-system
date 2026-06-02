@@ -35,14 +35,43 @@ export const createClass = async (classData) => {
   }
 };
 
-// Get all classes
+// Get all classes with teacher info
 export const getAllClasses = async () => {
   try {
     const classesSnapshot = await getDocs(collection(db, 'classes'));
-    const classes = classesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
+    const classes = await Promise.all(classesSnapshot.docs.map(async (classDoc) => {
+      const classData = classDoc.data();
+      
+      // Get teacher info
+      let teacherInfo = null;
+      if (classData.teacherId) {
+        const teacherDoc = await getDoc(doc(db, 'users', classData.teacherId));
+        if (teacherDoc.exists()) {
+          teacherInfo = {
+            uid: teacherDoc.id,
+            ...teacherDoc.data()
+          };
+        }
+      }
+      
+      // Get student count
+      const studentsSnapshot = await getDocs(collection(db, 'classes', classDoc.id, 'students'));
+      
+      return {
+        id: classDoc.id,
+        ...classData,
+        className: classData.name,
+        teacher: teacherInfo,
+        studentCount: studentsSnapshot.size
+      };
     }));
+    
+    // Sort by createdAt on client side
+    classes.sort((a, b) => {
+      const aTime = a.createdAt?.seconds || 0;
+      const bTime = b.createdAt?.seconds || 0;
+      return bTime - aTime;
+    });
 
     return { success: true, classes };
   } catch (error) {

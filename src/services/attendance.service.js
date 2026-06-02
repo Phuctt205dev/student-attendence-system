@@ -503,3 +503,57 @@ export const subscribeToAttendanceSession = (sessionId, callback) => {
 
   return unsubscribe;
 };
+
+// Get student's overall attendance stats across all classes
+export const getStudentOverallAttendanceStats = async (studentId) => {
+  try {
+    // First, get all classes the student is enrolled in
+    const classesSnapshot = await getDocs(collection(db, 'classes'));
+    const enrolledClasses = [];
+    
+    for (const classDoc of classesSnapshot.docs) {
+      const studentDoc = await getDoc(doc(db, 'classes', classDoc.id, 'students', studentId));
+      if (studentDoc.exists()) {
+        enrolledClasses.push({
+          id: classDoc.id,
+          name: classDoc.data().name
+        });
+      }
+    }
+    
+    // Now calculate attendance for each class
+    let totalSessions = 0;
+    let totalPresentOrLate = 0;
+    const classStats = [];
+    
+    for (const cls of enrolledClasses) {
+      const result = await getStudentClassAttendance(studentId, cls.id);
+      if (result.success) {
+        const stats = result.stats;
+        totalSessions += stats.total;
+        totalPresentOrLate += stats.present + stats.late;
+        classStats.push({
+          ...cls,
+          stats
+        });
+      }
+    }
+    
+    const overallRate = totalSessions > 0 
+      ? (((totalPresentOrLate / totalSessions) * 100).toFixed(1)) 
+      : 0;
+      
+    return {
+      success: true,
+      classStats,
+      overall: {
+        totalSessions,
+        totalPresentOrLate,
+        attendanceRate: overallRate
+      }
+    };
+  } catch (error) {
+    console.error('Error getting student overall attendance stats:', error);
+    return { success: false, error: error.message };
+  }
+};

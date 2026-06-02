@@ -8,9 +8,11 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
   verifyBeforeUpdateEmail,
-  updateEmail
+  updateEmail,
+  deleteUser,
+  getAuth
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, limit, getDocs, deleteDoc } from 'firebase/firestore';
 import { auth, db, secondaryAuth } from './firebase';
 
 // Register new user
@@ -471,4 +473,71 @@ export const batchCreateStudents = async (studentsData, onProgress) => {
   }
 
   return results;
+};
+
+// Get all users
+export const getAllUsers = async () => {
+  try {
+    const usersSnapshot = await getDocs(collection(db, 'users'));
+    const users = usersSnapshot.docs.map(doc => ({
+      uid: doc.id,
+      ...doc.data()
+    }));
+    return { success: true, users };
+  } catch (error) {
+    console.error('Error getting all users:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Search users by name, email, or student ID
+export const searchUsers = async (searchTerm) => {
+  try {
+    if (!searchTerm || searchTerm.trim().length === 0) {
+      const result = await getAllUsers();
+      return result;
+    }
+
+    const usersSnapshot = await getDocs(collection(db, 'users'));
+    const searchLower = searchTerm.toLowerCase();
+
+    const users = usersSnapshot.docs
+      .map(doc => ({
+        uid: doc.id,
+        ...doc.data()
+      }))
+      .filter(user => {
+        const studentId = (user.studentId || '').toLowerCase();
+        const fullName = (user.fullName || '').toLowerCase();
+        const email = (user.email || '').toLowerCase();
+
+        return studentId.includes(searchLower) ||
+               fullName.includes(searchLower) ||
+               email.includes(searchLower);
+      });
+
+    return { success: true, users };
+  } catch (error) {
+    console.error('Error searching users:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Delete user (Note: Deleting Firebase Auth user requires backend/admin privileges, 
+// but we can delete the Firestore profile here)
+export const deleteUserProfile = async (uid) => {
+  try {
+    await deleteDoc(doc(db, 'users', uid));
+    
+    // Also delete from teachers collection if it's a teacher
+    const teacherDoc = await getDoc(doc(db, 'teachers', uid));
+    if (teacherDoc.exists()) {
+      await deleteDoc(doc(db, 'teachers', uid));
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting user profile:', error);
+    return { success: false, error: error.message };
+  }
 };
