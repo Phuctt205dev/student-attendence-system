@@ -1,5 +1,9 @@
-import mammoth from 'mammoth';
+
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 import PDFParser from 'pdf2json';
+import mammoth from 'mammoth';
 import path from 'path';
 
 export const getFileType = (filename) => {
@@ -19,83 +23,99 @@ export const getFileType = (filename) => {
 };
 
 const extractFromDocx = async (buffer) => {
-  const result = await mammoth.convertToHtml({ buffer });
-  const html = result.value;
-  let plainText = '';
-  const boldRanges = [];
-  let currentIndex = 0;
+  try {
+    const result = await mammoth.convertToHtml({ buffer });
+    const html = result.value;
+    let plainText = '';
+    const boldRanges = [];
+    let currentIndex = 0;
 
-  const tokenizer = /<(strong|b)>(.*?)<\/(strong|b)>|([^<]+)/gis;
-  let match;
-  while ((match = tokenizer.exec(html)) !== null) {
-    if (match[2]) {
-      const boldText = match[2].replace(/<[^>]*>/g, '');
-      boldRanges.push({ start: currentIndex, end: currentIndex + boldText.length, text: boldText });
-      plainText += boldText;
-      currentIndex += boldText.length;
-    } else if (match[4]) {
-      const normalText = match[4].replace(/<[^>]*>/g, '');
-      plainText += normalText;
-      currentIndex += normalText.length;
+    const tokenizer = /<(strong|b)>(.*?)<\/(strong|b)>|([^<]+)/gis;
+    let match;
+    while ((match = tokenizer.exec(html)) !== null) {
+      if (match[2]) {
+        const boldText = match[2].replace(/<[^>]*>/g, '');
+        boldRanges.push({ start: currentIndex, end: currentIndex + boldText.length, text: boldText });
+        plainText += boldText;
+        currentIndex += boldText.length;
+      } else if (match[4]) {
+        const normalText = match[4].replace(/<[^>]*>/g, '');
+        plainText += normalText;
+        currentIndex += normalText.length;
+      }
     }
-  }
 
-  return { plainText: plainText.trim(), boldRanges };
+    return { plainText: plainText.trim(), boldRanges };
+  } catch (err) {
+    console.warn('Error extracting with mammoth convertToHtml, falling back to raw text:', err);
+    const result = await mammoth.extractRawText({ buffer });
+    return { plainText: result.value.trim(), boldRanges: [] };
+  }
+};
+
+const extractBoldFromPdf = (buffer) => {
+  return new Promise((resolve) => {
+    try {
+      const pdfParser = new PDFParser();
+      pdfParser.on('pdfParser_dataReady', (pdfData) => {
+        const boldTexts = [];
+        let currentBoldText = '';
+        let isInBold = false;
+
+        pdfData.Pages.forEach(page => {
+          page.Texts.forEach(text => {
+            const decodedText = decodeURIComponent(text.R[0].T);
+            const fontName = text.R[0].fontName || '';
+            const isBold = fontName.toLowerCase().includes('bold') || fontName.toLowerCase().includes('black');
+
+            if (isBold) {
+              currentBoldText += decodedText;
+              isInBold = true;
+            } else {
+              if (isInBold && currentBoldText.trim()) {
+                boldTexts.push(currentBoldText.trim());
+              }
+              currentBoldText = '';
+              isInBold = false;
+            }
+          });
+        });
+
+        if (currentBoldText.trim()) {
+          boldTexts.push(currentBoldText.trim());
+        }
+        resolve(boldTexts);
+      });
+      pdfParser.on('pdfParser_dataError', () => {
+        resolve([]);
+      });
+      pdfParser.parseBuffer(buffer);
+    } catch {
+      resolve([]);
+    }
+  });
 };
 
 const extractFromPdf = async (buffer) => {
-  return new Promise((resolve, reject) => {
-    const pdfParser = new PDFParser();
-    pdfParser.on('pdfParser_dataReady', (pdfData) => {
-      let fullText = '';
-      const boldTexts = [];
-      let currentBoldText = '';
-      let isInBold = false;
-
-      pdfData.Pages.forEach(page => {
-        page.Texts.forEach(text => {
-          const decodedText = decodeURIComponent(text.R[0].T);
-          const fontName = text.R[0].fontName || '';
-          const isBold = fontName.toLowerCase().includes('bold') || fontName.toLowerCase().includes('black');
-
-          fullText += decodedText;
-
-          if (isBold) {
-            currentBoldText += decodedText;
-            isInBold = true;
-          } else {
-            if (isInBold && currentBoldText.trim()) {
-              boldTexts.push(currentBoldText.trim());
-            }
-            currentBoldText = '';
-            isInBold = false;
-          }
-        });
-        fullText += '\n';
-      });
-
-      if (currentBoldText.trim()) {
-        boldTexts.push(currentBoldText.trim());
+  try {
+    const pdfData = await pdfParse(buffer);
+    const plainText = pdfData.text.trim();
+    const boldTexts = await extractBoldFromPdf(buffer);
+    
+    const boldRanges = [];
+    for (const boldText of boldTexts) {
+      let index = 0;
+      while ((index = plainText.indexOf(boldText, index)) !== -1) {
+        boldRanges.push({ start: index, end: index + boldText.length, text: boldText });
+        index += boldText.length;
       }
+    }
 
-      const boldRanges = [];
-      for (const boldText of boldTexts) {
-        let index = 0;
-        while ((index = fullText.indexOf(boldText, index)) !== -1) {
-          boldRanges.push({ start: index, end: index + boldText.length, text: boldText });
-          index += boldText.length;
-        }
-      }
-
-      resolve({ plainText: fullText.trim(), boldRanges });
-    });
-
-    pdfParser.on('pdfParser_dataError', (errData) => {
-      reject(errData.parserError);
-    });
-
-    pdfParser.parseBuffer(buffer);
-  });
+    return { plainText, boldRanges };
+  } catch (err) {
+    console.error('Error extracting from PDF:', err);
+    throw err;
+  }
 };
 
 const extractFromText = (buffer) => {
@@ -124,3 +144,4 @@ export const extractTextFromFile = async (file) => {
 
   return result;
 };
+

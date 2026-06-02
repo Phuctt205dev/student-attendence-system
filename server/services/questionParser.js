@@ -1,3 +1,4 @@
+
 const isTextInBoldRanges = (textStart, textEnd, boldRanges) => {
   for (const range of boldRanges) {
     if (textStart >= range.start && textEnd <= range.end) {
@@ -15,62 +16,72 @@ const isTextInBoldRanges = (textStart, textEnd, boldRanges) => {
 
 export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
   const questions = [];
-  
-  // Chuẩn hóa line endings (Windows \r\n -> \n)
-  const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  
-  // Tách văn bản thành các block dựa trên từ khóa "Câu 1:", "Câu 2:", "Question 1:" v.v.
-  const splitByQuestion = text.split(/(?:^|\n)\s*(?:Câu\s*\d+\s*:|Question\s*\d+\s*:)/i);
-  
-  for (let i = 0; i < questionMatches.length; i++) {
-    const match = questionMatches[i];
-    const startIndex = match.index + match[0].length;
-    const endIndex = i < questionMatches.length - 1 ? questionMatches[i + 1].index : text.length;
-    const block = text.substring(startIndex, endIndex).trim();
-    if (!block) continue;
-    
-    // Tìm các đáp án bắt đầu bằng A., B., C., D. (hoặc A:, B:, C:, D:)
-    const optionRegex = /(?:^|\n)\s*([A-D])[\.\:]\s*(.*?)(?=(?:^|\n)\s*[A-D][\.\:]|$)/gsi;
-    let match;
+  const rawText = extractedResult.plainText;
+  const boldRanges = extractedResult.boldRanges || [];
+
+  const text = rawText.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Build original index map
+  let originalIndex = 0;
+  const originalToNormalized = [];
+  for (let i = 0; i < text.length; i++) {
+    while (originalIndex < rawText.length && rawText[originalIndex] !== text[i]) {
+      originalIndex++;
+    }
+    originalToNormalized[i] = originalIndex;
+    originalIndex++;
+  }
+
+  // Split by question markers
+  const questionRegex = /(?:^|\s+)(Câu|Question)\s*(\d+)\s*[:.\-)]?\s*/gi;
+  const questionsData = [];
+  let lastIndex = 0;
+  let qMatch;
+  while ((qMatch = questionRegex.exec(text)) !== null) {
+    if (lastIndex > 0) {
+      questionsData.push(text.substring(lastIndex, qMatch.index).trim());
+    }
+    lastIndex = qMatch.index + qMatch[0].length;
+  }
+  if (lastIndex > 0 && lastIndex < text.length) {
+    questionsData.push(text.substring(lastIndex).trim());
+  }
+
+  for (const block of questionsData) {
+    // Find options
+    const optionRegex = /(?:^|\s+)([A-D])[:.\)]\s*(.*?)(?=(?:^|\s+)[A-D][:.\)]|$)/gis;
+    let optMatch;
     const options = {};
     const optionPositions = [];
     let firstOptionIndex = block.length;
+    const blockStartInText = text.indexOf(block);
 
-    while ((optionMatch = optionRegex.exec(block)) !== null) {
-      const optionLetter = optionMatch[1].toUpperCase();
-      const optionText = optionMatch[2].trim();
-      
+    while ((optMatch = optionRegex.exec(block)) !== null) {
+      const letter = optMatch[1].toUpperCase();
+      const optionText = optMatch[2].trim();
+
       if (firstOptionIndex === block.length) {
-        firstOptionIndex = optionMatch.index;
+        firstOptionIndex = optMatch.index;
       }
-      
-      options[optionLetter] = optionText;
-      
-      // Calculate position in original rawText
-      const normalizedStart = startIndex + optionMatch.index;
-      const normalizedEnd = startIndex + optionMatch.index + optionMatch[0].length;
-      const originalStart = originalToNormalized[normalizedStart] || normalizedStart;
-      const originalEnd = originalToNormalized[normalizedEnd] || normalizedEnd;
-      
-      optionPositions.push({
-        letter: optionLetter,
-        start: originalStart,
-        end: originalEnd
-      });
+      options[letter] = optionText;
+
+      const optionStartInText = blockStartInText + optMatch.index;
+      const optionEndInText = blockStartInText + optMatch.index + optMatch[0].length;
+      const originalStart = originalToNormalized[optionStartInText] || optionStartInText;
+      const originalEnd = originalToNormalized[optionEndInText] || optionEndInText;
+
+      optionPositions.push({ letter, start: originalStart, end: originalEnd });
     }
 
     const questionText = block.substring(0, firstOptionIndex).trim();
 
-    // Chỉ thêm nếu có đủ nội dung câu hỏi và ít nhất các đáp án A, B, C, D
     if (questionText && options.A && options.B && options.C && options.D) {
-      // Find which answer is bold
-      let correctAnswer = 'A'; // Default to A if no bold answer found
+      let correctAnswer = 'A';
       for (const pos of optionPositions) {
         if (isTextInBoldRanges(pos.start, pos.end, boldRanges)) {
           correctAnswer = pos.letter;
           break;
         }
-        // Also check if the option letter itself is bold (e.g., "**A.** Đáp án đúng")
         const letterStart = pos.start;
         const letterEnd = pos.start + 1;
         if (isTextInBoldRanges(letterStart, letterEnd, boldRanges)) {
@@ -78,7 +89,6 @@ export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
           break;
         }
       }
-      
       questions.push({
         questionText,
         options,
@@ -90,3 +100,4 @@ export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
 
   return questions;
 };
+
