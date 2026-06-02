@@ -7,6 +7,7 @@ import { AlertCircle, CheckCircle } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import { isEssayQuestion } from '../../utils/questionTypes';
+import { formatScale10, getAttemptScoreBreakdown } from '../../utils/examScoring';
 
 const StudentExamResult = () => {
   const { userProfile } = useAuth();
@@ -56,13 +57,8 @@ const StudentExamResult = () => {
     loadResult();
   }, [userProfile?.uid, examId, classId, classExamInstanceId]);
 
-  const mcqScore = attempt?.mcqScore ?? attempt?.score ?? 0;
-  const mcqTotal = attempt?.mcqTotalPoints ?? 0;
-  const essayScore = attempt?.essayScore;
-  const essayTotal = attempt?.essayTotalPoints ?? 0;
-  const essayPending = attempt?.essayPending === true;
-  const finalScore = attempt?.score ?? 0;
-  const totalScore = attempt?.totalScore ?? details?.exam?.totalPoints ?? 0;
+  const breakdown = getAttemptScoreBreakdown(attempt, details?.exam);
+  const { mcqScore, mcqTotal, essayScore, essayTotal, essayPending, totalRaw } = breakdown;
 
   const mcqQuestions = details?.questions?.filter((q) => !isEssayQuestion(q)) || [];
   const essayQuestions = details?.questions?.filter(isEssayQuestion) || [];
@@ -129,9 +125,10 @@ const StudentExamResult = () => {
                       </p>
                     )}
                     <p className="text-lg font-bold text-gray-900">
-                      Tổng điểm: {essayPending && essayTotal > 0
-                        ? `${mcqScore} / ${totalScore} (chưa gồm tự luận)`
-                        : `${finalScore} / ${totalScore}`}
+                      Điểm tổng (thang 10):{' '}
+                      {essayPending && essayTotal > 0
+                        ? `${formatScale10(mcqScore, totalRaw)}/10 (tạm — chưa tính tự luận)`
+                        : `${formatScale10(breakdown.earned, totalRaw)}/10`}
                     </p>
                   </div>
                 </div>

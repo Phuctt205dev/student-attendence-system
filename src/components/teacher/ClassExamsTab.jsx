@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   getExamsByClassForTeacher,
   getExamsBySubject,
@@ -10,7 +11,6 @@ import {
 import { getTeacherSubjects } from '../../services/subject.service';
 import Button from '../common/Button';
 import Modal from '../common/Modal';
-import TeacherExamClassDetailModal from './TeacherExamClassDetailModal';
 import {
   BookOpen,
   Plus,
@@ -32,6 +32,7 @@ const toLocalInputValue = (dateValue) => {
 };
 
 const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
+  const navigate = useNavigate();
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -40,8 +41,6 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
   const [availableExams, setAvailableExams] = useState([]);
   const [availableLoading, setAvailableLoading] = useState(false);
   const [assigningId, setAssigningId] = useState(null);
-  const [detailExam, setDetailExam] = useState(null);
-
   const [scheduleExam, setScheduleExam] = useState(null);
   const [scheduleStart, setScheduleStart] = useState('');
   const [scheduleEnd, setScheduleEnd] = useState('');
@@ -285,7 +284,9 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
                       variant="outline"
                       size="sm"
                       icon={<Eye className="w-4 h-4" />}
-                      onClick={() => setDetailExam(exam)}
+                      onClick={() =>
+                        navigate(`/teacher/classes/${classId}/exams/${exam.id}`)
+                      }
                     >
                       Chi tiết
                     </Button>
@@ -400,13 +401,6 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
           )}
         </div>
       </Modal>
-
-      <TeacherExamClassDetailModal
-        exam={detailExam}
-        classId={classId}
-        isOpen={!!detailExam}
-        onClose={() => setDetailExam(null)}
-      />
 
       <Modal
         isOpen={!!scheduleExam}

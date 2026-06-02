@@ -30,6 +30,7 @@ import TeacherSubjects from './pages/teacher/TeacherSubjects';
 import SubjectDetail from './pages/teacher/SubjectDetail';
 import SubjectExams from './pages/teacher/SubjectExams';
 import TopicDetail from './pages/teacher/TopicDetail';
+import TeacherExamClassDetail from './pages/teacher/TeacherExamClassDetail';
 import StudentExams from './pages/student/StudentExams';
 import StudentExamTake from './pages/student/StudentExamTake';
 import StudentExamResult from './pages/student/StudentExamResult';
@@ -133,6 +134,16 @@ function App() {
               <ProtectedRoute>
                 <RoleBasedRoute allowedRoles={['teacher']}>
                   <ClassDetail />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/classes/:classId/exams/:examInstanceId"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['teacher']}>
+                  <TeacherExamClassDetail />
                 </RoleBasedRoute>
               </ProtectedRoute>
             }
