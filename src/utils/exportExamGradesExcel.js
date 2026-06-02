@@ -215,10 +215,11 @@ export const exportExamGradesToExcel = ({
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Bảng điểm');
 
-  const date = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
-  const classCode = sanitizeFilename(classInfo?.classCode || 'Lop');
+  const className = sanitizeFilename(
+    classInfo?.className || classInfo?.classCode || 'Lop'
+  );
   const examTitle = sanitizeFilename(exam.title || 'BaiThi');
-  const filename = `BangDiem_${classCode}_${examTitle}_${date}.xlsx`;
+  const filename = `${className}_${examTitle}.xlsx`;
 
   XLSX.writeFile(wb, filename, { cellStyles: true });
 

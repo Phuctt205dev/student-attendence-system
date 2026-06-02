@@ -28,6 +28,7 @@ import QuestionForm from '../../components/teacher/QuestionForm';
 import { isEssayQuestion } from '../../utils/questionTypes';
 import GenerateQuestionsFromFileModal from '../../components/teacher/GenerateQuestionsFromFileModal';
 import ExtractQuestionsFromFileModal from '../../components/teacher/ExtractQuestionsFromFileModal';
+import ExamCreationModal from '../../components/teacher/ExamCreationModal';
 
 
 const TopicDetail = () => {
@@ -45,6 +46,8 @@ const TopicDetail = () => {
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [showAiGenerateModal, setShowAiGenerateModal] = useState(false);
   const [showExtractModal, setShowExtractModal] = useState(false);
+  const [showExamFromExtractModal, setShowExamFromExtractModal] = useState(false);
+  const [extractedQuestionIds, setExtractedQuestionIds] = useState([]);
 
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -360,7 +363,7 @@ const TopicDetail = () => {
         <Modal
           isOpen={showExtractModal}
           onClose={() => setShowExtractModal(false)}
-          title="Nhập câu hỏi từ File (Regex)"
+          title="Nhập câu hỏi từ File"
           size="md"
         >
           <ExtractQuestionsFromFileModal
@@ -378,7 +381,49 @@ const TopicDetail = () => {
               }
               setTimeout(() => setSuccess(''), 5000);
             }}
+            onCreateExam={async ({ saved, total, failed, questionIds }) => {
+              setShowExtractModal(false);
+              setExtractedQuestionIds(questionIds);
+              setShowExamFromExtractModal(true);
+              const failNote = failed > 0 ? ` (${failed} câu lỗi)` : '';
+              setSuccess(`Đã lưu ${saved}/${total} câu hỏi${failNote}. Chọn thông tin bài thi.`);
+              const questionsResult = await getTopicQuestions(subjectId, topicId);
+              if (questionsResult.success) {
+                setQuestions(questionsResult.data);
+              }
+            }}
           />
+        </Modal>
+
+        <Modal
+          isOpen={showExamFromExtractModal}
+          onClose={() => {
+            setShowExamFromExtractModal(false);
+            setExtractedQuestionIds([]);
+          }}
+          title={`Tạo bài thi (${extractedQuestionIds.length} câu hỏi)`}
+          size="md"
+        >
+          {extractedQuestionIds.length > 0 && subject && topic && (
+            <ExamCreationModal
+              subject={subject}
+              selectedQuestionIds={extractedQuestionIds}
+              topics={[{ id: topicId, name: topic.name, questions: [] }]}
+              availableQuestionCount={extractedQuestionIds.length}
+              teacherId={userProfile?.uid}
+              onSuccess={() => {
+                setShowExamFromExtractModal(false);
+                setExtractedQuestionIds([]);
+                setSuccess('Bài thi được tạo thành công!');
+                setTimeout(() => setSuccess(''), 5000);
+                navigate(`/teacher/subjects/${subjectId}/exams`);
+              }}
+              onCancel={() => {
+                setShowExamFromExtractModal(false);
+                setExtractedQuestionIds([]);
+              }}
+            />
+          )}
         </Modal>
 
         <Modal

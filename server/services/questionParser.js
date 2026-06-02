@@ -1,68 +1,183 @@
 
-export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
-  const questions = [];
-  const rawText = extractedResult.plainText;
+const normalizeForMatch = (text) =>
+  String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  // First, split the text into lines to process line by line
-  const lines = rawText.split(/\r?\n/).map(line => line.trim()).filter(line => line);
-  
-  let currentQuestion = null;
-  const optionRegex = /^(\*?)([A-D])[:.\)]\s*(.*)$/i; // Match options at start of line
-  const questionStartRegex = /^(Câu|Question)\s*\d+/i; // Match question starts
+const getSectionType = (line) => {
+  const n = normalizeForMatch(line);
+  if (n === 'trac nghiem' || n.startsWith('phan trac nghiem') || n === 'multiple choice') {
+    return 'mcq';
+  }
+  if (n === 'tu luan' || n.startsWith('phan tu luan') || n === 'essay') {
+    return 'essay';
+  }
+  return null;
+};
+
+const isQuestionStart = (line) => /^câu\s*\d+/i.test(line) || /^question\s*\d+/i.test(line);
+
+const parseQuestionHeader = (line) => {
+  const match = line.match(/^(?:câu|question)\s*\d+\s*[:.\-)]?\s*(.*)$/i);
+  return match ? match[1].trim() : line.replace(/^(?:câu|question)\s*\d+/i, '').trim();
+};
+
+const parseOptionLine = (line, lines, index) => {
+  const withText = line.match(/^(\*+)?([A-D])(?:[\.\):]\s*|\s+)(.+)$/i);
+  if (withText) {
+    return {
+      letter: withText[2].toUpperCase(),
+      text: withText[3].trim(),
+      markedCorrect: Boolean(withText[1]),
+      skipNext: 0
+    };
+  }
+
+  const letterOnly = line.match(/^(\*+)?([A-D])$/i);
+  if (letterOnly) {
+    const next = lines[index + 1]?.trim() || '';
+    if (next && !isQuestionStart(next) && !getSectionType(next) && !/^[A-D](?:[\.\):]|\s|$)/i.test(next)) {
+      return {
+        letter: letterOnly[2].toUpperCase(),
+        text: next.replace(/^\*+/, '').trim(),
+        markedCorrect: Boolean(letterOnly[1]),
+        skipNext: 1
+      };
+    }
+    return {
+      letter: letterOnly[2].toUpperCase(),
+      text: letterOnly[2].toUpperCase(),
+      markedCorrect: Boolean(letterOnly[1]),
+      skipNext: 0
+    };
+  }
+
+  return null;
+};
+
+const isLineBold = (lineStart, lineEnd, boldRanges) => {
+  if (!boldRanges?.length || lineStart >= lineEnd) return false;
+  return boldRanges.some((range) => range.start < lineEnd && range.end > lineStart);
+};
+
+const buildLineMeta = (plainText, boldRanges) => {
+  const rawLines = plainText.split(/\r?\n/);
+  let offset = 0;
+  const meta = [];
+
+  for (const raw of rawLines) {
+    const start = offset;
+    const end = offset + raw.length;
+    meta.push({
+      raw,
+      trimmed: raw.trim(),
+      start,
+      end,
+      isBold: isLineBold(start, end, boldRanges)
+    });
+    offset = end + 1;
+  }
+
+  return meta;
+};
+
+const finalizeQuestion = (draft, defaultPoints) => {
+  if (!draft?.questionText?.trim()) return null;
+
+  const optionLetters = ['A', 'B', 'C', 'D'].filter((letter) => draft.options[letter]?.trim());
+  const hasOptions = optionLetters.length >= 2;
+
+  if (hasOptions) {
+    const options = {};
+    optionLetters.forEach((letter) => {
+      options[letter] = draft.options[letter].trim();
+    });
+    ['A', 'B', 'C', 'D'].forEach((letter) => {
+      if (!options[letter]) options[letter] = '';
+    });
+
+    let correctAnswer = draft.correctAnswer || 'A';
+    if (!optionLetters.includes(correctAnswer)) {
+      correctAnswer = optionLetters[0] || 'A';
+    }
+
+    return {
+      type: 'mcq',
+      questionText: draft.questionText.trim(),
+      options,
+      correctAnswer,
+      points: defaultPoints
+    };
+  }
+
+  return {
+    type: 'essay',
+    questionText: draft.questionText.trim(),
+    points: defaultPoints
+  };
+};
+
+export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
+  const plainText = extractedResult.plainText || '';
+  const boldRanges = extractedResult.boldRanges || [];
+  const lineMeta = buildLineMeta(plainText, boldRanges).filter((m) => m.trimmed.length > 0);
+  const lines = lineMeta.map((m) => m.trimmed);
+
+  const questions = [];
+  let sectionType = null;
+  let current = null;
+  let skipUntil = -1;
+
+  const flushCurrent = () => {
+    if (!current) return;
+    const finalized = finalizeQuestion(current, defaultPoints);
+    if (finalized) questions.push(finalized);
+    current = null;
+  };
 
   for (let i = 0; i < lines.length; i++) {
+    if (i < skipUntil) continue;
+
     const line = lines[i];
-    
-    if (questionStartRegex.test(line)) {
-      // If we were building a question, save it first
-      if (currentQuestion && currentQuestion.questionText && currentQuestion.options.A && currentQuestion.options.B && currentQuestion.options.C && currentQuestion.options.D) {
-        questions.push({
-          questionText: currentQuestion.questionText,
-          options: currentQuestion.options,
-          correctAnswer: currentQuestion.correctAnswer || 'A',
-          points: defaultPoints
-        });
-      }
-      
-      // Start a new question
-      // Remove "Câu X:" or "Question X:" prefix
-      const questionText = line.replace(questionStartRegex, '').replace(/^[:.\-)]\s*/, '').replace(/[:.\-)]\s*$/, '').trim();
-      currentQuestion = {
-        questionText: questionText,
+    const meta = lineMeta[i];
+
+    const section = getSectionType(line);
+    if (section) {
+      flushCurrent();
+      sectionType = section;
+      continue;
+    }
+
+    if (isQuestionStart(line)) {
+      flushCurrent();
+      current = {
+        questionText: parseQuestionHeader(line),
         options: {},
         correctAnswer: 'A'
       };
-    } else if (currentQuestion) {
-      // Check if this line is an option
-      const match = line.match(optionRegex);
-      if (match) {
-        const isCorrect = !!match[1];
-        const letter = match[2].toUpperCase();
-        const optionText = match[3].trim();
-        
-        currentQuestion.options[letter] = optionText;
-        if (isCorrect) {
-          currentQuestion.correctAnswer = letter;
-        }
-      } else {
-        // If it's not an option and not a new question, add it to the current question text if needed
-        if (Object.keys(currentQuestion.options).length === 0) {
-          currentQuestion.questionText += ' ' + line;
-        }
+      continue;
+    }
+
+    if (!current) continue;
+
+    const option = parseOptionLine(line, lines, i);
+    if (option) {
+      current.options[option.letter] = option.text;
+      if (option.markedCorrect || meta?.isBold) {
+        current.correctAnswer = option.letter;
       }
+      skipUntil = i + 1 + option.skipNext;
+      continue;
+    }
+
+    if (Object.keys(current.options).length === 0) {
+      current.questionText = `${current.questionText} ${line}`.trim();
     }
   }
-  
-  // Add the last question if it's complete
-  if (currentQuestion && currentQuestion.questionText && currentQuestion.options.A && currentQuestion.options.B && currentQuestion.options.C && currentQuestion.options.D) {
-    questions.push({
-      questionText: currentQuestion.questionText,
-      options: currentQuestion.options,
-      correctAnswer: currentQuestion.correctAnswer || 'A',
-      points: defaultPoints
-    });
-  }
 
+  flushCurrent();
   return questions;
 };
-

@@ -124,7 +124,8 @@ router.post('/extract-questions', handleUpload, async (req, res) => {
     if (questions.length === 0) {
       return res.status(422).json({
         success: false,
-        error: 'Không tìm thấy câu hỏi nào hợp lệ trong file. Vui lòng kiểm tra định dạng (Câu 1: ... A. ... B. ... C. ... D. ...).'
+        error:
+          'Không tìm thấy câu hỏi hợp lệ. Kiểm tra định dạng: phần trắc nghiệm/tự luận, Câu 1: ..., đáp án A–D (in đậm = đúng).'
       });
     }
 

@@ -1,16 +1,61 @@
 import { useState, useRef } from 'react';
-import { Upload, AlertCircle, FileText, Download } from 'lucide-react';
+import { Upload, AlertCircle, FileText, Download, FilePlus2 } from 'lucide-react';
 import Button from '../common/Button';
 import { extractQuestionsFromFile } from '../../services/aiQuestion.service';
 import { createQuestion } from '../../services/subject.service';
 
 const ACCEPT = '.pdf,.docx,.doc,.txt,.md';
 
+const saveQuestionsToTopic = async ({
+  questions,
+  subjectId,
+  topicId,
+  createdBy,
+  defaultPoints,
+  onProgress
+}) => {
+  let saved = 0;
+  const savedIds = [];
+  const failures = [];
+
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    onProgress?.(`Đang lưu câu hỏi ${i + 1}/${questions.length}...`);
+
+    const payload = {
+      questionText: q.questionText,
+      points: q.points || defaultPoints,
+      createdBy,
+      type: q.type === 'essay' ? 'essay' : 'mcq'
+    };
+
+    if (payload.type === 'essay') {
+      payload.options = null;
+      payload.correctAnswer = null;
+    } else {
+      payload.options = q.options;
+      payload.correctAnswer = q.correctAnswer;
+    }
+
+    const result = await createQuestion(subjectId, topicId, payload);
+
+    if (result.success) {
+      saved += 1;
+      savedIds.push(result.data.id);
+    } else {
+      failures.push(result.error);
+    }
+  }
+
+  return { saved, savedIds, failures, total: questions.length };
+};
+
 const ExtractQuestionsFromFileModal = ({
   subjectId,
   topicId,
   createdBy,
   onSuccess,
+  onCreateExam,
   onCancel
 }) => {
   const fileInputRef = useRef(null);
@@ -20,18 +65,10 @@ const ExtractQuestionsFromFileModal = ({
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
 
-  const handleFileChange = (e) => {
-    const selected = e.target.files?.[0];
-    if (selected) {
-      setFile(selected);
-      setError('');
-    }
-  };
-
-  const handleExtractAndSave = async () => {
+  const runExtract = async () => {
     if (!file) {
       setError('Vui lòng chọn file (PDF, DOCX hoặc TXT)');
-      return;
+      return null;
     }
 
     setError('');
@@ -46,34 +83,27 @@ const ExtractQuestionsFromFileModal = ({
     if (!extResult.success) {
       setError(extResult.error);
       setStep('form');
-      return;
+      return null;
     }
 
-    const { questions, totalQuestions } = extResult.data;
+    return extResult.data.questions;
+  };
+
+  const handleExtractAndSave = async () => {
+    const questions = await runExtract();
+    if (!questions) return;
+
     setStep('saving');
-    setProgress(`Đang lưu ${totalQuestions} câu hỏi vào chủ đề...`);
+    setProgress(`Đang lưu ${questions.length} câu hỏi vào chủ đề...`);
 
-    let saved = 0;
-    const failures = [];
-
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      setProgress(`Đang lưu câu hỏi ${i + 1}/${questions.length}...`);
-
-      const result = await createQuestion(subjectId, topicId, {
-        questionText: q.questionText,
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-        points: q.points || defaultPoints,
-        createdBy
-      });
-
-      if (result.success) {
-        saved += 1;
-      } else {
-        failures.push(result.error);
-      }
-    }
+    const { saved, failures, total } = await saveQuestionsToTopic({
+      questions,
+      subjectId,
+      topicId,
+      createdBy,
+      defaultPoints,
+      onProgress: setProgress
+    });
 
     if (saved === 0) {
       setError(failures[0] || 'Không lưu được câu hỏi nào');
@@ -83,9 +113,47 @@ const ExtractQuestionsFromFileModal = ({
 
     onSuccess({
       saved,
-      total: questions.length,
+      total,
       failed: failures.length
     });
+  };
+
+  const handleExtractAndCreateExam = async () => {
+    const questions = await runExtract();
+    if (!questions) return;
+
+    setStep('saving');
+    setProgress(`Đang lưu ${questions.length} câu hỏi và tạo bài thi...`);
+
+    const { saved, savedIds, failures, total } = await saveQuestionsToTopic({
+      questions,
+      subjectId,
+      topicId,
+      createdBy,
+      defaultPoints,
+      onProgress: setProgress
+    });
+
+    if (saved === 0) {
+      setError(failures[0] || 'Không lưu được câu hỏi nào');
+      setStep('form');
+      return;
+    }
+
+    if (onCreateExam) {
+      onCreateExam({
+        saved,
+        total,
+        failed: failures.length,
+        questionIds: savedIds
+      });
+    } else {
+      onSuccess({
+        saved,
+        total,
+        failed: failures.length
+      });
+    }
   };
 
   if (step === 'extracting' || step === 'saving') {
@@ -122,7 +190,13 @@ const ExtractQuestionsFromFileModal = ({
           type="file"
           accept={ACCEPT}
           className="hidden"
-          onChange={handleFileChange}
+          onChange={(e) => {
+            const selected = e.target.files?.[0];
+            if (selected) {
+              setFile(selected);
+              setError('');
+            }
+          }}
         />
       </div>
 
@@ -146,38 +220,49 @@ const ExtractQuestionsFromFileModal = ({
           max={100}
           value={defaultPoints}
           onChange={(e) => setDefaultPoints(Number(e.target.value))}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+          className="input-field"
         />
       </div>
 
       <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-sm text-yellow-800 font-medium mb-1">Lưu ý định dạng file:</p>
-        <p className="text-xs text-yellow-700">
-          File cần tuân thủ cấu trúc sau để hệ thống nhận diện chính xác:
-        </p>
-        <pre className="text-xs mt-2 bg-white/50 p-2 rounded text-yellow-900 font-mono">
-          Câu 1: Nội dung câu hỏi...{'\n'}
-          A. Đáp án 1{'\n'}
-          *B. Đáp án đúng{'\n'}
-          C. Đáp án 3{'\n'}
-          D. Đáp án 4
+        <pre className="text-xs mt-2 bg-white/50 p-2 rounded text-yellow-900 font-mono whitespace-pre-wrap">
+{`trắc nghiệm
+câu 1: Nội dung câu hỏi...
+A. Đáp án A
+B. Đáp án B (in đậm = đúng)
+C. Đáp án C
+D. Đáp án D
+
+tự luận
+câu 1: Nội dung câu tự luận...`}
         </pre>
-        <p className="text-xs text-yellow-700 mt-2">
-          * Đặt dấu * trước đáp án đúng để hệ thống tự động nhận diện! Nếu không có, mặc định sẽ là A.
-        </p>
+        <ul className="text-xs text-yellow-800 mt-2 space-y-1 list-disc list-inside">
+          <li>Tiêu đề <strong>trắc nghiệm</strong> / <strong>tự luận</strong> để phân loại phần.</li>
+          <li>Có đáp án A–D bên dưới → câu trắc nghiệm; không có đáp án → câu tự luận.</li>
+          <li>Đáp án <strong>in đậm</strong> trong Word/PDF là đáp án đúng (file TXT có thể dùng * trước đáp án).</li>
+        </ul>
       </div>
 
-      <div className="flex justify-end gap-3 pt-4 border-t">
+      <div className="flex flex-wrap justify-end gap-3 pt-4 border-t">
         <Button variant="outline" onClick={onCancel}>
           Hủy
         </Button>
         <Button
-          variant="primary"
+          variant="outline"
           icon={<Download className="w-4 h-4" />}
           onClick={handleExtractAndSave}
           disabled={!file}
         >
           Trích xuất & Lưu
+        </Button>
+        <Button
+          variant="primary"
+          icon={<FilePlus2 className="w-4 h-4" />}
+          onClick={handleExtractAndCreateExam}
+          disabled={!file}
+        >
+          Trích xuất & Tạo bài thi
         </Button>
       </div>
     </div>
