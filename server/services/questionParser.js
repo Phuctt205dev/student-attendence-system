@@ -15,27 +15,12 @@ const isTextInBoldRanges = (textStart, textEnd, boldRanges) => {
 
 export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
   const questions = [];
-  const rawText = extractedResult.plainText;
-  const boldRanges = extractedResult.boldRanges || [];
-
-  // Chuẩn hóa line endings (Windows \r\n -> \n) và xóa ký tự BOM nếu có
-  const text = rawText.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  // Tìm vị trí offset giữa rawText và normalized text
-  // For simplicity, we'll work with the normalized text and adjust bold ranges accordingly
-  // First, build a map from original index to normalized index
-  let originalIndex = 0;
-  const originalToNormalized = [];
-  for (let i = 0; i < text.length; i++) {
-    while (originalIndex < rawText.length && rawText[originalIndex] !== text[i]) {
-      originalIndex++;
-    }
-    originalToNormalized[i] = originalIndex;
-    originalIndex++;
-  }
-
+  
+  // Chuẩn hóa line endings (Windows \r\n -> \n)
+  const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  
   // Tách văn bản thành các block dựa trên từ khóa "Câu 1:", "Câu 2:", "Question 1:" v.v.
-  const questionMatches = [...text.matchAll(/(?:^|\s+)((?:Câu|Question)\s*\d+\s*[\:\.\-\)]?\s*)/gi)];
+  const splitByQuestion = text.split(/(?:^|\n)\s*(?:Câu\s*\d+\s*:|Question\s*\d+\s*:)/i);
   
   for (let i = 0; i < questionMatches.length; i++) {
     const match = questionMatches[i];
@@ -43,10 +28,10 @@ export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
     const endIndex = i < questionMatches.length - 1 ? questionMatches[i + 1].index : text.length;
     const block = text.substring(startIndex, endIndex).trim();
     if (!block) continue;
-
-    // Tìm các đáp án bắt đầu bằng A., B., C., D. (hoặc A:, B:, C:, D:, A), B))
-    const optionRegex = /(?:^|\s+)([A-D])[\.\:\)]\s*(.*?)(?=(?:^|\s+)[A-D][\.\:\)]|$)/gsi;
-    let optionMatch;
+    
+    // Tìm các đáp án bắt đầu bằng A., B., C., D. (hoặc A:, B:, C:, D:)
+    const optionRegex = /(?:^|\n)\s*([A-D])[\.\:]\s*(.*?)(?=(?:^|\n)\s*[A-D][\.\:]|$)/gsi;
+    let match;
     const options = {};
     const optionPositions = [];
     let firstOptionIndex = block.length;
