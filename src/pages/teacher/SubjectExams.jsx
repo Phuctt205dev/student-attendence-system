@@ -23,6 +23,11 @@ import {
   partitionQuestionsByType,
   getQuestionTypeLabel
 } from '../../utils/questionTypes';
+import {
+  buildExamQuestionsTextForDocx,
+  getExamDocxTemplateFileName,
+  shuffleExamQuestionsForVersion
+} from '../../utils/buildExamDocxContent';
 
 const SubjectExams = () => {
   const { userProfile } = useAuth();
@@ -321,37 +326,6 @@ const SubjectExams = () => {
     return Math.abs(hash) || 1;
   };
 
-  const createSeededRandom = (seed) => {
-    let state = seed;
-    return () => {
-      state = (state * 9301 + 49297) % 233280;
-      return state / 233280;
-    };
-  };
-
-  const shuffleWithSeed = (items, seedValue) => {
-    const result = [...items];
-    const rand = createSeededRandom(seedValue);
-    for (let i = result.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(rand() * (i + 1));
-      [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
-  };
-
-  const buildQuestionsText = (questions) => {
-    return questions
-      .map((question, index) => {
-        const options = ['A', 'B', 'C', 'D']
-          .filter((key) => question.options?.[key] !== undefined)
-          .map((key) => `${key}. ${question.options?.[key]}`)
-          .join('\n');
-
-        return `Câu ${index + 1}: ${question.questionText}\n${options}`.trim();
-      })
-      .join('\n\n');
-  };
-
   const handleExportDoc = async () => {
     if (!pdfExam) return;
     setPdfLoading(true);
@@ -366,16 +340,27 @@ const SubjectExams = () => {
       }
 
       const questions = Array.isArray(result.data.questions) ? result.data.questions : [];
+      if (questions.length === 0) {
+        setError('Bài thi chưa có câu hỏi');
+        setPdfLoading(false);
+        return;
+      }
+
       const subjectName = subject?.name || '';
       const baseCode = pdfCodeBase || pdfExam.id.slice(0, 6).toUpperCase();
 
       const seedA = hashToSeed(`${pdfExam.id}-A`);
-      const versionA = shuffleWithSeed(questions, seedA);
+      const versionA = shuffleExamQuestionsForVersion(questions, seedA, 'essay');
 
-      const templateUrl = `${import.meta.env.BASE_URL}templates/dethimau.docx`;
+      const templateFile = getExamDocxTemplateFileName(questions);
+      const templateUrl = `${import.meta.env.BASE_URL}templates/${templateFile}`;
       const templateResponse = await fetch(templateUrl);
       if (!templateResponse.ok) {
-        throw new Error('TEMPLATE_NOT_FOUND');
+        throw new Error(
+          templateFile === 'dethimauTL.docx'
+            ? 'Không tìm thấy mẫu dethimauTL.docx trong public/templates/'
+            : 'Không tìm thấy mẫu dethimau.docx trong public/templates/'
+        );
       }
       const templateBuffer = await templateResponse.arrayBuffer();
 
@@ -387,7 +372,7 @@ const SubjectExams = () => {
           delimiters: { start: '{{', end: '}}' }
         });
         doc.setData({
-          QUESTIONS: buildQuestionsText(versionQuestions),
+          QUESTIONS: buildExamQuestionsTextForDocx(versionQuestions),
           EXAM_CODE: codeLabel,
           SUBJECT: subjectName,
           FACULTY: pdfFaculty,
@@ -410,7 +395,9 @@ const SubjectExams = () => {
       document.body.removeChild(linkA);
       URL.revokeObjectURL(urlA);
 
-      setSuccess('Xuất file Word thành công! Đã tạo 2 mã đề A và B.');
+      const templateNote =
+        templateFile === 'dethimauTL.docx' ? ' (mẫu tự luận)' : '';
+      setSuccess(`Xuất file Word thành công${templateNote}!`);
     } catch (err) {
       console.error('Lỗi xuất file:', err);
       if (err?.stack) {
@@ -845,7 +832,9 @@ const SubjectExams = () => {
                 placeholder="VD: 123456"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
-              <p className="text-xs text-gray-500 mt-1">Hệ thống sẽ tự tạo 2 mã đề: A và B.</p>
+              <p className="text-xs text-gray-500 mt-1">
+                File gồm phần trắc nghiệm / tự luận (nếu có) và điểm từng câu. Bài chỉ tự luận dùng mẫu TL.
+              </p>
             </div>
             <div className="flex justify-end gap-2">
               <Button
