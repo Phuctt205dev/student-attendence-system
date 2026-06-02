@@ -1,4 +1,27 @@
 
+/** Insert line breaks when DOCX/PDF text is flattened into one line */
+const normalizePlainTextLayout = (plainText) => {
+  const lineCount = plainText.split(/\r?\n/).filter((l) => l.trim()).length;
+  if (lineCount >= 4) {
+    return plainText.replace(/\r\n/g, '\n');
+  }
+
+  let text = plainText.replace(/\r\n/g, '\n').trim();
+
+  text = text.replace(
+    /\s*((?:trắc nghiệm|tự luận|trac nghiem|tu luan))\s*/gi,
+    '\n$1\n'
+  );
+  text = text.replace(/\s*((?:câu|question)\s*\d+\s*[:.)])/gi, '\n$1');
+  text = text.replace(/(?<![A-Za-zÀ-ỹ])([A-D])([.)]\s*)/gi, '\n$1$2');
+
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n');
+};
+
 const normalizeForMatch = (text) =>
   String(text || '')
     .toLowerCase()
@@ -18,7 +41,8 @@ const getSectionType = (line) => {
   return null;
 };
 
-const isQuestionStart = (line) => /^câu\s*\d+/i.test(line) || /^question\s*\d+/i.test(line);
+const isQuestionStart = (line) =>
+  /^(?:câu|question)\s*\d+/i.test(line.replace(/^\uFEFF/, ''));
 
 const parseQuestionHeader = (line) => {
   const match = line.match(/^(?:câu|question)\s*\d+\s*[:.\-)]?\s*(.*)$/i);
@@ -121,7 +145,7 @@ const finalizeQuestion = (draft, defaultPoints) => {
 };
 
 export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
-  const plainText = extractedResult.plainText || '';
+  const plainText = normalizePlainTextLayout(extractedResult.plainText || '');
   const boldRanges = extractedResult.boldRanges || [];
   const lineMeta = buildLineMeta(plainText, boldRanges).filter((m) => m.trimmed.length > 0);
   const lines = lineMeta.map((m) => m.trimmed);

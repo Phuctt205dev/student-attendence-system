@@ -22,10 +22,24 @@ export const getFileType = (filename) => {
   }
 };
 
+const htmlToPlainWithLineBreaks = (html) => {
+  return html
+    .replace(/<\/p>\s*/gi, '\n')
+    .replace(/<p[^>]*>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/li>\s*/gi, '\n')
+    .replace(/<li[^>]*>/gi, '')
+    .replace(/<\/tr>\s*/gi, '\n')
+    .replace(/<\/h[1-6]>\s*/gi, '\n')
+    .replace(/<h[1-6][^>]*>/gi, '')
+    .replace(/<\/div>\s*/gi, '\n')
+    .replace(/<div[^>]*>/gi, '');
+};
+
 const extractFromDocx = async (buffer) => {
   try {
     const result = await mammoth.convertToHtml({ buffer });
-    const html = result.value;
+    const html = htmlToPlainWithLineBreaks(result.value);
     let plainText = '';
     const boldRanges = [];
     let currentIndex = 0;
