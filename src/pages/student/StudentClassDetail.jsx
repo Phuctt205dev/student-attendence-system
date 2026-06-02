@@ -8,7 +8,7 @@ import { getExamsByClass, canStudentTakeClassExam } from '../../services/exam.se
 import { getStudentExamAttempt, startExamAttempt } from '../../services/examAttempt.service';
 import { getStudentTagsWithDetails, getTagColor, formatPoints } from '../../services/tag.service';
 import {
-  ChevronLeft,
+  ArrowLeft,
   ClipboardCheck,
   BookOpen,
   Tag,
@@ -403,7 +403,7 @@ const StudentClassDetail = () => {
                 onClick={() => navigate('/student/classes')}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <ArrowLeft className="w-6 h-6" />
               </button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">

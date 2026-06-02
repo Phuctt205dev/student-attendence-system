@@ -8,7 +8,7 @@ import {
   deleteTopic
 } from '../../services/subject.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -129,7 +129,7 @@ const SubjectDetail = () => {
                   onClick={() => navigate('/teacher/subjects')}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <ChevronLeft className="w-6 h-6" />
+                  <ArrowLeft className="w-6 h-6" />
                 </button>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">

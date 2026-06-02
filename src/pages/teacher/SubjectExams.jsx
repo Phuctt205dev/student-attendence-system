@@ -10,7 +10,7 @@ import {
 } from '../../services/exam.service';
 import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ChevronLeft, Plus, BookOpen, AlertCircle, CheckCircle, Users, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, BookOpen, AlertCircle, CheckCircle, Users, Trash2 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -314,7 +314,7 @@ const SubjectExams = () => {
                   onClick={() => navigate(`/teacher/subjects/${subjectId}`)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <ChevronLeft className="w-6 h-6" />
+                  <ArrowLeft className="w-6 h-6" />
                 </button>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">Bài thi</h1>

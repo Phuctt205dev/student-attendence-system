@@ -35,7 +35,7 @@ import {
 } from '../../services/tag.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
 import {
-  ChevronLeft,
+  ArrowLeft,
   Users,
   ClipboardCheck,
   Plus,
@@ -1094,7 +1094,7 @@ const ClassDetail = () => {
                 onClick={() => navigate('/teacher/classes')}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <ArrowLeft className="w-6 h-6" />
               </button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">

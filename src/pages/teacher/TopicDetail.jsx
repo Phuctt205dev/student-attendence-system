@@ -11,7 +11,7 @@ import {
 } from '../../services/subject.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
 import {
-  ChevronLeft,
+  ArrowLeft,
   Plus,
   Edit2,
   Trash2,
@@ -161,7 +161,7 @@ const TopicDetail = () => {
                   onClick={() => navigate(`/teacher/subjects/${subjectId}`)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <ChevronLeft className="w-6 h-6" />
+                  <ArrowLeft className="w-6 h-6" />
                 </button>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">
