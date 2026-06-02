@@ -280,9 +280,11 @@ service cloud.firestore {
       allow create: if signedIn() &&
         request.resource.data.studentId == request.auth.uid;
 
-      // Cập nhật attempt: student tự mình cập nhật
-      allow update: if signedIn() &&
-        resource.data.studentId == request.auth.uid;
+      // Cập nhật attempt: sinh viên khi làm bài, giáo viên chủ bài thi khi chấm tự luận
+      allow update: if signedIn() && (
+        resource.data.studentId == request.auth.uid ||
+        get(/databases/$(database)/documents/exams/$(resource.data.examId)).data.teacherId == request.auth.uid
+      );
 
       // Giáo viên chủ bài thi có thể xóa attempt (vd. gỡ bài khỏi lớp)
       allow delete: if signedIn() &&

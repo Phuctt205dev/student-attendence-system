@@ -121,7 +121,7 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
           })}
           rows="4"
           placeholder={isMcq ? 'Nhập câu hỏi trắc nghiệm...' : 'Nhập đề bài tự luận...'}
-          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+          className="input-field"
         />
         {errors.questionText && (
           <p className="text-red-600 text-sm mt-1">{errors.questionText.message}</p>
@@ -152,7 +152,7 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
                     }
                   })}
                   placeholder={`Nhập đáp án ${option}...`}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input-field flex-1"
                 />
                 {correctAnswer === option && (
                   <span className="text-green-600 text-sm font-medium">✓ Đúng</span>
@@ -191,7 +191,7 @@ const QuestionForm = ({ initialData, onSubmit, onCancel, lastQuestionPoints = 1,
           })}
           min="1"
           max="100"
-          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="input-field"
         />
         {errors.points && (
           <p className="text-red-600 text-sm mt-1">{errors.points.message}</p>

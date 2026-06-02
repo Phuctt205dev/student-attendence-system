@@ -19,6 +19,13 @@ export const isMcqQuestion = (question) => !isEssayQuestion(question);
 export const getQuestionTypeLabel = (question) =>
   isEssayQuestion(question) ? 'Tự luận' : 'Trắc nghiệm';
 
+/** Điểm tối đa: ưu tiên cấu hình câu hỏi gốc, không dùng snapshot exam nếu lệch. */
+export const getQuestionMaxPoints = (question, questionRef) => {
+  const refPoints =
+    questionRef && typeof questionRef === 'object' ? questionRef.points : undefined;
+  return question?.points ?? refPoints ?? 1;
+};
+
 /** Trắc nghiệm trước, tự luận sau. */
 export const sortQuestionsByType = (questions) => {
   const mcq = [];

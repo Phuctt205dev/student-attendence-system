@@ -195,7 +195,11 @@ const StudentExamTake = () => {
                 <p className="text-gray-600 mt-1">{exam.description}</p>
               )}
             </div>
-            <Button variant="outline" onClick={() => navigate('/student/exams')}>
+            <Button
+              variant="secondary"
+              className="!bg-white !text-gray-800 !border !border-gray-300 shadow-sm hover:!bg-gray-50"
+              onClick={() => navigate('/student/exams')}
+            >
               Quay lại
             </Button>
           </div>
@@ -260,10 +264,7 @@ const StudentExamTake = () => {
                   )}
                   {isFirstEssayQuestion && (
                     <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-sm font-semibold text-amber-900">
-                        Phần II — Tự luận
-                      </p>
-                      <p className="text-xs text-amber-800 mt-1">
+                      <p className="text-sm text-amber-900">
                         Từ đây là các câu tự luận. Hãy nhập câu trả lời vào ô bên dưới.
                       </p>
                     </div>
@@ -283,7 +284,7 @@ const StudentExamTake = () => {
                         value={answers[currentQuestion.id]?.textAnswer || ''}
                         onChange={(e) => handleEssayAnswer(currentQuestion.id, e.target.value)}
                         placeholder="Nhập câu trả lời tự luận..."
-                        className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
+                        className="input-field"
                       />
                       <p className="text-xs text-gray-500 mt-2">
                         Phần tự luận sẽ do giáo viên chấm điểm sau khi bạn nộp bài.

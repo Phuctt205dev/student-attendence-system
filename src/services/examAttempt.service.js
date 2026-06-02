@@ -11,7 +11,11 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { isEssayQuestion, sortQuestionsByType } from '../utils/questionTypes';
+import {
+  isEssayQuestion,
+  sortQuestionsByType,
+  getQuestionMaxPoints
+} from '../utils/questionTypes';
 
 const getQuestionFromExam = async (examData, questionId) => {
   const subjectId = examData.subjectId;
@@ -185,7 +189,7 @@ export const submitExamAttempt = async (attemptId) => {
       const question = await getQuestionFromExam(examData, questionId);
       if (!question) continue;
 
-      const points = questionRef.points ?? question.points ?? 1;
+      const points = getQuestionMaxPoints(question, questionRef);
 
       if (isEssayQuestion(question)) {
         hasEssay = true;
@@ -469,7 +473,7 @@ export const getAttemptWithDetails = async (attemptId) => {
       questionsWithAnswers.push({
         id: questionId,
         ...question,
-        maxPoints: questionRef.points ?? question.points ?? 1,
+        maxPoints: getQuestionMaxPoints(question, questionRef),
         studentAnswer: isEssayQuestion(question)
           ? answer.textAnswer || null
           : answer.selected || null,
@@ -529,7 +533,7 @@ export const gradeEssayAttempt = async (attemptId, essayScores) => {
       const question = await getQuestionFromExam(examData, questionId);
       if (!question || !isEssayQuestion(question)) continue;
 
-      const maxPoints = questionRef.points ?? question.points ?? 1;
+      const maxPoints = getQuestionMaxPoints(question, questionRef);
       const raw = essayScores[questionId];
       const earned = Math.min(Math.max(Number(raw) || 0, 0), maxPoints);
 
