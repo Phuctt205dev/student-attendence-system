@@ -46,11 +46,6 @@ const TeacherLayout = ({ children }) => {
       name: 'Môn học',
       href: '/teacher/subjects',
       icon: FileText
-    },
-    {
-      name: 'Hồ sơ',
-      href: '/teacher/profile',
-      icon: Settings
     }
   ];
 
@@ -84,13 +79,13 @@ const TeacherLayout = ({ children }) => {
           {!collapsed && <h2 className="text-xl font-bold text-gray-900">Teacher Panel</h2>}
           <button
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+            className="lg:hidden p-2 rounded-md text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <X className="w-5 h-5" />
           </button>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:block p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 ml-auto"
+            className="hidden lg:block p-2 rounded-md text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 ml-auto"
             title={collapsed ? 'Mở rộng' : 'Thu gọn'}
           >
             {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
@@ -98,7 +93,10 @@ const TeacherLayout = ({ children }) => {
         </div>
 
         {/* User Profile */}
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => {
+          navigate('/teacher/profile');
+          setSidebarOpen(false);
+        }}>
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
             <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
               <User className="w-5 h-5 text-primary-600" />
@@ -175,7 +173,7 @@ const TeacherLayout = ({ children }) => {
           <div className="flex items-center justify-between h-16 px-4">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+              className="p-2 rounded-md text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <Menu className="w-6 h-6" />
             </button>

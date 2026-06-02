@@ -401,7 +401,7 @@ const StudentClassDetail = () => {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate('/student/classes')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-gray-700 dark:text-gray-200"
               >
                 <ArrowLeft className="w-6 h-6" />
               </button>

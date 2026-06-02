@@ -126,11 +126,11 @@ const SubjectDetail = () => {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => navigate('/teacher/subjects')}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <ArrowLeft className="w-6 h-6" />
-                </button>
+                onClick={() => navigate('/teacher/subjects')}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-gray-700 dark:text-gray-200"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">
                     {loading ? 'Loading...' : subject?.name}

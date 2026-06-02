@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import TeacherLayout from '../../layouts/TeacherLayout';
 import { Card, Button } from '../../components/common';
 import ChangeEmailModal from '../../components/teacher/ChangeEmailModal';
@@ -9,11 +10,13 @@ import {
   Building,
   Award,
   Calendar,
-  Shield
+  Shield,
+  ArrowLeft
 } from 'lucide-react';
 
 const TeacherProfile = () => {
   const { userProfile } = useAuth();
+  const navigate = useNavigate();
   const [showEmailModal, setShowEmailModal] = useState(false);
 
   // Format date
@@ -75,8 +78,18 @@ const TeacherProfile = () => {
         {/* Header */}
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 py-6">
-            <h1 className="text-3xl font-bold text-gray-900">Hồ sơ cá nhân</h1>
-            <p className="text-gray-600 mt-1">Quản lý thông tin tài khoản của bạn</p>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/teacher')}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-gray-700 dark:text-gray-200"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Hồ sơ cá nhân</h1>
+                <p className="text-gray-600 mt-1">Quản lý thông tin tài khoản của bạn</p>
+              </div>
+            </div>
           </div>
         </header>
 
