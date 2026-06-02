@@ -1,22 +1,7 @@
 
-const isTextInBoldRanges = (textStart, textEnd, boldRanges) => {
-  for (const range of boldRanges) {
-    const overlapStart = Math.max(textStart, range.start);
-    const overlapEnd = Math.min(textEnd, range.end);
-    const overlapLength = overlapEnd - overlapStart;
-    const textLength = textEnd - textStart;
-    
-    if (overlapLength >= textLength * 0.5 || (textStart >= range.start && textEnd <= range.end)) {
-      return true;
-    }
-  }
-  return false;
-};
-
 export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
   const questions = [];
   const rawText = extractedResult.plainText;
-  const boldRanges = extractedResult.boldRanges || [];
 
   const questionRegex = /(?:^|\s+)(Câu|Question)\s*(\d+)\s*[:.\-)]?\s*/gi;
   const questionMatches = [];
@@ -32,9 +17,9 @@ export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
     const block = rawText.substring(start, end).trim();
     if (!block) continue;
 
-    const optionRegex = /(?:^|\s+)([A-D])[:.\)]\s*(.*?)(?=(?:^|\s+)[A-D][:.\)]|$)/gis;
+    const optionRegex = /(?:^|\s+)(\*?)([A-D])[:.\)]\s*(.*?)(?=(?:^|\s+)\*?[A-D][:.\)]|$)/gis;
     const options = {};
-    const optionPositions = [];
+    let correctAnswer = 'A';
     let firstOptionIndexInBlock = block.length;
     let oMatch;
     
@@ -46,8 +31,9 @@ export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
       if (oMatch.index < blockStartInRaw) continue;
       if (oMatch.index > end) break;
 
-      const letter = oMatch[1].toUpperCase();
-      const optionText = oMatch[2].trim();
+      const isCorrect = !!oMatch[1];
+      const letter = oMatch[2].toUpperCase();
+      const optionText = oMatch[3].trim();
       
       const indexInBlock = oMatch.index - blockStartInRaw;
       if (firstOptionIndexInBlock === block.length) {
@@ -55,31 +41,14 @@ export const extractQuestionsRegex = (extractedResult, defaultPoints = 1) => {
       }
 
       options[letter] = optionText;
-      optionPositions.push({ 
-        letter, 
-        start: oMatch.index, 
-        end: oMatch.index + oMatch[0].length,
-        letterStart: oMatch.index + oMatch[0].indexOf(letter) // Find the actual letter's start index
-      });
+      if (isCorrect) {
+        correctAnswer = letter;
+      }
     }
 
     const questionText = block.substring(0, firstOptionIndexInBlock).trim();
 
     if (questionText && options.A && options.B && options.C && options.D) {
-      let correctAnswer = 'A';
-      for (const pos of optionPositions) {
-        if (isTextInBoldRanges(pos.start, pos.end, boldRanges)) {
-          correctAnswer = pos.letter;
-          break;
-        }
-        const letterStart = pos.letterStart;
-        const letterEnd = pos.letterStart + 1;
-        if (isTextInBoldRanges(letterStart, letterEnd, boldRanges)) {
-          correctAnswer = pos.letter;
-          break;
-        }
-      }
-      
       questions.push({
         questionText,
         options,

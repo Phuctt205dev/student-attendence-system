@@ -158,12 +158,12 @@ const ExtractQuestionsFromFileModal = ({
         <pre className="text-xs mt-2 bg-white/50 p-2 rounded text-yellow-900 font-mono">
           Câu 1: Nội dung câu hỏi...{'\n'}
           A. Đáp án 1{'\n'}
-          B. Đáp án 2{'\n'}
+          *B. Đáp án đúng{'\n'}
           C. Đáp án 3{'\n'}
           D. Đáp án 4
         </pre>
         <p className="text-xs text-yellow-700 mt-2">
-          * Đáp án đúng sẽ được tự động nhận diện nếu bạn để chữ in đậm (bold). Nếu không tìm thấy, mặc định sẽ là A.
+          * Đặt dấu * trước đáp án đúng để hệ thống tự động nhận diện! Nếu không có, mặc định sẽ là A.
         </p>
       </div>
 
