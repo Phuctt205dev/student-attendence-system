@@ -7,20 +7,29 @@ import { createExam } from '../../services/exam.service';
 
 const ExamCreationModal = ({
   subject,
-  topicIds,
-  topicNames,
+  selectedQuestionIds,
+  topics,
   availableQuestionCount = 0,
   teacherId,
   onSuccess,
   onCancel,
   loading = false
 }) => {
+  // Get topic names for title
+  const topicNames = Array.from(new Set(selectedQuestionIds.map(qId => {
+    for (const topic of topics) {
+      if (topic.questions.some(q => q.id === qId)) {
+        return topic.name;
+      }
+    }
+    return '';
+  }))).filter(Boolean);
+
   const { register, handleSubmit, formState: { errors }, watch } = useForm({
     defaultValues: {
-      title: `${subject?.name} - ${topicNames?.join(', ')}`,
+      title: `${subject?.name} - ${topicNames.length > 0 ? topicNames.join(', ') : 'Bài thi mới'}`,
       description: '',
       durationMinutes: 60,
-      questionCount: Math.min(availableQuestionCount, 10),
       classIds: []
     }
   });
@@ -57,10 +66,6 @@ const ExamCreationModal = ({
       setError('');
       setSubmitting(true);
 
-      // Debug logging
-      console.log('Form data:', data);
-      console.log('ClassIds:', data.classIds);
-
       const selectedClassIds = Array.isArray(data.classIds)
         ? data.classIds
         : data.classIds
@@ -74,11 +79,8 @@ const ExamCreationModal = ({
         classIds: selectedClassIds,
         durationMinutes: parseInt(data.durationMinutes),
         subjectId: subject.id,
-        topicIds: topicIds,
-        questionCount: parseInt(data.questionCount)
+        selectedQuestionIds: selectedQuestionIds
       };
-
-      console.log('Exam data to save:', examData);
 
       const result = await createExam(examData);
 
@@ -142,58 +144,38 @@ const ExamCreationModal = ({
         </div>
       </div>
 
-      {/* Question Selection */}
+      {/* Question & Duration */}
       <div className="border-b pb-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Chọn câu hỏi</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Thông tin bài thi</h3>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Số lượng câu hỏi *
-            </label>
-            <input
-              type="number"
-              {...register('questionCount', {
-                required: 'Question count is required',
-                min: { value: 1, message: 'At least 1 question required' },
-                max: {
-                  value: availableQuestionCount,
-                  message: `Maximum ${availableQuestionCount} questions available`
-                }
-              })}
-              min="1"
-              max={availableQuestionCount}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            {errors.questionCount && (
-              <p className="text-red-600 text-sm mt-1">{errors.questionCount.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Thời gian (phút) *
-            </label>
-            <input
-              type="number"
-              {...register('durationMinutes', {
-                required: 'Duration is required',
-                min: { value: 5, message: 'Minimum 5 minutes' },
-                max: { value: 480, message: 'Maximum 480 minutes' }
-              })}
-              min="5"
-              max="480"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            {errors.durationMinutes && (
-              <p className="text-red-600 text-sm mt-1">{errors.durationMinutes.message}</p>
-            )}
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Số lượng câu hỏi
+          </label>
+          <p className="text-lg font-semibold text-primary-600">
+            {availableQuestionCount} câu hỏi
+          </p>
         </div>
 
-        <p className="text-xs text-gray-600 mt-3">
-          Có sẵn: <span className="font-semibold">{availableQuestionCount}</span> câu hỏi
-        </p>
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Thời gian (phút) *
+          </label>
+          <input
+            type="number"
+            {...register('durationMinutes', {
+              required: 'Duration is required',
+              min: { value: 5, message: 'Minimum 5 minutes' },
+              max: { value: 480, message: 'Maximum 480 minutes' }
+            })}
+            min="5"
+            max="480"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          {errors.durationMinutes && (
+            <p className="text-red-600 text-sm mt-1">{errors.durationMinutes.message}</p>
+          )}
+        </div>
       </div>
 
       {/* Class Selection (optional — assign & schedule in class detail) */}
@@ -232,13 +214,13 @@ const ExamCreationModal = ({
             <span className="font-medium">Tên:</span> {watch('title')}
           </p>
           <p>
-            <span className="font-medium">Câu hỏi:</span> {questionCount} câu
+            <span className="font-medium">Câu hỏi:</span> {availableQuestionCount} câu
           </p>
           <p>
             <span className="font-medium">Thời gian:</span> {watch('durationMinutes')} phút
           </p>
           <p>
-            <span className="font-medium">Lớp:</span> {classIds.length > 0 ? classIds.length + ' lớp' : 'Không chọn'}
+            <span className="font-medium">Lớp:</span> {(watch('classIds') || []).length > 0 ? (watch('classIds').length + ' lớp') : 'Không chọn'}
           </p>
         </div>
       </div>

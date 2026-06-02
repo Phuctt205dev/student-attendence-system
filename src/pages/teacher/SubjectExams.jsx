@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getSubjectById, getSubjectTopics } from '../../services/subject.service';
+import { getSubjectById, getSubjectTopics, getTopicQuestions } from '../../services/subject.service';
 import {
   getExamWithQuestions,
   getExamsBySubject,
@@ -10,7 +10,7 @@ import {
 } from '../../services/exam.service';
 import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
-import { ArrowLeft, Plus, BookOpen, AlertCircle, CheckCircle, Users, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, BookOpen, AlertCircle, CheckCircle, Users, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -29,8 +29,8 @@ const SubjectExams = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  const [selectedTopicIds, setSelectedTopicIds] = useState([]);
+  const [expandedTopicIds, setExpandedTopicIds] = useState([]);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState(new Set());
   const [showExamModal, setShowExamModal] = useState(false);
 
   const [exams, setExams] = useState([]);
@@ -59,7 +59,20 @@ const SubjectExams = () => {
 
     const topicsResult = await getSubjectTopics(subjectId);
     if (topicsResult.success) {
-      setTopics(topicsResult.data);
+      // For each topic, load its questions
+      const topicsWithQuestions = await Promise.all(
+        topicsResult.data.map(async (topic) => {
+          const questionsResult = await getTopicQuestions(subjectId, topic.id);
+          if (questionsResult.success) {
+            return {
+              ...topic,
+              questions: questionsResult.data
+            };
+          }
+          return { ...topic, questions: [] };
+        })
+      );
+      setTopics(topicsWithQuestions);
       setError('');
     } else {
       setError(topicsResult.error || 'Failed to load topics');
@@ -68,17 +81,53 @@ const SubjectExams = () => {
     setLoading(false);
   }, [subjectId]);
 
-  const handleToggleTopicSelection = (topicId) => {
-    setSelectedTopicIds((prev) =>
+  const toggleTopicExpansion = (topicId) => {
+    setExpandedTopicIds((prev) =>
       prev.includes(topicId)
         ? prev.filter((id) => id !== topicId)
         : [...prev, topicId]
     );
   };
 
+  const toggleQuestionSelection = (questionId) => {
+    setSelectedQuestionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllQuestionsInTopic = (topic) => {
+    const questionIds = (topic.questions || []).map(q => q.id);
+    setSelectedQuestionIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = questionIds.every(id => next.has(id));
+      
+      questionIds.forEach(id => {
+        if (allSelected) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+      });
+      
+      return next;
+    });
+  };
+
+  const isAllQuestionsSelectedInTopic = (topic) => {
+    const questionIds = (topic.questions || []).map(q => q.id);
+    if (questionIds.length === 0) return false;
+    return questionIds.every(id => selectedQuestionIds.has(id));
+  };
+
   const handleOpenExamModal = () => {
-    if (selectedTopicIds.length === 0) {
-      setError('Vui lòng chọn ít nhất một chủ đề');
+    if (selectedQuestionIds.size === 0) {
+      setError('Vui lòng chọn ít nhất một câu hỏi');
       setTimeout(() => setError(''), 3000);
       return;
     }
@@ -350,11 +399,11 @@ const SubjectExams = () => {
 
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Chọn chủ đề</h2>
-              <span className="text-sm text-gray-500">
-                Đã chọn {selectedTopicIds.length}/{topics.length}
-              </span>
-            </div>
+                <h2 className="text-xl font-semibold text-gray-900">Chọn câu hỏi</h2>
+                <span className="text-sm text-gray-500">
+                  Đã chọn {selectedQuestionIds.size} câu hỏi
+                </span>
+              </div>
 
             {loading ? (
               <div className="text-center py-12">
@@ -372,23 +421,81 @@ const SubjectExams = () => {
               <div className="space-y-4">
                 {topics.map((topic) => (
                   <Card key={topic.id} className="hover:shadow-lg transition-shadow">
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedTopicIds.includes(topic.id)}
-                        onChange={() => handleToggleTopicSelection(topic.id)}
-                        className="w-5 h-5 mt-1 rounded border-gray-300 cursor-pointer"
-                      />
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{topic.name}</h3>
-                        {topic.description && (
-                          <p className="text-gray-600 mt-1">{topic.description}</p>
-                        )}
-                        <div className="mt-3 text-sm text-gray-500">
-                          <span className="font-semibold text-gray-900">{topic.questionCount || 0}</span> câu hỏi
+                    <div
+                      className="flex items-start gap-3 cursor-pointer"
+                      onClick={() => toggleTopicExpansion(topic.id)}
+                    >
+                      <div
+                        className="w-5 h-5 mt-1 rounded border-gray-300 cursor-pointer flex items-center justify-center"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleAllQuestionsInTopic(topic);
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isAllQuestionsSelectedInTopic(topic)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            toggleAllQuestionsInTopic(topic);
+                          }}
+                          className="w-5 h-5 rounded border-gray-300 cursor-pointer"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">{topic.name}</h3>
+                            {topic.description && (
+                              <p className="text-gray-600 mt-1">{topic.description}</p>
+                            )}
+                            <div className="mt-3 text-sm text-gray-500">
+                              <span className="font-semibold text-gray-900">
+                                {topic.questions.length}
+                              </span> câu hỏi
+                            </div>
+                          </div>
+                          <div>
+                            {expandedTopicIds.includes(topic.id) ? (
+                              <ChevronUp className="w-6 h-6 text-gray-500" />
+                            ) : (
+                              <ChevronDown className="w-6 h-6 text-gray-500" />
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
+                    {expandedTopicIds.includes(topic.id) && topic.questions.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                        {topic.questions.map((question) => (
+                          <div
+                            key={question.id}
+                            className="flex items-start gap-3 px-2 py-2 hover:bg-gray-50 rounded-lg"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedQuestionIds.has(question.id)}
+                              onChange={() => toggleQuestionSelection(question.id)}
+                              className="w-4 h-4 mt-0.5 rounded border-gray-300 cursor-pointer"
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">
+                                {question.questionText}
+                              </p>
+                              {question.options && Object.keys(question.options).length > 0 && (
+                                <div className="mt-1 text-xs text-gray-600">
+                                  {Object.entries(question.options).map(([key, value]) => (
+                                    <span key={key} className="mr-3">
+                                      {key}. {value}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </Card>
                 ))}
               </div>
@@ -506,19 +613,15 @@ const SubjectExams = () => {
           onClose={() => {
             setShowExamModal(false);
           }}
-          title={`Tạo bài thi từ ${selectedTopicIds.length} chủ đề`}
+          title={`Tạo bài thi với ${selectedQuestionIds.size} câu hỏi`}
           size="md"
         >
-          {selectedTopicIds.length > 0 && subject && (
+          {selectedQuestionIds.size > 0 && subject && (
             <ExamCreationModal
               subject={subject}
-              topicIds={selectedTopicIds}
-              topicNames={topics
-                .filter((t) => selectedTopicIds.includes(t.id))
-                .map((t) => t.name)}
-              availableQuestionCount={topics
-                .filter((t) => selectedTopicIds.includes(t.id))
-                .reduce((sum, t) => sum + (t.questionCount || 0), 0)}
+              selectedQuestionIds={Array.from(selectedQuestionIds)}
+              topics={topics}
+              availableQuestionCount={selectedQuestionIds.size}
               teacherId={userProfile?.uid}
               onSuccess={handleExamCreated}
               onCancel={() => {

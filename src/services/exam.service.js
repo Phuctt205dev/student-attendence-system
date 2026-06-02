@@ -220,7 +220,7 @@ export const getExamDataForClass = async (classId, classExamInstanceId) => {
   return { success: false, error: 'Exam not found for this class' };
 };
 
-// Create exam with topic-based question selection
+// Create exam with topic-based or selected question ID selection
 export const createExam = async (examData) => {
   try {
     const {
@@ -231,48 +231,72 @@ export const createExam = async (examData) => {
       durationMinutes,
       subjectId,
       topicIds,
-      questionCount
+      questionCount,
+      selectedQuestionIds
     } = examData;
 
-    if (!subjectId || !topicIds || topicIds.length === 0) {
-      return {
-        success: false,
-        error: 'Please select subject and at least one topic'
-      };
-    }
+    let selectedQuestions = [];
+    let usedTopicIds = [];
 
-    if (!questionCount || questionCount < 1) {
-      return {
-        success: false,
-        error: 'Please specify at least one question'
-      };
-    }
+    if (selectedQuestionIds && selectedQuestionIds.length > 0) {
+      // Get selected questions from topics
+      const topicsResult = await getDocs(collection(db, 'subjects', subjectId, 'topics'));
+      for (const topicDoc of topicsResult.docs) {
+        const topicId = topicDoc.id;
+        usedTopicIds.push(topicId);
+        const questionsSnap = await getDocs(collection(db, 'subjects', subjectId, 'topics', topicId, 'questions'));
+        for (const questionDoc of questionsSnap.docs) {
+          if (selectedQuestionIds.includes(questionDoc.id)) {
+            selectedQuestions.push({
+              id: questionDoc.id,
+              ...questionDoc.data()
+            });
+          }
+        }
+      }
+    } else {
+      // Original topic-based random selection
+      if (!subjectId || !topicIds || topicIds.length === 0) {
+        return {
+          success: false,
+          error: 'Please select subject and at least one topic'
+        };
+      }
 
-    // Get random questions from selected topics
-    const questionsResult = await getRandomQuestionsFromTopics(
-      subjectId,
-      topicIds,
-      questionCount
-    );
+      if (!questionCount || questionCount < 1) {
+        return {
+          success: false,
+          error: 'Please specify at least one question'
+        };
+      }
 
-    if (!questionsResult.success) {
-      return questionsResult;
-    }
+      usedTopicIds = topicIds;
 
-    const selectedQuestions = questionsResult.data;
+      const questionsResult = await getRandomQuestionsFromTopics(
+        subjectId,
+        topicIds,
+        questionCount
+      );
 
-    if (selectedQuestions.length === 0) {
-      return {
-        success: false,
-        error: `No questions found in selected topics. Available: ${questionsResult.totalAvailable}`
-      };
-    }
+      if (!questionsResult.success) {
+        return questionsResult;
+      }
 
-    if (selectedQuestions.length < questionCount) {
-      return {
-        success: false,
-        error: `Not enough questions. Requested: ${questionCount}, Available: ${selectedQuestions.length}`
-      };
+      selectedQuestions = questionsResult.data;
+
+      if (selectedQuestions.length === 0) {
+        return {
+          success: false,
+          error: `No questions found in selected topics. Available: ${questionsResult.totalAvailable}`
+        };
+      }
+
+      if (selectedQuestions.length < questionCount) {
+        return {
+          success: false,
+          error: `Not enough questions. Requested: ${questionCount}, Available: ${selectedQuestions.length}`
+        };
+      }
     }
 
     // Calculate total points from questions
@@ -301,7 +325,7 @@ export const createExam = async (examData) => {
       classIds: classIdsArray,
       durationMinutes: parseInt(durationMinutes),
       subjectId,
-      topicIds,
+      topicIds: usedTopicIds,
       questionIds,
       totalQuestions: selectedQuestions.length,
       totalPoints,
