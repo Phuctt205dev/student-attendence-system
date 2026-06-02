@@ -621,9 +621,24 @@ const SubjectExams = () => {
                   return (
                     <Card key={exam.id} className="hover:shadow-lg transition-shadow">
                       <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
+                        <div
+                          className="flex-1 cursor-pointer min-w-0"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() =>
+                            navigate(`/teacher/subjects/${subjectId}/exams/${exam.id}`)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              navigate(`/teacher/subjects/${subjectId}/exams/${exam.id}`);
+                            }
+                          }}
+                        >
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900">{exam.title}</h3>
+                            <h3 className="text-lg font-semibold text-gray-900 hover:text-primary-600">
+                              {exam.title}
+                            </h3>
                             {getStatusBadge(exam.visibility)}
                           </div>
 
@@ -654,12 +669,23 @@ const SubjectExams = () => {
                           </div>
                         </div>
 
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-2 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/teacher/subjects/${subjectId}/exams/${exam.id}`);
+                            }}
+                          >
+                            Chi tiết
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             icon={<Users className="w-4 h-4" />}
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setAssignExam(exam);
                               setAssigningClassId('');
                             }}
@@ -669,7 +695,8 @@ const SubjectExams = () => {
                           <Button
                             variant="primary"
                             size="sm"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setPdfExam(exam);
                               setPdfCodeBase('');
                               setPdfFaculty('');
@@ -683,7 +710,10 @@ const SubjectExams = () => {
                             icon={<Trash2 className="w-4 h-4" />}
                             className="border-red-300 text-red-600 hover:bg-red-50"
                             disabled={deletingId === exam.id}
-                            onClick={() => handleDeleteExam(exam)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteExam(exam);
+                            }}
                           >
                             {deletingId === exam.id ? 'Đang xóa...' : 'Xóa'}
                           </Button>

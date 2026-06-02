@@ -60,6 +60,19 @@ const TeacherExamClassDetailContent = ({ exam, classId }) => {
     [attemptMap]
   );
 
+  const sortedStudents = useMemo(() => {
+    return [...students].sort((a, b) => {
+      const idA = String(a.studentId || '').trim();
+      const idB = String(b.studentId || '').trim();
+      const numA = parseInt(idA, 10);
+      const numB = parseInt(idB, 10);
+      if (!Number.isNaN(numA) && !Number.isNaN(numB) && idA === String(numA) && idB === String(numB)) {
+        return numA - numB;
+      }
+      return idA.localeCompare(idB, 'vi', { numeric: true, sensitivity: 'base' });
+    });
+  }, [students]);
+
   const avgScale10 = useMemo(() => {
     const scales = submittedAttempts
       .map((a) => getAttemptScoreBreakdown(a, exam).scale10)
@@ -148,11 +161,10 @@ const TeacherExamClassDetailContent = ({ exam, classId }) => {
                   <th className="px-3 py-3 text-left font-medium text-gray-700">Trắc nghiệm</th>
                   <th className="px-3 py-3 text-left font-medium text-gray-700">Tự luận</th>
                   <th className="px-3 py-3 text-left font-medium text-gray-700">Điểm (thang 10)</th>
-                  <th className="px-3 py-3 text-left font-medium text-gray-700">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {students.map((student) => {
+                {sortedStudents.map((student) => {
                   const attempt = attemptMap[student.uid];
                   const status = getAttemptLabel(attempt);
                   const breakdown = getAttemptScoreBreakdown(attempt, exam);
@@ -170,9 +182,11 @@ const TeacherExamClassDetailContent = ({ exam, classId }) => {
                         : '—';
 
                     if (breakdown.essayTotal > 0) {
-                      essayCell = breakdown.essayPending
-                        ? 'Chờ chấm'
-                        : `${breakdown.essayScore ?? 0}/${breakdown.essayTotal}`;
+                      if (breakdown.essayPending) {
+                        essayCell = 'pending';
+                      } else {
+                        essayCell = `${breakdown.essayScore ?? 0}/${breakdown.essayTotal}`;
+                      }
                     } else {
                       essayCell = '—';
                     }
@@ -195,21 +209,27 @@ const TeacherExamClassDetailContent = ({ exam, classId }) => {
                       <td className="px-3 py-2 font-medium text-gray-900">{student.fullName}</td>
                       <td className={`px-3 py-2 ${status.className}`}>{status.text}</td>
                       <td className="px-3 py-2 text-gray-700">{mcqCell}</td>
-                      <td className="px-3 py-2 text-gray-700">{essayCell}</td>
-                      <td className="px-3 py-2 font-semibold text-gray-900">{scaleCell}</td>
-                      <td className="px-3 py-2">
-                        {canGradeEssay && (
-                          <Button
-                            variant="outline"
-                            className="text-xs py-1 px-2"
-                            onClick={() =>
-                              setGradingStudent({ attempt, name: student.fullName })
-                            }
-                          >
-                            Chấm tự luận
-                          </Button>
+                      <td className="px-3 py-2 text-gray-700">
+                        {essayCell === 'pending' ? (
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <span className="text-amber-700 text-xs">Chờ chấm</span>
+                            {canGradeEssay && (
+                              <Button
+                                variant="outline"
+                                className="text-xs py-1 px-2"
+                                onClick={() =>
+                                  setGradingStudent({ attempt, name: student.fullName })
+                                }
+                              >
+                                Chấm điểm
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          essayCell
                         )}
                       </td>
+                      <td className="px-3 py-2 font-semibold text-gray-900">{scaleCell}</td>
                     </tr>
                   );
                 })}

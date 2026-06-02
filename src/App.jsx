@@ -29,6 +29,7 @@ import TeacherQuestionBank from './pages/teacher/TeacherQuestionBank';
 import TeacherSubjects from './pages/teacher/TeacherSubjects';
 import SubjectDetail from './pages/teacher/SubjectDetail';
 import SubjectExams from './pages/teacher/SubjectExams';
+import TeacherSubjectExamDetail from './pages/teacher/TeacherSubjectExamDetail';
 import TopicDetail from './pages/teacher/TopicDetail';
 import TeacherExamClassDetail from './pages/teacher/TeacherExamClassDetail';
 import StudentExams from './pages/student/StudentExams';
@@ -184,6 +185,16 @@ function App() {
               <ProtectedRoute>
                 <RoleBasedRoute allowedRoles={['teacher', 'admin']}>
                   <SubjectExams />
+                </RoleBasedRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/subjects/:subjectId/exams/:examId"
+            element={
+              <ProtectedRoute>
+                <RoleBasedRoute allowedRoles={['teacher', 'admin']}>
+                  <TeacherSubjectExamDetail />
                 </RoleBasedRoute>
               </ProtectedRoute>
             }
