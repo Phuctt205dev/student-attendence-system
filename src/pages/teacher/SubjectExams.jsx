@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSubjectById, getSubjectTopics, getTopicQuestions } from '../../services/subject.service';
@@ -18,6 +18,11 @@ import ExamCreationModal from '../../components/teacher/ExamCreationModal';
 import { formatDistanceToNow } from 'date-fns';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
+import {
+  isEssayQuestion,
+  partitionQuestionsByType,
+  getQuestionTypeLabel
+} from '../../utils/questionTypes';
 
 const SubjectExams = () => {
   const { userProfile } = useAuth();
@@ -137,6 +142,59 @@ const SubjectExams = () => {
       el.indeterminate = isSomeQuestionsSelectedInTopic(topic);
     }
   };
+
+  const selectedBreakdown = useMemo(() => {
+    let mcq = 0;
+    let essay = 0;
+    topics.forEach((topic) => {
+      (topic.questions || []).forEach((q) => {
+        if (!selectedQuestionIds.has(q.id)) return;
+        if (isEssayQuestion(q)) essay += 1;
+        else mcq += 1;
+      });
+    });
+    return { mcq, essay, total: mcq + essay };
+  }, [topics, selectedQuestionIds]);
+
+  const renderQuestionSelectRow = (question) => (
+    <div
+      key={question.id}
+      className="flex items-start gap-3 px-2 py-2 hover:bg-gray-50 rounded-lg"
+    >
+      <input
+        type="checkbox"
+        checked={selectedQuestionIds.has(question.id)}
+        onChange={() => toggleQuestionSelection(question.id)}
+        className="w-4 h-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0"
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          <span
+            className={`text-xs font-medium px-2 py-0.5 rounded ${
+              isEssayQuestion(question)
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-blue-100 text-blue-800'
+            }`}
+          >
+            {getQuestionTypeLabel(question)}
+          </span>
+          <span className="text-xs text-gray-500">{question.points ?? 1} điểm</span>
+        </div>
+        <p className="text-sm font-medium text-gray-900">{question.questionText}</p>
+        {!isEssayQuestion(question) && question.options && (
+          <div className="mt-1 text-xs text-gray-600">
+            {Object.entries(question.options)
+              .filter(([, value]) => value)
+              .map(([key, value]) => (
+                <span key={key} className="mr-3">
+                  {key}. {value}
+                </span>
+              ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   const handleOpenExamModal = () => {
     if (selectedQuestionIds.size === 0) {
@@ -415,7 +473,20 @@ const SubjectExams = () => {
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-gray-900">Chọn câu hỏi</h2>
                 <span className="text-sm text-gray-500">
-                  Đã chọn {selectedQuestionIds.size} câu hỏi
+                  Đã chọn {selectedBreakdown.total} câu
+                  {selectedBreakdown.total > 0 && (
+                    <>
+                      {' '}
+                      (
+                      <span className="text-blue-700">{selectedBreakdown.mcq} TN</span>
+                      {selectedBreakdown.essay > 0 && (
+                        <>
+                          , <span className="text-amber-700">{selectedBreakdown.essay} TL</span>
+                        </>
+                      )}
+                      )
+                    </>
+                  )}
                 </span>
               </div>
 
@@ -486,34 +557,32 @@ const SubjectExams = () => {
                       </div>
                     </div>
                     {expandedTopicIds.includes(topic.id) && topic.questions.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
-                        {topic.questions.map((question) => (
-                          <div
-                            key={question.id}
-                            className="flex items-start gap-3 px-2 py-2 hover:bg-gray-50 rounded-lg"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedQuestionIds.has(question.id)}
-                              onChange={() => toggleQuestionSelection(question.id)}
-                              className="w-4 h-4 mt-0.5 rounded border-gray-300 cursor-pointer"
-                            />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-900">
-                                {question.questionText}
-                              </p>
-                              {question.options && Object.keys(question.options).length > 0 && (
-                                <div className="mt-1 text-xs text-gray-600">
-                                  {Object.entries(question.options).map(([key, value]) => (
-                                    <span key={key} className="mr-3">
-                                      {key}. {value}
-                                    </span>
-                                  ))}
+                      <div className="mt-4 pt-4 border-t border-gray-100 space-y-1">
+                        {(() => {
+                          const { mcqQuestions, essayQuestions } = partitionQuestionsByType(
+                            topic.questions
+                          );
+                          return (
+                            <>
+                              {mcqQuestions.length > 0 && (
+                                <div className="mb-2">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 px-2 py-1 bg-blue-50 rounded">
+                                    Trắc nghiệm ({mcqQuestions.length})
+                                  </p>
+                                  {mcqQuestions.map(renderQuestionSelectRow)}
                                 </div>
                               )}
-                            </div>
-                          </div>
-                        ))}
+                              {essayQuestions.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 px-2 py-1 bg-amber-50 rounded">
+                                    Tự luận ({essayQuestions.length})
+                                  </p>
+                                  {essayQuestions.map(renderQuestionSelectRow)}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </Card>

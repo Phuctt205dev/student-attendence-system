@@ -16,7 +16,12 @@ import { AlertCircle, Clock, CheckCircle, ChevronLeft, ChevronRight } from 'luci
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import { format, isAfter, isBefore } from 'date-fns';
-import { isEssayQuestion, partitionQuestionsByType } from '../../utils/questionTypes';
+import {
+  isEssayQuestion,
+  partitionQuestionsByType,
+  sortQuestionsByType,
+  hasMcqOptions
+} from '../../utils/questionTypes';
 
 const StudentExamTake = () => {
   const { userProfile } = useAuth();
@@ -79,7 +84,7 @@ const StudentExamTake = () => {
       const access = canStudentTakeClassExam(examData, classId);
 
       setExam(examData);
-      setQuestions(examData.questions || []);
+      setQuestions(sortQuestionsByType(examData.questions || []));
 
       const attemptResult = await getStudentExamAttempt(
         userProfile.uid,
@@ -154,6 +159,12 @@ const StudentExamTake = () => {
 
   const currentQuestion = questions[currentIndex];
   const isCurrentEssay = currentQuestion && isEssayQuestion(currentQuestion);
+  const showEssayInput =
+    currentQuestion && (isCurrentEssay || !hasMcqOptions(currentQuestion));
+  const isFirstEssayQuestion =
+    showEssayInput &&
+    mcqQuestions.length > 0 &&
+    currentIndex === mcqQuestions.length;
 
   const isQuestionAnswered = (question) => {
     const a = answers[question.id];
@@ -247,11 +258,22 @@ const StudentExamTake = () => {
                       Kết thúc: {format(endTime, 'MMM dd, yyyy HH:mm')}
                     </p>
                   )}
+                  {isFirstEssayQuestion && (
+                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm font-semibold text-amber-900">
+                        Phần II — Tự luận
+                      </p>
+                      <p className="text-xs text-amber-800 mt-1">
+                        Từ đây là các câu tự luận. Hãy nhập câu trả lời vào ô bên dưới.
+                      </p>
+                    </div>
+                  )}
+
                   <h2 className="text-lg font-semibold text-gray-900 mb-4">
                     {currentQuestion.questionText}
                   </h2>
 
-                  {isCurrentEssay ? (
+                  {showEssayInput ? (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Câu trả lời của bạn
@@ -269,8 +291,13 @@ const StudentExamTake = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
+                      <p className="text-xs font-medium text-blue-700 mb-2">Chọn một đáp án</p>
                       {['A', 'B', 'C', 'D']
-                        .filter((key) => currentQuestion.options?.[key] !== undefined)
+                        .filter(
+                          (key) =>
+                            currentQuestion.options?.[key] !== undefined &&
+                            String(currentQuestion.options[key] ?? '').trim()
+                        )
                         .map((key) => (
                           <label
                             key={key}
@@ -326,19 +353,21 @@ const StudentExamTake = () => {
 
               <div className="space-y-4">
                 <Card>
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Tóm tắt</h3>
-                  <div className="text-sm text-gray-600 space-y-2">
-                    <div>
-                      Trắc nghiệm:{' '}
-                      <span className="font-medium text-gray-900">{mcqQuestions.length} câu</span>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Cấu trúc bài thi</h3>
+                  <div className="text-sm space-y-2">
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-blue-50 border border-blue-100">
+                      <span className="text-blue-800 font-medium">Phần I — Trắc nghiệm</span>
+                      <span className="font-semibold text-blue-900">{mcqQuestions.length} câu</span>
                     </div>
-                    {essayQuestions.length > 0 && (
-                      <div>
-                        Tự luận:{' '}
-                        <span className="font-medium text-gray-900">{essayQuestions.length} câu</span>
+                    {essayQuestions.length > 0 ? (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50 border border-amber-100">
+                        <span className="text-amber-900 font-medium">Phần II — Tự luận</span>
+                        <span className="font-semibold text-amber-900">{essayQuestions.length} câu</span>
                       </div>
+                    ) : (
+                      <p className="text-gray-500 text-xs">Không có câu tự luận</p>
                     )}
-                    <div>
+                    <div className="text-gray-600 pt-1 border-t">
                       Thời lượng:{' '}
                       <span className="font-medium text-gray-900">{exam?.durationMinutes} phút</span>
                     </div>
@@ -346,8 +375,8 @@ const StudentExamTake = () => {
                 </Card>
 
                 {mcqQuestions.length > 0 && (
-                  <Card>
-                    <h3 className="text-sm font-semibold text-gray-900 mb-2">Phần I — Trắc nghiệm</h3>
+                  <Card className="border-blue-100">
+                    <h3 className="text-sm font-semibold text-blue-800 mb-2">Phần I — Trắc nghiệm</h3>
                     <div className="grid grid-cols-5 gap-2">
                       {mcqQuestions.map((question) => {
                         const globalIndex = questions.findIndex((q) => q.id === question.id);
@@ -368,8 +397,8 @@ const StudentExamTake = () => {
                 )}
 
                 {essayQuestions.length > 0 && (
-                  <Card>
-                    <h3 className="text-sm font-semibold text-gray-900 mb-2">Phần II — Tự luận</h3>
+                  <Card className="border-amber-200">
+                    <h3 className="text-sm font-semibold text-amber-900 mb-2">Phần II — Tự luận</h3>
                     <div className="grid grid-cols-5 gap-2">
                       {essayQuestions.map((question) => {
                         const globalIndex = questions.findIndex((q) => q.id === question.id);

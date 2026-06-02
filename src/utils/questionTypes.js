@@ -1,9 +1,23 @@
 export const QUESTION_TYPE_MCQ = 'mcq';
 export const QUESTION_TYPE_ESSAY = 'essay';
 
-export const isEssayQuestion = (question) => question?.type === QUESTION_TYPE_ESSAY;
+export const hasMcqOptions = (question) => {
+  const opts = question?.options;
+  if (!opts || typeof opts !== 'object') return false;
+  return Object.values(opts).some((v) => typeof v === 'string' && v.trim().length > 0);
+};
+
+/** Essay nếu type === essay, hoặc câu cũ/lưu thiếu không có đáp án trắc nghiệm hợp lệ. */
+export const isEssayQuestion = (question) => {
+  if (question?.type === QUESTION_TYPE_ESSAY) return true;
+  if (question?.type === QUESTION_TYPE_MCQ) return false;
+  return !hasMcqOptions(question);
+};
 
 export const isMcqQuestion = (question) => !isEssayQuestion(question);
+
+export const getQuestionTypeLabel = (question) =>
+  isEssayQuestion(question) ? 'Tự luận' : 'Trắc nghiệm';
 
 /** Trắc nghiệm trước, tự luận sau. */
 export const sortQuestionsByType = (questions) => {

@@ -291,12 +291,21 @@ export const getQuestion = async (subjectId, topicId, questionId) => {
 
 export const updateQuestion = async (subjectId, topicId, questionId, updates) => {
   try {
+    const type = updates.type === 'essay' ? 'essay' : 'mcq';
+    const payload = {
+      ...updates,
+      type,
+      updatedAt: serverTimestamp()
+    };
+
+    if (type === 'essay') {
+      payload.options = null;
+      payload.correctAnswer = null;
+    }
+
     await updateDoc(
       doc(db, 'subjects', subjectId, 'topics', topicId, 'questions', questionId),
-      {
-        ...updates,
-        updatedAt: serverTimestamp()
-      }
+      payload
     );
 
     return { success: true };
