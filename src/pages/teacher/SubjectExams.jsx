@@ -263,7 +263,12 @@ const SubjectExams = () => {
   };
 
   const handleDeleteExam = async (exam) => {
-    if (!window.confirm(`Xóa bài thi "${exam.title}"? Hành động không thể hoàn tác.`)) return;
+    const hasClasses = (exam.classIds || []).length > 0;
+    const confirmMessage = hasClasses
+      ? `Xóa "${exam.title}" khỏi danh sách môn học?\n\nBài thi tại các lớp đã gán (và bài làm của sinh viên) vẫn giữ nguyên.`
+      : `Xóa bài thi "${exam.title}"?\n\nHành động không thể hoàn tác.`;
+
+    if (!window.confirm(confirmMessage)) return;
 
     setDeletingId(exam.id);
     const result = await deleteExam(exam.id);

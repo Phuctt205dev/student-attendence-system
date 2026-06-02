@@ -427,19 +427,43 @@ export const closeExam = async (examId) => {
   }
 };
 
-// Delete exam from subject list (class copies in classExams are kept)
+const examHasClassCopies = async (sourceExamId, teacherId) => {
+  if (!teacherId) return false;
+
+  const classesSnap = await getDocs(
+    query(collection(db, 'classes'), where('teacherId', '==', teacherId))
+  );
+
+  for (const classDoc of classesSnap.docs) {
+    const classExamsSnap = await getDocs(
+      collection(db, 'classes', classDoc.id, 'classExams')
+    );
+    const hasCopy = classExamsSnap.docs.some(
+      (d) => (d.data().sourceExamId || d.id) === sourceExamId
+    );
+    if (hasCopy) return true;
+  }
+
+  return false;
+};
+
+// Xóa khỏi danh sách môn học. Bản sao trong classExams (và bài làm của lớp) được giữ nguyên.
 export const deleteExam = async (examId) => {
   try {
     const examRef = doc(db, 'exams', examId);
-    const exam = await getDoc(examRef);
+    const examSnap = await getDoc(examRef);
 
-    if (!exam.exists()) {
-      return { success: false, error: 'Exam not found' };
+    if (!examSnap.exists()) {
+      return { success: false, error: 'Không tìm thấy bài thi' };
     }
 
-    const classIds = exam.data().classIds || [];
+    const examData = examSnap.data();
+    const classIds = examData.classIds || [];
+    const hasClassCopies =
+      classIds.length > 0 ||
+      (await examHasClassCopies(examId, examData.teacherId));
 
-    if (classIds.length > 0) {
+    if (hasClassCopies) {
       await updateDoc(examRef, {
         hiddenFromSubject: true,
         updatedAt: serverTimestamp()
@@ -451,14 +475,8 @@ export const deleteExam = async (examId) => {
       collection(db, 'examAttempts'),
       where('examId', '==', examId)
     );
-    const attempts = await getDocs(attemptsQuery);
-
-    if (attempts.size > 0) {
-      return {
-        success: false,
-        error: 'Không thể xóa bài thi đã có sinh viên nộp bài'
-      };
-    }
+    const attemptsSnap = await getDocs(attemptsQuery);
+    await Promise.all(attemptsSnap.docs.map((d) => deleteDoc(d.ref)));
 
     await deleteDoc(examRef);
 
