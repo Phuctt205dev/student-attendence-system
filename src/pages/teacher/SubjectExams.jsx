@@ -137,7 +137,8 @@ const SubjectExams = () => {
   const handleExamCreated = () => {
     setSuccess('Bài thi được tạo thành công!');
     setShowExamModal(false);
-    setSelectedTopicIds([]);
+    setSelectedQuestionIds(new Set());
+    setExpandedTopicIds([]);
     loadSubjectExams();
     setTimeout(() => setSuccess(''), 3000);
   };
@@ -374,7 +375,7 @@ const SubjectExams = () => {
                 variant="primary"
                 icon={<Plus className="w-4 h-4" />}
                 onClick={handleOpenExamModal}
-                disabled={selectedTopicIds.length === 0}
+                disabled={selectedQuestionIds.size === 0}
               >
                 Tạo bài thi
               </Button>
