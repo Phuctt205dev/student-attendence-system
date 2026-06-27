@@ -6,7 +6,8 @@ import {
   getExamWithQuestions,
   getExamsBySubject,
   assignExamToClass,
-  deleteExam
+  deleteExam,
+  saveExamPrintVersions
 } from '../../services/exam.service';
 import { getClassesByTeacher } from '../../services/class.service';
 import TeacherLayout from '../../layouts/TeacherLayout';
@@ -25,9 +26,13 @@ import {
 } from '../../utils/questionTypes';
 import {
   buildExamQuestionsTextForDocx,
+  buildExamPrintVersionRecord,
   getExamDocxTemplateFileName,
   shuffleExamQuestionsForVersion
 } from '../../utils/buildExamDocxContent';
+
+const DEFAULT_PRINT_VERSION_NAMES = ['1', '2', '3', '4'];
+const MAX_PRINT_VERSION_COUNT = 4;
 
 const SubjectExams = () => {
   const { userProfile } = useAuth();
@@ -49,6 +54,8 @@ const SubjectExams = () => {
   const [pdfExam, setPdfExam] = useState(null);
   const [pdfFaculty, setPdfFaculty] = useState('');
   const [pdfCodeBase, setPdfCodeBase] = useState('');
+  const [pdfVersionCount, setPdfVersionCount] = useState(1);
+  const [pdfVersionNames, setPdfVersionNames] = useState(DEFAULT_PRINT_VERSION_NAMES);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [assignExam, setAssignExam] = useState(null);
   const [assigningClassId, setAssigningClassId] = useState('');
@@ -326,10 +333,51 @@ const SubjectExams = () => {
     return Math.abs(hash) || 1;
   };
 
+  const resetDocxExportForm = () => {
+    setPdfExam(null);
+    setPdfFaculty('');
+    setPdfCodeBase('');
+    setPdfVersionCount(1);
+    setPdfVersionNames(DEFAULT_PRINT_VERSION_NAMES);
+  };
+
+  const handleVersionCountChange = (event) => {
+    const nextCount = Math.min(
+      MAX_PRINT_VERSION_COUNT,
+      Math.max(1, Number(event.target.value) || 1)
+    );
+    setPdfVersionCount(nextCount);
+  };
+
+  const handleVersionNameChange = (index, value) => {
+    setPdfVersionNames((prev) =>
+      prev.map((name, i) => (i === index ? value : name))
+    );
+  };
+
+  const getSelectedVersionNames = () => {
+    const names = pdfVersionNames
+      .slice(0, pdfVersionCount)
+      .map((name, index) => String(name || '').trim() || String(index + 1));
+    const uniqueNames = new Set(names.map((name) => name.toLowerCase()));
+
+    if (uniqueNames.size !== names.length) {
+      return { success: false, error: 'Tên mã đề không được trùng nhau' };
+    }
+
+    return { success: true, names };
+  };
+
+  const toSafeFileNamePart = (value, fallback) => {
+    const text = String(value || '').trim() || fallback;
+    return text.replace(/[<>:"/\\|?*]/g, '-');
+  };
+
   const handleExportDoc = async () => {
     if (!pdfExam) return;
     setPdfLoading(true);
     setError('');
+    let exportSucceeded = false;
 
     try {
       const result = await getExamWithQuestions(pdfExam.id);
@@ -347,10 +395,13 @@ const SubjectExams = () => {
       }
 
       const subjectName = subject?.name || '';
-      const baseCode = pdfCodeBase || pdfExam.id.slice(0, 6).toUpperCase();
-
-      const seedA = hashToSeed(`${pdfExam.id}-A`);
-      const versionA = shuffleExamQuestionsForVersion(questions, seedA, 'essay');
+      const baseCode = String(pdfCodeBase || '').trim();
+      const versionNamesResult = getSelectedVersionNames();
+      if (!versionNamesResult.success) {
+        setError(versionNamesResult.error);
+        setPdfLoading(false);
+        return;
+      }
 
       const templateFile = getExamDocxTemplateFileName(questions);
       const templateUrl = `${import.meta.env.BASE_URL}templates/${templateFile}`;
@@ -385,19 +436,88 @@ const SubjectExams = () => {
         });
       };
 
-      const blobA = buildDocxBlob(versionA, `${baseCode}-A`);
-      const urlA = URL.createObjectURL(blobA);
-      const linkA = document.createElement('a');
-      linkA.href = urlA;
-      linkA.download = `de-thi-${baseCode}.docx`;
-      document.body.appendChild(linkA);
-      linkA.click();
-      document.body.removeChild(linkA);
-      URL.revokeObjectURL(urlA);
+      const printVersions = versionNamesResult.names.map((versionName, index) => {
+        const seed = hashToSeed(`${pdfExam.id}-${versionName}-${index + 1}`);
+        const versionQuestions = shuffleExamQuestionsForVersion(
+          questions,
+          seed,
+          `essay-${versionName}`
+        );
+        const codeLabel = baseCode ? `${baseCode}-${versionName}` : versionName;
+
+        return {
+          versionName,
+          codeLabel,
+          questions: versionQuestions,
+          blob: buildDocxBlob(versionQuestions, codeLabel),
+          record: buildExamPrintVersionRecord({
+            examId: pdfExam.id,
+            versionName,
+            codeLabel,
+            questions: versionQuestions
+          })
+        };
+      });
+
+      const saveResult = await saveExamPrintVersions(
+        pdfExam.id,
+        printVersions.map((version) => version.record)
+      );
+
+      if (!saveResult.success) {
+        setError(saveResult.error || 'Không thể lưu đáp án mã đề');
+        setPdfLoading(false);
+        return;
+      }
+
+      const downloadBaseName = toSafeFileNamePart(
+        baseCode || pdfExam.id.slice(0, 6).toUpperCase(),
+        'de-thi'
+      );
+
+      if (printVersions.length === 1) {
+        const url = URL.createObjectURL(printVersions[0].blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `de-thi-${downloadBaseName}-ma-${toSafeFileNamePart(
+          printVersions[0].versionName,
+          '1'
+        )}.docx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        const outputZip = new PizZip();
+        for (const version of printVersions) {
+          const buffer = await version.blob.arrayBuffer();
+          outputZip.file(
+            `de-thi-${downloadBaseName}-ma-${toSafeFileNamePart(
+              version.versionName,
+              String(version.record.order || 1)
+            )}.docx`,
+            buffer
+          );
+        }
+        const zipBlob = outputZip.generate({ type: 'blob' });
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const zipLink = document.createElement('a');
+        zipLink.href = zipUrl;
+        zipLink.download = `de-thi-${downloadBaseName}-${printVersions.length}-ma-de.zip`;
+        document.body.appendChild(zipLink);
+        zipLink.click();
+        document.body.removeChild(zipLink);
+        URL.revokeObjectURL(zipUrl);
+      }
 
       const templateNote =
         templateFile === 'dethimauTL.docx' ? ' (mẫu tự luận)' : '';
-      setSuccess(`Xuất file Word thành công${templateNote}!`);
+      const exportNote =
+        printVersions.length > 1
+          ? ` Đã tạo ZIP gồm ${printVersions.length} file Word và lưu đáp án mã đề.`
+          : ' Đã lưu đáp án mã đề.';
+      setSuccess(`Xuất file Word thành công${templateNote}!${exportNote}`);
+      exportSucceeded = true;
     } catch (err) {
       console.error('Lỗi xuất file:', err);
       if (err?.stack) {
@@ -406,7 +526,9 @@ const SubjectExams = () => {
       setError('Lỗi xuất file: ' + (err?.message || String(err)));
     } finally {
       setPdfLoading(false);
-      setPdfExam(null);
+      if (exportSucceeded) {
+        resetDocxExportForm();
+      }
     }
   };
 
@@ -689,6 +811,8 @@ const SubjectExams = () => {
                               setPdfExam(exam);
                               setPdfCodeBase('');
                               setPdfFaculty('');
+                              setPdfVersionCount(1);
+                              setPdfVersionNames(DEFAULT_PRINT_VERSION_NAMES);
                             }}
                           >
                             Xuất Word
@@ -800,13 +924,9 @@ const SubjectExams = () => {
 
         <Modal
           isOpen={!!pdfExam}
-          onClose={() => {
-            setPdfExam(null);
-            setPdfFaculty('');
-            setPdfCodeBase('');
-          }}
+          onClose={resetDocxExportForm}
           title="Xuất file Word bài thi"
-          size="sm"
+          size="md"
         >
           <div className="space-y-4">
             <div>
@@ -833,17 +953,54 @@ const SubjectExams = () => {
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <p className="text-xs text-gray-500 mt-1">
-                File gồm phần trắc nghiệm / tự luận (nếu có) và điểm từng câu. Bài chỉ tự luận dùng mẫu TL.
+                Nếu nhập mã cơ bản, hệ thống sẽ ghép với tên mã đề, ví dụ 123456-1.
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Số lượng mã đề
+              </label>
+              <select
+                value={pdfVersionCount}
+                onChange={handleVersionCountChange}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {DEFAULT_PRINT_VERSION_NAMES.map((name, index) => (
+                  <option key={name} value={index + 1}>
+                    {index + 1} mã đề
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tên mã đề
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {pdfVersionNames.slice(0, pdfVersionCount).map((name, index) => (
+                  <div key={index}>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Mã đề {index + 1}
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(event) =>
+                        handleVersionNameChange(index, event.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Hệ thống chỉ xáo trộn khi xuất Word và lưu đáp án mã đề để phục vụ chấm OMR; bài thi trên web không thay đổi.
               </p>
             </div>
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => {
-                  setPdfExam(null);
-                  setPdfFaculty('');
-                  setPdfCodeBase('');
-                }}
+                onClick={resetDocxExportForm}
               >
                 Hủy
               </Button>

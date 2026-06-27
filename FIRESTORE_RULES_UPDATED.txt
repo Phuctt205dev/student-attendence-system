@@ -280,6 +280,15 @@ service cloud.firestore {
         resource.data.teacherId == request.auth.uid ||
         isAdmin()
       ) && resource.data.status == 'draft';
+
+      // Dap an cac ma de xuat Word phuc vu cham OMR.
+      // Khong luu trong exam document chinh vi student co the doc metadata bai thi.
+      match /printVersions/{versionId} {
+        allow read, create, update, delete: if signedIn() && (
+          examDoc(examId).data.teacherId == request.auth.uid ||
+          isAdmin()
+        );
+      }
     }
 
     // =========================

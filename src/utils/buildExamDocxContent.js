@@ -58,6 +58,55 @@ export const buildExamQuestionsTextForDocx = (questions) => {
   return blocks.join('\n\n');
 };
 
+export const buildExamPrintVersionRecord = ({
+  examId,
+  versionName,
+  codeLabel,
+  questions
+}) => {
+  const questionList = Array.isArray(questions) ? questions : [];
+  const answerKey = {};
+  const { mcqQuestions, essayQuestions } = partitionQuestionsByType(questionList);
+
+  const mcqMap = mcqQuestions.map((question, index) => {
+    const questionNumber = index + 1;
+    const correctAnswer = question.correctAnswer || null;
+
+    if (correctAnswer) {
+      answerKey[String(questionNumber)] = correctAnswer;
+    }
+
+    return {
+      questionNumber,
+      section: 'mcq',
+      questionId: question.id,
+      type: 'mcq',
+      correctAnswer,
+      points: getQuestionMaxPoints(question)
+    };
+  });
+
+  const essayMap = essayQuestions.map((question, index) => ({
+    questionNumber: index + 1,
+    section: 'essay',
+    questionId: question.id,
+    type: 'essay',
+    correctAnswer: null,
+    points: getQuestionMaxPoints(question)
+  }));
+
+  return {
+    examId,
+    versionName,
+    codeLabel,
+    questionCount: questionList.length,
+    mcqCount: mcqQuestions.length,
+    essayCount: essayQuestions.length,
+    answerKey,
+    questionMap: [...mcqMap, ...essayMap]
+  };
+};
+
 /** Bài thi chỉ có câu tự luận → dùng mẫu dethimauTL.docx */
 export const isAllEssayExam = (questions) =>
   Array.isArray(questions) &&

@@ -260,6 +260,20 @@ service cloud.firestore {
 
       allow update, delete: if signedIn() &&
         resource.data.teacherId == request.auth.uid;
+
+      // Đáp án các mã đề xuất Word phục vụ chấm OMR.
+      // Không lưu trong exam document chính vì học sinh có quyền đọc metadata bài thi.
+      match /printVersions/{versionId} {
+        allow read: if signedIn() && (
+          get(/databases/$(database)/documents/exams/$(examId)).data.teacherId == request.auth.uid ||
+          isAdmin()
+        );
+
+        allow create, update, delete: if signedIn() && (
+          get(/databases/$(database)/documents/exams/$(examId)).data.teacherId == request.auth.uid ||
+          isAdmin()
+        );
+      }
     }
 
     // =========================

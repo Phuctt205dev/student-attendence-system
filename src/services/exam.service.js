@@ -7,6 +7,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   query,
   where,
   orderBy,
@@ -502,6 +503,74 @@ export const getExamById = async (examId) => {
     }
   } catch (error) {
     console.error('Error getting exam:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+const toSafeFirestoreId = (value, fallback) => {
+  const text = String(value || '').trim() || fallback;
+  return text.replace(/\//g, '_');
+};
+
+export const saveExamPrintVersions = async (examId, versions) => {
+  try {
+    if (!examId) {
+      return { success: false, error: 'Missing exam id' };
+    }
+
+    const normalizedVersions = Array.isArray(versions) ? versions.slice(0, 4) : [];
+    if (normalizedVersions.length === 0) {
+      return { success: false, error: 'Missing print versions' };
+    }
+
+    const batch = writeBatch(db);
+    const examRef = doc(db, 'exams', examId);
+
+    normalizedVersions.forEach((version, index) => {
+      const versionName = String(version.versionName || index + 1).trim() || String(index + 1);
+      const versionRef = doc(
+        db,
+        'exams',
+        examId,
+        'printVersions',
+        toSafeFirestoreId(version.docId || versionName, String(index + 1))
+      );
+
+      batch.set(
+        versionRef,
+        {
+          examId,
+          versionName,
+          codeLabel: version.codeLabel || versionName,
+          order: index + 1,
+          questionCount: version.questionCount || 0,
+          mcqCount: version.mcqCount || 0,
+          essayCount: version.essayCount || 0,
+          answerKey: version.answerKey || {},
+          questionMap: version.questionMap || [],
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+    });
+
+    batch.update(examRef, {
+      printVersionSummary: {
+        versionCount: normalizedVersions.length,
+        versionNames: normalizedVersions.map((version, index) =>
+          String(version.versionName || index + 1).trim() || String(index + 1)
+        ),
+        updatedAt: new Date().toISOString()
+      },
+      updatedAt: serverTimestamp()
+    });
+
+    await batch.commit();
+
+    return { success: true, data: { examId, versionCount: normalizedVersions.length } };
+  } catch (error) {
+    console.error('Error saving exam print versions:', error);
     return { success: false, error: error.message };
   }
 };
