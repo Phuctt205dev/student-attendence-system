@@ -160,6 +160,12 @@ service cloud.firestore {
           isAdmin()
         );
         allow create, update, delete: if isClassOwner(classId) || isAdmin();
+
+        // Đáp án mã đề xuất Word theo từng lớp, phục vụ chấm OMR.
+        // Student có thể đọc classExam metadata nhưng không được đọc đáp án mã đề.
+        match /printVersions/{versionId} {
+          allow read, create, update, delete: if isClassOwner(classId) || isAdmin();
+        }
       }
     }
 

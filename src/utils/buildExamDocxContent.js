@@ -60,6 +60,9 @@ export const buildExamQuestionsTextForDocx = (questions) => {
 
 export const buildExamPrintVersionRecord = ({
   examId,
+  sourceExamId,
+  classId,
+  classExamInstanceId,
   versionName,
   codeLabel,
   questions
@@ -97,6 +100,9 @@ export const buildExamPrintVersionRecord = ({
 
   return {
     examId,
+    sourceExamId: sourceExamId || examId,
+    classId: classId || null,
+    classExamInstanceId: classExamInstanceId || null,
     versionName,
     codeLabel,
     questionCount: questionList.length,

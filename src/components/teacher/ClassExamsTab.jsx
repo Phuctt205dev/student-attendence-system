@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import {
   getExamsByClassForTeacher,
   getExamsBySubject,
+  getExamWithQuestions,
   setClassExamVisibility,
   setClassExamSchedule,
   assignExamToClass,
-  removeExamFromClass
+  removeExamFromClass,
+  saveClassExamPrintVersions
 } from '../../services/exam.service';
-import { getTeacherSubjects } from '../../services/subject.service';
+import { getSubjectById, getTeacherSubjects } from '../../services/subject.service';
 import Button from '../common/Button';
 import Modal from '../common/Modal';
 import {
@@ -19,9 +21,20 @@ import {
   Calendar,
   Trash2,
   AlertCircle,
-  Eye
+  FileText
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
+import {
+  buildExamQuestionsTextForDocx,
+  buildExamPrintVersionRecord,
+  getExamDocxTemplateFileName,
+  shuffleExamQuestionsForVersion
+} from '../../utils/buildExamDocxContent';
+
+const DEFAULT_PRINT_VERSION_NAMES = ['1', '2', '3', '4'];
+const MAX_PRINT_VERSION_COUNT = 4;
 
 const toLocalInputValue = (dateValue) => {
   if (!dateValue) return '';
@@ -45,6 +58,12 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
   const [scheduleStart, setScheduleStart] = useState('');
   const [scheduleEnd, setScheduleEnd] = useState('');
   const [scheduleError, setScheduleError] = useState('');
+  const [docxExam, setDocxExam] = useState(null);
+  const [docxFaculty, setDocxFaculty] = useState('');
+  const [docxCodeBase, setDocxCodeBase] = useState('');
+  const [docxVersionCount, setDocxVersionCount] = useState(1);
+  const [docxVersionNames, setDocxVersionNames] = useState(DEFAULT_PRINT_VERSION_NAMES);
+  const [docxLoading, setDocxLoading] = useState(false);
 
   const loadExams = useCallback(async () => {
     if (!classId || !teacherId) return;
@@ -189,6 +208,240 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
     loadExamsForSubject(subjectId);
   };
 
+  const hashToSeed = (value) => {
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+      hash = (hash << 5) - hash + value.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash) || 1;
+  };
+
+  const resetDocxExportForm = () => {
+    setDocxExam(null);
+    setDocxFaculty('');
+    setDocxCodeBase('');
+    setDocxVersionCount(1);
+    setDocxVersionNames(DEFAULT_PRINT_VERSION_NAMES);
+  };
+
+  const openDocxExportModal = (exam) => {
+    setDocxExam(exam);
+    setDocxFaculty('');
+    setDocxCodeBase('');
+    setDocxVersionCount(1);
+    setDocxVersionNames(DEFAULT_PRINT_VERSION_NAMES);
+  };
+
+  const handleVersionCountChange = (event) => {
+    const nextCount = Math.min(
+      MAX_PRINT_VERSION_COUNT,
+      Math.max(1, Number(event.target.value) || 1)
+    );
+    setDocxVersionCount(nextCount);
+  };
+
+  const handleVersionNameChange = (index, value) => {
+    setDocxVersionNames((prev) =>
+      prev.map((name, i) => (i === index ? value : name))
+    );
+  };
+
+  const getSelectedVersionNames = () => {
+    const names = docxVersionNames
+      .slice(0, docxVersionCount)
+      .map((name, index) => String(name || '').trim() || String(index + 1));
+    const uniqueNames = new Set(names.map((name) => name.toLowerCase()));
+
+    if (uniqueNames.size !== names.length) {
+      return { success: false, error: 'Tên mã đề không được trùng nhau' };
+    }
+
+    return { success: true, names };
+  };
+
+  const toSafeFileNamePart = (value, fallback) => {
+    const text = String(value || '').trim() || fallback;
+    return text.replace(/[<>:"/\\|?*]/g, '-');
+  };
+
+  const handleExportDocx = async () => {
+    if (!docxExam) return;
+
+    setDocxLoading(true);
+    let exportSucceeded = false;
+
+    try {
+      const sourceExamId = docxExam.sourceExamId || docxExam.examId || docxExam.id;
+      const result = await getExamWithQuestions(sourceExamId, classId, docxExam.id);
+
+      if (!result.success) {
+        if (onError) onError(result.error || 'Không thể tải bài thi');
+        setDocxLoading(false);
+        return;
+      }
+
+      const questions = Array.isArray(result.data.questions) ? result.data.questions : [];
+      if (questions.length === 0) {
+        if (onError) onError('Bài thi chưa có câu hỏi');
+        setDocxLoading(false);
+        return;
+      }
+
+      const versionNamesResult = getSelectedVersionNames();
+      if (!versionNamesResult.success) {
+        if (onError) onError(versionNamesResult.error);
+        setDocxLoading(false);
+        return;
+      }
+
+      let subjectName = '';
+      if (result.data?.subjectId) {
+        const subjectResult = await getSubjectById(result.data.subjectId);
+        if (subjectResult.success) {
+          subjectName = subjectResult.data?.name || '';
+        }
+      }
+
+      const templateFile = getExamDocxTemplateFileName(questions);
+      const templateUrl = `${import.meta.env.BASE_URL}templates/${templateFile}`;
+      const templateResponse = await fetch(templateUrl);
+
+      if (!templateResponse.ok) {
+        throw new Error(
+          templateFile === 'dethimauTL.docx'
+            ? 'Không tìm thấy mẫu dethimauTL.docx trong public/templates/'
+            : 'Không tìm thấy mẫu dethimau.docx trong public/templates/'
+        );
+      }
+
+      const templateBuffer = await templateResponse.arrayBuffer();
+      const baseCode = String(docxCodeBase || '').trim();
+
+      const buildDocxBlob = (versionQuestions, codeLabel) => {
+        const zip = new PizZip(templateBuffer);
+        const doc = new Docxtemplater(zip, {
+          paragraphLoop: true,
+          linebreaks: true,
+          delimiters: { start: '{{', end: '}}' }
+        });
+
+        doc.setData({
+          QUESTIONS: buildExamQuestionsTextForDocx(versionQuestions),
+          EXAM_CODE: codeLabel,
+          SUBJECT: subjectName,
+          FACULTY: docxFaculty,
+          DURATION: result.data?.durationMinutes ? `${result.data.durationMinutes} phút` : ''
+        });
+        doc.render();
+
+        return doc.getZip().generate({
+          type: 'blob',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        });
+      };
+
+      const printVersions = versionNamesResult.names.map((versionName, index) => {
+        const seed = hashToSeed(
+          `${classId}-${docxExam.id}-${sourceExamId}-${versionName}-${index + 1}`
+        );
+        const versionQuestions = shuffleExamQuestionsForVersion(
+          questions,
+          seed,
+          `essay-${classId}-${docxExam.id}-${versionName}`
+        );
+        const codeLabel = baseCode ? `${baseCode}-${versionName}` : versionName;
+
+        return {
+          versionName,
+          codeLabel,
+          questions: versionQuestions,
+          blob: buildDocxBlob(versionQuestions, codeLabel),
+          record: buildExamPrintVersionRecord({
+            examId: sourceExamId,
+            sourceExamId,
+            classId,
+            classExamInstanceId: docxExam.id,
+            versionName,
+            codeLabel,
+            questions: versionQuestions
+          })
+        };
+      });
+
+      const saveResult = await saveClassExamPrintVersions(
+        classId,
+        docxExam.id,
+        printVersions.map((version) => version.record)
+      );
+
+      if (!saveResult.success) {
+        if (onError) onError(saveResult.error || 'Không thể lưu đáp án mã đề cho lớp');
+        setDocxLoading(false);
+        return;
+      }
+
+      const downloadBaseName = toSafeFileNamePart(
+        baseCode || `${docxExam.title || 'de-thi'}-${docxExam.id.slice(0, 6)}`,
+        'de-thi'
+      );
+
+      if (printVersions.length === 1) {
+        const url = URL.createObjectURL(printVersions[0].blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `de-thi-${downloadBaseName}-ma-${toSafeFileNamePart(
+          printVersions[0].versionName,
+          '1'
+        )}.docx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        const outputZip = new PizZip();
+        for (const version of printVersions) {
+          const buffer = await version.blob.arrayBuffer();
+          outputZip.file(
+            `de-thi-${downloadBaseName}-ma-${toSafeFileNamePart(
+              version.versionName,
+              String(version.record.order || 1)
+            )}.docx`,
+            buffer
+          );
+        }
+        const zipBlob = outputZip.generate({ type: 'blob' });
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const zipLink = document.createElement('a');
+        zipLink.href = zipUrl;
+        zipLink.download = `de-thi-${downloadBaseName}-${printVersions.length}-ma-de.zip`;
+        document.body.appendChild(zipLink);
+        zipLink.click();
+        document.body.removeChild(zipLink);
+        URL.revokeObjectURL(zipUrl);
+      }
+
+      const templateNote =
+        templateFile === 'dethimauTL.docx' ? ' (mẫu tự luận)' : '';
+      const exportNote =
+        printVersions.length > 1
+          ? ` Đã tạo ZIP gồm ${printVersions.length} file Word và lưu đáp án mã đề riêng cho lớp.`
+          : ' Đã lưu đáp án mã đề riêng cho lớp.';
+
+      if (onSuccess) onSuccess(`Xuất file Word thành công${templateNote}!${exportNote}`);
+      exportSucceeded = true;
+      await loadExams();
+    } catch (err) {
+      console.error('Lỗi xuất file Word cho lớp:', err);
+      if (onError) onError('Lỗi xuất file: ' + (err?.message || String(err)));
+    } finally {
+      setDocxLoading(false);
+      if (exportSucceeded) {
+        resetDocxExportForm();
+      }
+    }
+  };
+
   const getVisibilityBadge = (visibility) => (
     <span
       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -239,7 +492,16 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
             return (
               <div
                 key={exam.id}
-                className="p-4 bg-gray-50 rounded-lg border border-gray-200"
+                className="p-4 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer transition-all duration-200 hover:bg-white hover:border-primary-200 hover:shadow-md"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/teacher/classes/${classId}/exams/${exam.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/teacher/classes/${classId}/exams/${exam.id}`);
+                  }
+                }}
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
@@ -281,14 +543,15 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
 
                   <div className="flex flex-wrap gap-2 sm:flex-col sm:flex-nowrap">
                     <Button
-                      variant="outline"
+                      variant="primary"
                       size="sm"
-                      icon={<Eye className="w-4 h-4" />}
-                      onClick={() =>
-                        navigate(`/teacher/classes/${classId}/exams/${exam.id}`)
-                      }
+                      icon={<FileText className="w-4 h-4" />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDocxExportModal(exam);
+                      }}
                     >
-                      Chi tiết
+                      Xuất Word
                     </Button>
                     <Button
                       variant="outline"
@@ -300,7 +563,10 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
                           <Unlock className="w-4 h-4" />
                         )
                       }
-                      onClick={() => handleToggleVisibility(exam)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleVisibility(exam);
+                      }}
                     >
                       {exam.visibility === 'public' ? 'Khóa' : 'Mở'}
                     </Button>
@@ -308,7 +574,10 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
                       variant="outline"
                       size="sm"
                       icon={<Calendar className="w-4 h-4" />}
-                      onClick={() => openScheduleModal(exam)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openScheduleModal(exam);
+                      }}
                     >
                       Đặt thời gian
                     </Button>
@@ -317,7 +586,10 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
                       size="sm"
                       icon={<Trash2 className="w-4 h-4" />}
                       className="border-red-300 text-red-600 hover:bg-red-50"
-                      onClick={() => handleRemoveExam(exam)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveExam(exam);
+                      }}
                     >
                       Gỡ khỏi lớp
                     </Button>
@@ -399,6 +671,101 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
               )}
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!docxExam}
+        onClose={resetDocxExportForm}
+        title="Xuất file Word bài thi của lớp"
+        size="md"
+      >
+        <div className="space-y-4">
+          {docxExam && (
+            <p className="text-sm text-gray-600">
+              Bài thi: <span className="font-medium text-gray-900">{docxExam.title}</span>
+            </p>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Khoa
+            </label>
+            <input
+              type="text"
+              value={docxFaculty}
+              onChange={(event) => setDocxFaculty(event.target.value)}
+              placeholder="Mang may tinh & Truyen thong"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Mã đề (cơ bản)
+            </label>
+            <input
+              type="text"
+              value={docxCodeBase}
+              onChange={(event) => setDocxCodeBase(event.target.value)}
+              placeholder="VD: 123456"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Nếu nhập mã cơ bản, hệ thống sẽ ghép với tên mã đề, ví dụ 123456-1.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Số lượng mã đề
+            </label>
+            <select
+              value={docxVersionCount}
+              onChange={handleVersionCountChange}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {DEFAULT_PRINT_VERSION_NAMES.map((name, index) => (
+                <option key={name} value={index + 1}>
+                  {index + 1} mã đề
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tên mã đề
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {docxVersionNames.slice(0, docxVersionCount).map((name, index) => (
+                <div key={index}>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Mã đề {index + 1}
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(event) =>
+                      handleVersionNameChange(index, event.target.value)
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Cấu hình này chỉ áp dụng cho bài thi trong lớp hiện tại; các lớp khác có thể có bộ mã đề riêng.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={resetDocxExportForm}
+              disabled={docxLoading}
+            >
+              Hủy
+            </Button>
+            <Button variant="primary" onClick={handleExportDocx} disabled={docxLoading}>
+              {docxLoading ? 'Đang tạo...' : 'Tạo file Word'}
+            </Button>
+          </div>
         </div>
       </Modal>
 

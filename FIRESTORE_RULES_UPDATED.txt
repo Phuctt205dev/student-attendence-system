@@ -158,6 +158,20 @@ service cloud.firestore {
         // Chỉ teacher owner của class mới được đọc/ghi student tags
         allow read, create, update, delete: if isClassOwner(classId);
       }
+
+      // =========================
+      // CLASS EXAMS (snapshot per class)
+      // Web/mobile dung: classes/{classId}/classExams/{examId}
+      // =========================
+      match /classExams/{examId} {
+        allow read, create, update, delete: if isClassOwner(classId);
+
+        // Dap an ma de xuat Word theo tung lop, phuc vu cham OMR.
+        // Student khong duoc doc dap an ma de.
+        match /printVersions/{versionId} {
+          allow read, create, update, delete: if isClassOwner(classId) || isAdmin();
+        }
+      }
     }
 
     // =========================

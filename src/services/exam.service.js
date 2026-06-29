@@ -575,6 +575,80 @@ export const saveExamPrintVersions = async (examId, versions) => {
   }
 };
 
+export const saveClassExamPrintVersions = async (
+  classId,
+  classExamInstanceId,
+  versions
+) => {
+  try {
+    if (!classId || !classExamInstanceId) {
+      return { success: false, error: 'Missing class exam id' };
+    }
+
+    const normalizedVersions = Array.isArray(versions) ? versions.slice(0, 4) : [];
+    if (normalizedVersions.length === 0) {
+      return { success: false, error: 'Missing print versions' };
+    }
+
+    const batch = writeBatch(db);
+    const classExamRef = doc(db, 'classes', classId, 'classExams', classExamInstanceId);
+
+    normalizedVersions.forEach((version, index) => {
+      const versionName = String(version.versionName || index + 1).trim() || String(index + 1);
+      const versionRef = doc(
+        db,
+        'classes',
+        classId,
+        'classExams',
+        classExamInstanceId,
+        'printVersions',
+        toSafeFirestoreId(version.docId || versionName, String(index + 1))
+      );
+
+      batch.set(
+        versionRef,
+        {
+          ...version,
+          classId,
+          classExamInstanceId,
+          versionName,
+          codeLabel: version.codeLabel || versionName,
+          order: index + 1,
+          questionCount: version.questionCount || 0,
+          mcqCount: version.mcqCount || 0,
+          essayCount: version.essayCount || 0,
+          answerKey: version.answerKey || {},
+          questionMap: version.questionMap || [],
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+    });
+
+    batch.update(classExamRef, {
+      printVersionSummary: {
+        versionCount: normalizedVersions.length,
+        versionNames: normalizedVersions.map((version, index) =>
+          String(version.versionName || index + 1).trim() || String(index + 1)
+        ),
+        updatedAt: new Date().toISOString()
+      },
+      updatedAt: serverTimestamp()
+    });
+
+    await batch.commit();
+
+    return {
+      success: true,
+      data: { classId, classExamInstanceId, versionCount: normalizedVersions.length }
+    };
+  } catch (error) {
+    console.error('Error saving class exam print versions:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Get exams by teacher
 export const getTeacherExams = async (teacherId) => {
   try {
