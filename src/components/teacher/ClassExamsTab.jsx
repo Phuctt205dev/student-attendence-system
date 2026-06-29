@@ -8,7 +8,8 @@ import {
   setClassExamSchedule,
   assignExamToClass,
   removeExamFromClass,
-  saveClassExamPrintVersions
+  saveClassExamPrintVersions,
+  getClassExamPrintVersions
 } from '../../services/exam.service';
 import { getSubjectById, getTeacherSubjects } from '../../services/subject.service';
 import Button from '../common/Button';
@@ -64,6 +65,10 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
   const [docxVersionCount, setDocxVersionCount] = useState(1);
   const [docxVersionNames, setDocxVersionNames] = useState(DEFAULT_PRINT_VERSION_NAMES);
   const [docxLoading, setDocxLoading] = useState(false);
+  const [docxMode, setDocxMode] = useState('form');
+  const [savedPrintVersions, setSavedPrintVersions] = useState([]);
+  const [selectedPrintVersion, setSelectedPrintVersion] = useState(null);
+  const [savedVersionsLoading, setSavedVersionsLoading] = useState(false);
 
   const loadExams = useCallback(async () => {
     if (!classId || !teacherId) return;
@@ -223,14 +228,36 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
     setDocxCodeBase('');
     setDocxVersionCount(1);
     setDocxVersionNames(DEFAULT_PRINT_VERSION_NAMES);
+    setDocxMode('form');
+    setSavedPrintVersions([]);
+    setSelectedPrintVersion(null);
+    setSavedVersionsLoading(false);
   };
 
-  const openDocxExportModal = (exam) => {
+  const openDocxExportModal = async (exam) => {
     setDocxExam(exam);
     setDocxFaculty('');
     setDocxCodeBase('');
     setDocxVersionCount(1);
     setDocxVersionNames(DEFAULT_PRINT_VERSION_NAMES);
+    setDocxMode('form');
+    setSavedPrintVersions([]);
+    setSelectedPrintVersion(null);
+    setSavedVersionsLoading(true);
+
+    const result = await getClassExamPrintVersions(classId, exam.id);
+    if (result.success) {
+      const versions = result.data || [];
+      setSavedPrintVersions(versions);
+      if (versions.length > 0) {
+        setSelectedPrintVersion(versions[0]);
+        setDocxMode('saved');
+      }
+    } else if (onError) {
+      onError(result.error || 'Không thể tải danh sách mã đề đã xuất');
+    }
+
+    setSavedVersionsLoading(false);
   };
 
   const handleVersionCountChange = (event) => {
@@ -440,6 +467,35 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
         resetDocxExportForm();
       }
     }
+  };
+
+  const getSortedAnswerEntries = (version) => {
+    const answerKey = version?.answerKey || {};
+    return Object.entries(answerKey).sort(
+      ([a], [b]) => (Number(a) || 0) - (Number(b) || 0)
+    );
+  };
+
+  const getQuestionPoint = (version, questionNumber) => {
+    const item = (version?.questionMap || []).find(
+      (question) =>
+        question.section === 'mcq' &&
+        Number(question.questionNumber) === Number(questionNumber)
+    );
+    return item?.points ?? 1;
+  };
+
+  const openReExportForm = () => {
+    const names = savedPrintVersions.length > 0
+      ? savedPrintVersions
+          .slice(0, MAX_PRINT_VERSION_COUNT)
+          .map((version, index) => version.versionName || String(index + 1))
+      : DEFAULT_PRINT_VERSION_NAMES;
+
+    setDocxVersionCount(Math.min(Math.max(names.length, 1), MAX_PRINT_VERSION_COUNT));
+    setDocxVersionNames(DEFAULT_PRINT_VERSION_NAMES.map((fallback, index) => names[index] || fallback));
+    setSelectedPrintVersion(null);
+    setDocxMode('form');
   };
 
   const getVisibilityBadge = (visibility) => (
@@ -678,7 +734,7 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
         isOpen={!!docxExam}
         onClose={resetDocxExportForm}
         title="Xuất file Word bài thi của lớp"
-        size="md"
+        size="lg"
       >
         <div className="space-y-4">
           {docxExam && (
@@ -686,86 +742,216 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
               Bài thi: <span className="font-medium text-gray-900">{docxExam.title}</span>
             </p>
           )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Khoa
-            </label>
-            <input
-              type="text"
-              value={docxFaculty}
-              onChange={(event) => setDocxFaculty(event.target.value)}
-              placeholder="Mang may tinh & Truyen thong"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Mã đề (cơ bản)
-            </label>
-            <input
-              type="text"
-              value={docxCodeBase}
-              onChange={(event) => setDocxCodeBase(event.target.value)}
-              placeholder="VD: 123456"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Nếu nhập mã cơ bản, hệ thống sẽ ghép với tên mã đề, ví dụ 123456-1.
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Số lượng mã đề
-            </label>
-            <select
-              value={docxVersionCount}
-              onChange={handleVersionCountChange}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              {DEFAULT_PRINT_VERSION_NAMES.map((name, index) => (
-                <option key={name} value={index + 1}>
-                  {index + 1} mã đề
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tên mã đề
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {docxVersionNames.slice(0, docxVersionCount).map((name, index) => (
-                <div key={index}>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
-                    Mã đề {index + 1}
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(event) =>
-                      handleVersionNameChange(index, event.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-              ))}
+
+          {savedVersionsLoading ? (
+            <div className="text-center py-10">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto" />
+              <p className="text-sm text-gray-500 mt-3">Đang tải mã đề đã lưu...</p>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Cấu hình này chỉ áp dụng cho bài thi trong lớp hiện tại; các lớp khác có thể có bộ mã đề riêng.
-            </p>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={resetDocxExportForm}
-              disabled={docxLoading}
-            >
-              Hủy
-            </Button>
-            <Button variant="primary" onClick={handleExportDocx} disabled={docxLoading}>
-              {docxLoading ? 'Đang tạo...' : 'Tạo file Word'}
-            </Button>
-          </div>
+          ) : docxMode === 'saved' ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-gray-900">
+                    Đã xuất {savedPrintVersions.length} mã đề
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Bấm vào từng mã đề để xem đáp án đã lưu trên Firebase.
+                  </p>
+                </div>
+                <Button variant="primary" onClick={openReExportForm}>
+                  Xuất lại
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4">
+                <div className="space-y-2">
+                  {savedPrintVersions.map((version) => (
+                    <button
+                      type="button"
+                      key={version.id}
+                      onClick={() => setSelectedPrintVersion(version)}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                        selectedPrintVersion?.id === version.id
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-gray-200 hover:border-primary-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <p className="font-medium text-gray-900">
+                        Mã đề {version.versionName || version.id}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {version.mcqCount || 0} TN · {version.essayCount || 0} TL
+                      </p>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="border border-gray-200 rounded-lg p-4 min-h-[220px]">
+                  {selectedPrintVersion ? (
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">
+                          Đáp án mã đề {selectedPrintVersion.versionName || selectedPrintVersion.id}
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Mã hiển thị: {selectedPrintVersion.codeLabel || selectedPrintVersion.versionName || '—'}
+                        </p>
+                      </div>
+
+                      {getSortedAnswerEntries(selectedPrintVersion).length === 0 ? (
+                        <p className="text-sm text-gray-500">
+                          Mã đề này không có đáp án trắc nghiệm.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                          {getSortedAnswerEntries(selectedPrintVersion).map(([questionNumber, answer]) => (
+                            <div
+                              key={questionNumber}
+                              className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                            >
+                              <span className="text-gray-600">Câu {questionNumber}</span>
+                              <span className="font-semibold text-primary-700">
+                                {answer}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-600">Câu</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-600">Đáp án</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-600">Điểm</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-600">ID câu hỏi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {getSortedAnswerEntries(selectedPrintVersion).map(([questionNumber, answer]) => {
+                              const question = (selectedPrintVersion.questionMap || []).find(
+                                (item) =>
+                                  item.section === 'mcq' &&
+                                  Number(item.questionNumber) === Number(questionNumber)
+                              );
+                              return (
+                                <tr key={questionNumber}>
+                                  <td className="px-3 py-2 text-gray-700">{questionNumber}</td>
+                                  <td className="px-3 py-2 font-semibold text-gray-900">{answer}</td>
+                                  <td className="px-3 py-2 text-gray-700">
+                                    {getQuestionPoint(selectedPrintVersion, questionNumber)}
+                                  </td>
+                                  <td className="px-3 py-2 text-gray-500">{question?.questionId || '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-full min-h-[180px] flex items-center justify-center text-sm text-gray-500">
+                      Chọn một mã đề để xem đáp án.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {savedPrintVersions.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  Xuất lại sẽ ghi đè bộ mã đề và đáp án đã lưu trước đó cho bài thi trong lớp này.
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Khoa
+                </label>
+                <input
+                  type="text"
+                  value={docxFaculty}
+                  onChange={(event) => setDocxFaculty(event.target.value)}
+                  placeholder="Mang may tinh & Truyen thong"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Mã đề (cơ bản)
+                </label>
+                <input
+                  type="text"
+                  value={docxCodeBase}
+                  onChange={(event) => setDocxCodeBase(event.target.value)}
+                  placeholder="VD: 123456"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Nếu nhập mã cơ bản, hệ thống sẽ ghép với tên mã đề, ví dụ 123456-1.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Số lượng mã đề
+                </label>
+                <select
+                  value={docxVersionCount}
+                  onChange={handleVersionCountChange}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {DEFAULT_PRINT_VERSION_NAMES.map((name, index) => (
+                    <option key={name} value={index + 1}>
+                      {index + 1} mã đề
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tên mã đề
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {docxVersionNames.slice(0, docxVersionCount).map((name, index) => (
+                    <div key={index}>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Mã đề {index + 1}
+                      </label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(event) =>
+                          handleVersionNameChange(index, event.target.value)
+                        }
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Cấu hình này chỉ áp dụng cho bài thi trong lớp hiện tại; các lớp khác có thể có bộ mã đề riêng.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={
+                    savedPrintVersions.length > 0
+                      ? () => setDocxMode('saved')
+                      : resetDocxExportForm
+                  }
+                  disabled={docxLoading}
+                >
+                  {savedPrintVersions.length > 0 ? 'Quay lại' : 'Hủy'}
+                </Button>
+                <Button variant="primary" onClick={handleExportDocx} disabled={docxLoading}>
+                  {docxLoading ? 'Đang tạo...' : 'Tạo file Word'}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 

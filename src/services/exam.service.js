@@ -592,16 +592,24 @@ export const saveClassExamPrintVersions = async (
 
     const batch = writeBatch(db);
     const classExamRef = doc(db, 'classes', classId, 'classExams', classExamInstanceId);
+    const versionsCollection = collection(
+      db,
+      'classes',
+      classId,
+      'classExams',
+      classExamInstanceId,
+      'printVersions'
+    );
+    const existingVersions = await getDocs(versionsCollection);
+
+    existingVersions.docs.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
 
     normalizedVersions.forEach((version, index) => {
       const versionName = String(version.versionName || index + 1).trim() || String(index + 1);
       const versionRef = doc(
-        db,
-        'classes',
-        classId,
-        'classExams',
-        classExamInstanceId,
-        'printVersions',
+        versionsCollection,
         toSafeFirestoreId(version.docId || versionName, String(index + 1))
       );
 
@@ -645,6 +653,42 @@ export const saveClassExamPrintVersions = async (
     };
   } catch (error) {
     console.error('Error saving class exam print versions:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getClassExamPrintVersions = async (classId, classExamInstanceId) => {
+  try {
+    if (!classId || !classExamInstanceId) {
+      return { success: false, error: 'Missing class exam id' };
+    }
+
+    const snapshot = await getDocs(
+      collection(
+        db,
+        'classes',
+        classId,
+        'classExams',
+        classExamInstanceId,
+        'printVersions'
+      )
+    );
+
+    const versions = snapshot.docs
+      .map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }))
+      .sort((a, b) => {
+        const orderA = Number(a.order) || 0;
+        const orderB = Number(b.order) || 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.versionName || a.id).localeCompare(String(b.versionName || b.id));
+      });
+
+    return { success: true, data: versions };
+  } catch (error) {
+    console.error('Error getting class exam print versions:', error);
     return { success: false, error: error.message };
   }
 };
