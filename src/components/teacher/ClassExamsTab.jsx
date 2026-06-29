@@ -22,7 +22,8 @@ import {
   Calendar,
   Trash2,
   AlertCircle,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import PizZip from 'pizzip';
@@ -292,6 +293,129 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
     return text.replace(/[<>:"/\\|?*]/g, '-');
   };
 
+  const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadPrintVersionFiles = async (printVersions, downloadBaseName) => {
+    if (printVersions.length === 1) {
+      downloadBlob(
+        printVersions[0].blob,
+        `de-thi-${downloadBaseName}-ma-${toSafeFileNamePart(
+          printVersions[0].versionName,
+          '1'
+        )}.docx`
+      );
+      return;
+    }
+
+    const outputZip = new PizZip();
+    for (const version of printVersions) {
+      const buffer = await version.blob.arrayBuffer();
+      outputZip.file(
+        `de-thi-${downloadBaseName}-ma-${toSafeFileNamePart(
+          version.versionName,
+          String(version.order || 1)
+        )}.docx`,
+        buffer
+      );
+    }
+    const zipBlob = outputZip.generate({ type: 'blob' });
+    downloadBlob(zipBlob, `de-thi-${downloadBaseName}-${printVersions.length}-ma-de.zip`);
+  };
+
+  const buildDocxBlobFromTemplate = (
+    templateBuffer,
+    versionQuestions,
+    codeLabel,
+    subjectName,
+    durationText,
+    facultyName = docxFaculty
+  ) => {
+    const zip = new PizZip(templateBuffer);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      delimiters: { start: '{{', end: '}}' }
+    });
+
+    doc.setData({
+      QUESTIONS: buildExamQuestionsTextForDocx(versionQuestions),
+      EXAM_CODE: codeLabel,
+      SUBJECT: subjectName,
+      FACULTY: facultyName,
+      DURATION: durationText
+    });
+    doc.render();
+
+    return doc.getZip().generate({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    });
+  };
+
+  const getDocxBuildData = async () => {
+    const sourceExamId = docxExam.sourceExamId || docxExam.examId || docxExam.id;
+    const result = await getExamWithQuestions(sourceExamId, classId, docxExam.id);
+
+    if (!result.success) {
+      throw new Error(result.error || 'Không thể tải bài thi');
+    }
+
+    const questions = Array.isArray(result.data.questions) ? result.data.questions : [];
+    if (questions.length === 0) {
+      throw new Error('Bài thi chưa có câu hỏi');
+    }
+
+    let subjectName = '';
+    if (result.data?.subjectId) {
+      const subjectResult = await getSubjectById(result.data.subjectId);
+      if (subjectResult.success) {
+        subjectName = subjectResult.data?.name || '';
+      }
+    }
+
+    const templateFile = getExamDocxTemplateFileName(questions);
+    const templateUrl = `${import.meta.env.BASE_URL}templates/${templateFile}`;
+    const templateResponse = await fetch(templateUrl);
+
+    if (!templateResponse.ok) {
+      throw new Error(
+        templateFile === 'dethimauTL.docx'
+          ? 'Không tìm thấy mẫu dethimauTL.docx trong public/templates/'
+          : 'Không tìm thấy mẫu dethimau.docx trong public/templates/'
+      );
+    }
+
+    return {
+      sourceExamId,
+      examData: result.data,
+      questions,
+      subjectName,
+      templateFile,
+      templateBuffer: await templateResponse.arrayBuffer(),
+      durationText: result.data?.durationMinutes ? `${result.data.durationMinutes} phút` : ''
+    };
+  };
+
+  const getQuestionsForSavedVersion = (version, questions) => {
+    const questionById = new Map(
+      questions.map((question) => [String(question.id), question])
+    );
+    const mappedQuestions = (version?.questionMap || [])
+      .map((item) => questionById.get(String(item.questionId)))
+      .filter(Boolean);
+
+    return mappedQuestions.length > 0 ? mappedQuestions : questions;
+  };
+
   const handleExportDocx = async () => {
     if (!docxExam) return;
 
@@ -384,15 +508,18 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
           codeLabel,
           questions: versionQuestions,
           blob: buildDocxBlob(versionQuestions, codeLabel),
-          record: buildExamPrintVersionRecord({
-            examId: sourceExamId,
-            sourceExamId,
-            classId,
-            classExamInstanceId: docxExam.id,
-            versionName,
-            codeLabel,
-            questions: versionQuestions
-          })
+          record: {
+            ...buildExamPrintVersionRecord({
+              examId: sourceExamId,
+              sourceExamId,
+              classId,
+              classExamInstanceId: docxExam.id,
+              versionName,
+              codeLabel,
+              questions: versionQuestions
+            }),
+            faculty: docxFaculty
+          }
         };
       });
 
@@ -466,6 +593,52 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
       if (exportSucceeded) {
         resetDocxExportForm();
       }
+    }
+  };
+
+  const handleDownloadSavedDocx = async () => {
+    if (!docxExam || savedPrintVersions.length === 0) return;
+
+    setDocxLoading(true);
+    try {
+      const buildData = await getDocxBuildData();
+      const downloadBaseName = toSafeFileNamePart(
+        `${docxExam.title || 'de-thi'}-${docxExam.id.slice(0, 6)}`,
+        'de-thi'
+      );
+
+      const printVersions = savedPrintVersions.map((version, index) => {
+        const versionQuestions = getQuestionsForSavedVersion(version, buildData.questions);
+        const codeLabel =
+          version.codeLabel || version.versionName || version.id || String(index + 1);
+
+        return {
+          versionName: version.versionName || version.id || String(index + 1),
+          order: version.order || index + 1,
+          blob: buildDocxBlobFromTemplate(
+            buildData.templateBuffer,
+            versionQuestions,
+            codeLabel,
+            buildData.subjectName,
+            buildData.durationText,
+            version.faculty || ''
+          )
+        };
+      });
+
+      await downloadPrintVersionFiles(printVersions, downloadBaseName);
+      if (onSuccess) {
+        onSuccess(
+          savedPrintVersions.length > 1
+            ? `Đã tải ZIP gồm ${savedPrintVersions.length} file Word.`
+            : 'Đã tải file Word.'
+        );
+      }
+    } catch (err) {
+      console.error('Lỗi tải lại file Word:', err);
+      if (onError) onError('Lỗi tải đề thi: ' + (err?.message || String(err)));
+    } finally {
+      setDocxLoading(false);
     }
   };
 
@@ -759,9 +932,19 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
                     Bấm vào từng mã đề để xem đáp án đã lưu trên Firebase.
                   </p>
                 </div>
-                <Button variant="primary" onClick={openReExportForm}>
-                  Xuất lại
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    icon={<Download className="w-4 h-4" />}
+                    onClick={handleDownloadSavedDocx}
+                    disabled={docxLoading || savedPrintVersions.length === 0}
+                  >
+                    {docxLoading ? 'Đang tải...' : 'Tải đề thi'}
+                  </Button>
+                  <Button variant="primary" onClick={openReExportForm} disabled={docxLoading}>
+                    Xuất lại
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4">
@@ -804,52 +987,23 @@ const ClassExamsTab = ({ classId, teacherId, onError, onSuccess }) => {
                           Mã đề này không có đáp án trắc nghiệm.
                         </p>
                       ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                           {getSortedAnswerEntries(selectedPrintVersion).map(([questionNumber, answer]) => (
                             <div
                               key={questionNumber}
-                              className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
+                              className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 shadow-sm"
                             >
-                              <span className="text-gray-600">Câu {questionNumber}</span>
-                              <span className="font-semibold text-primary-700">
-                                {answer}
-                              </span>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm text-gray-600">Câu {questionNumber}</span>
+                                <span className="text-base font-bold text-primary-700">{answer}</span>
+                              </div>
+                              <p className="mt-1 text-xs text-gray-500">
+                                {getQuestionPoint(selectedPrintVersion, questionNumber)} điểm
+                              </p>
                             </div>
                           ))}
                         </div>
                       )}
-
-                      <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                        <table className="min-w-full text-xs">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-medium text-gray-600">Câu</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-600">Đáp án</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-600">Điểm</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-600">ID câu hỏi</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {getSortedAnswerEntries(selectedPrintVersion).map(([questionNumber, answer]) => {
-                              const question = (selectedPrintVersion.questionMap || []).find(
-                                (item) =>
-                                  item.section === 'mcq' &&
-                                  Number(item.questionNumber) === Number(questionNumber)
-                              );
-                              return (
-                                <tr key={questionNumber}>
-                                  <td className="px-3 py-2 text-gray-700">{questionNumber}</td>
-                                  <td className="px-3 py-2 font-semibold text-gray-900">{answer}</td>
-                                  <td className="px-3 py-2 text-gray-700">
-                                    {getQuestionPoint(selectedPrintVersion, questionNumber)}
-                                  </td>
-                                  <td className="px-3 py-2 text-gray-500">{question?.questionId || '—'}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
                     </div>
                   ) : (
                     <div className="h-full min-h-[180px] flex items-center justify-center text-sm text-gray-500">
