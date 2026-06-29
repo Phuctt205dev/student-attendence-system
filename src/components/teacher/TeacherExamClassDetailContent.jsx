@@ -6,6 +6,7 @@ import { getExamAttemptsForClass } from '../../services/examAttempt.service';
 import TeacherGradeEssayModal from './TeacherGradeEssayModal';
 import {
   formatScale10,
+  getAttemptExamCodeLabel,
   getAttemptScoreBreakdown,
   getPassingScale10
 } from '../../utils/examScoring';
@@ -194,6 +195,7 @@ const TeacherExamClassDetailContent = ({ exam, classId, onNotify }) => {
                   <th className="px-3 py-3 text-left font-medium text-gray-700">Trắc nghiệm</th>
                   <th className="px-3 py-3 text-left font-medium text-gray-700">Tự luận</th>
                   <th className="px-3 py-3 text-left font-medium text-gray-700">Điểm (thang 10)</th>
+                  <th className="px-3 py-3 text-left font-medium text-gray-700">Mã đề</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -201,6 +203,7 @@ const TeacherExamClassDetailContent = ({ exam, classId, onNotify }) => {
                   const attempt = attemptMap[student.uid];
                   const status = getAttemptLabel(attempt);
                   const breakdown = getAttemptScoreBreakdown(attempt, exam);
+                  const examCodeLabel = getAttemptExamCodeLabel(attempt);
                   const canGradeEssay =
                     breakdown.isSubmitted && breakdown.essayPending;
 
@@ -263,6 +266,7 @@ const TeacherExamClassDetailContent = ({ exam, classId, onNotify }) => {
                         )}
                       </td>
                       <td className="px-3 py-2 font-semibold text-gray-900">{scaleCell}</td>
+                      <td className="px-3 py-2 text-gray-700">{examCodeLabel}</td>
                     </tr>
                   );
                 })}

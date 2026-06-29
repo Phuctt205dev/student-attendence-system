@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx-js-style';
 import {
   formatScale10,
+  getAttemptExamCodeLabel,
   getAttemptScoreBreakdown,
   getPassingScale10
 } from './examScoring';
@@ -75,6 +76,7 @@ const buildGradeCells = (attempt, exam) => {
       essay: '—',
       total: '—',
       scale10: '—',
+      examCode: getAttemptExamCodeLabel(attempt),
       note: ''
     };
   }
@@ -108,6 +110,7 @@ const buildGradeCells = (attempt, exam) => {
     essay,
     total,
     scale10,
+    examCode: getAttemptExamCodeLabel(attempt),
     note
   };
 };
@@ -178,6 +181,7 @@ export const exportExamGradesToExcel = ({
     'Điểm tự luận',
     'Tổng điểm',
     'Điểm (thang 10)',
+    'Mã đề',
     'Ghi chú'
   ]);
 
@@ -193,6 +197,7 @@ export const exportExamGradesToExcel = ({
       cells.essay,
       cells.total,
       cells.scale10,
+      cells.examCode,
       cells.note
     ]);
   });
@@ -207,6 +212,7 @@ export const exportExamGradesToExcel = ({
     { wch: 12 },
     { wch: 12 },
     { wch: 14 },
+    { wch: 10 },
     { wch: 22 }
   ];
 

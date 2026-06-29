@@ -49,6 +49,47 @@ service cloud.firestore {
       return signedIn();
     }
 
+    function examDoc(examId) {
+      return get(/databases/$(database)/documents/exams/$(examId));
+    }
+
+    function classExamDoc(classId, classExamInstanceId) {
+      return get(/databases/$(database)/documents/classes/$(classId)/classExams/$(classExamInstanceId));
+    }
+
+    function isExamOwner(examId) {
+      return signedIn() &&
+        examDoc(examId).data.teacherId == request.auth.uid;
+    }
+
+    function hasOmrAttemptKeys(data) {
+      return data.keys().hasAll([
+        'source',
+        'studentId',
+        'examId',
+        'classId',
+        'classExamInstanceId'
+      ]);
+    }
+
+    function isClassExamForSourceExam(classId, classExamInstanceId, examId) {
+      return exists(/databases/$(database)/documents/classes/$(classId)/classExams/$(classExamInstanceId)) &&
+        (
+          classExamDoc(classId, classExamInstanceId).data.sourceExamId == examId ||
+          classExamDoc(classId, classExamInstanceId).data.examId == examId
+        );
+    }
+
+    function canCreateOmrAttempt(data) {
+      return signedIn() &&
+        hasOmrAttemptKeys(data) &&
+        data.source == 'omr' &&
+        isClassOwner(data.classId) &&
+        isExamOwner(data.examId) &&
+        exists(/databases/$(database)/documents/classes/$(data.classId)/students/$(data.studentId)) &&
+        isClassExamForSourceExam(data.classId, data.classExamInstanceId, data.examId);
+    }
+
     // =========================
     // USERS (Web App)
     // App web lưu user profile tại: users/{uid}
@@ -297,8 +338,10 @@ service cloud.firestore {
       allow list: if signedIn();
 
       // Tạo attempt: studentId phải là user hiện tại
-      allow create: if signedIn() &&
-        request.resource.data.studentId == request.auth.uid;
+      allow create: if signedIn() && (
+        request.resource.data.studentId == request.auth.uid ||
+        canCreateOmrAttempt(request.resource.data)
+      );
 
       // Cập nhật attempt: sinh viên khi làm bài, giáo viên chủ bài thi khi chấm tự luận
       allow update: if signedIn() && (

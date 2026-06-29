@@ -57,3 +57,25 @@ export const getPassingScale10 = (exam) => {
   const total = exam?.totalPoints;
   return toScale10(passing, total);
 };
+
+export const getAttemptExamCodeLabel = (attempt) => {
+  if (!attempt) return '—';
+
+  const codeLabel =
+    attempt.printVersionName ||
+    attempt.printVersionCode ||
+    attempt.codeLabel ||
+    attempt.versionName ||
+    attempt.examCode ||
+    attempt.paperCode ||
+    attempt.printVersionId;
+
+  const source = String(attempt.source || attempt.submissionSource || '').toLowerCase();
+  const isPaperAttempt = source === 'omr' || source === 'paper' || Boolean(codeLabel);
+
+  if (isPaperAttempt) {
+    return codeLabel ? String(codeLabel) : 'OMR';
+  }
+
+  return 'Online';
+};
