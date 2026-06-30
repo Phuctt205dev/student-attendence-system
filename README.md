@@ -13,7 +13,7 @@ Website điểm danh sinh viên, ra đề kiểm tra và chấm bài tự độn
 - Trương Trọng Phúc : 50%
 
 ## Video demo các tính năng mới
-- link: https://drive.google.com/drive/folders/1ffq03E98BJljEA4ldslBVEcKR0kcByJ0?usp=drive_link
+- link demo: https://drive.google.com/drive/folders/1ffq03E98BJljEA4ldslBVEcKR0kcByJ0?usp=drive_link
 - Tạo nhiều mã đề thi
 - Chấm bài tự động OMR, cho phép
   + nhận diện mã đề và sinh viên tương ứng
@@ -22,5 +22,8 @@ Website điểm danh sinh viên, ra đề kiểm tra và chấm bài tự độn
   + nhận diện câu hỏi bị bỏ trống 
   + tính điểm cho sinh viên
   + cập nhật điểm lên website
+
+## Link github app mobile liên kết với dự án
+https://github.com/ThanhNam23/roll_call_mobile.git
 ## P/s
 Chúng em đã biết làm web và hiểu hệ thống web hoạt động như thế nào.
