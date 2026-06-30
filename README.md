@@ -19,5 +19,6 @@ Website điểm danh sinh viên, ra đề kiểm tra và chấm bài tự độn
   + nhận diện câu hỏi đúng, sai
   + nhận diện câu tô nhiều đáp án
   + nhận diện câu hỏi bị bỏ trống 
+  + cập nhật điểm lên website
 ## P/s
 Chúng em đã biết làm web và hiểu hệ thống web hoạt động như thế nào.
