@@ -7,8 +7,24 @@ import {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const normalizeModelName = (name) => String(name || '').trim().replace(/^models\//, '');
+
+const getModelChain = () => {
+  const chain = [
+    config.geminiModel,
+    config.geminiFallbackModel,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.5-flash-lite'
+  ]
+    .map(normalizeModelName)
+    .filter(Boolean);
+
+  return [...new Set(chain)];
+};
+
 const getGeminiUrl = (modelName) => {
-  const model = encodeURIComponent(modelName || config.geminiModel);
+  const model = encodeURIComponent(normalizeModelName(modelName));
   const key = encodeURIComponent(config.geminiApiKey);
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 };
@@ -26,10 +42,14 @@ const parseRetryAfterMs = (response, attempt) => {
 
 const buildGeminiRateLimitError = () =>
   new Error(
-    'Gemini free tier đã hết hạn mức tạm thời (429). ' +
-      'Thử: (1) đợi 5–10 phút hoặc sang ngày mới; (2) tạo API key mới trên AI Studio; ' +
-      '(3) Railway: GEMINI_MODEL=gemini-1.5-flash, AI_MAX_CHUNKS=1; ' +
-      '(4) hoặc đổi sang Groq — xem GITHUB_PAGES_AI.md mục Groq.'
+    'Gemini free tier đã hết hạn mức tạm thời (429). Đợi 5–10 phút rồi thử lại, hoặc đặt AI_MAX_CHUNKS=1 trên Railway.'
+  );
+
+const buildGeminiNotFoundError = (tried) =>
+  new Error(
+    `Không tìm thấy model Gemini (404). Đã thử: ${tried.join(', ')}. ` +
+      'Trên Railway đặt GEMINI_MODEL=gemini-2.5-flash (gemini-1.5-flash đã ngừng). ' +
+      'Hoặc gọi: GET https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY để xem model hợp lệ.'
   );
 
 const callGeminiOnce = async (userPrompt, modelName) => {
@@ -78,6 +98,12 @@ const callGeminiWithRetry = async (userPrompt, modelName) => {
       errorText.slice(0, 500)
     );
 
+    if (response.status === 404) {
+      const err = new Error(`Model "${modelName}" không tồn tại (404)`);
+      err.notFound = true;
+      throw err;
+    }
+
     const isRetryable = response.status === 429 || response.status === 503;
 
     if (isRetryable && attempt < maxAttempts - 1) {
@@ -118,23 +144,37 @@ export const generateQuestionsForChunkGemini = async (params) => {
     throw new Error('Thiếu GEMINI_API_KEY (hoặc AI_API_KEY khi AI_PROVIDER=gemini)');
   }
 
-  try {
-    return await generateWithModel(params, config.geminiModel);
-  } catch (error) {
-    const fallback = config.geminiFallbackModel;
-    const canFallback =
-      error.rateLimited &&
-      fallback &&
-      fallback !== config.geminiModel;
+  const chain = getModelChain();
+  const tried = [];
+  let lastRateLimitError = null;
 
-    if (!canFallback) {
+  for (const modelName of chain) {
+    tried.push(modelName);
+    try {
+      console.log(`Gemini: dùng model ${modelName}`);
+      return await generateWithModel(params, modelName);
+    } catch (error) {
+      if (error.notFound) {
+        console.warn(`Gemini model ${modelName} 404 — thử model khác...`);
+        continue;
+      }
+
+      if (error.rateLimited) {
+        lastRateLimitError = error;
+        console.warn(`Gemini model ${modelName} 429 — thử model khác...`);
+        await sleep(2000);
+        continue;
+      }
+
       throw error;
     }
-
-    console.warn(`Gemini primary model rate limited — thử fallback: ${fallback}`);
-    await sleep(2000);
-    return await generateWithModel(params, fallback);
   }
+
+  if (lastRateLimitError) {
+    throw lastRateLimitError;
+  }
+
+  throw buildGeminiNotFoundError(tried);
 };
 
 export const geminiInterChunkDelayMs = () => config.geminiInterChunkDelayMs;

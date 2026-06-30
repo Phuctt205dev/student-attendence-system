@@ -49,7 +49,8 @@ Tab **Variables** → **Add variables** (hoặc Raw Editor):
 ```env
 AI_PROVIDER=gemini
 GEMINI_API_KEY=<key từ https://aistudio.google.com/apikey>
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODEL=gemini-2.0-flash
 CORS_ORIGIN=http://localhost:5173,https://phuctt205dev.github.io
 ```
 
@@ -91,7 +92,8 @@ Raw Editor sau khi dọn (ví dụ):
 ```env
 AI_PROVIDER=gemini
 GEMINI_API_KEY=<key của bạn>
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODEL=gemini-2.0-flash
 CORS_ORIGIN=http://localhost:5173,https://phuctt205dev.github.io
 AI_CHUNK_SIZE=4000
 AI_CHUNK_OVERLAP=200
@@ -274,7 +276,8 @@ Hoặc: push bất kỳ commit nào lên `master` cũng kích hoạt deploy.
 | Frontend không gọi Railway | Thiếu `VITE_API_URL` hoặc chưa build lại Pages |
 | AI 400 `Missing ... api-version` | Thêm `AI_API_VERSION=2024-10-21` trên Railway (hoặc version Azure Portal ghi) → Redeploy |
 | AI 401/404 | Kiểm tra endpoint Azure trong Portal |
-| **Gemini 429** Too Many Requests | Free tier giới hạn/phút. Đợi 1–2 phút. Variables: `GEMINI_MODEL=gemini-2.0-flash-lite`, `AI_MAX_CHUNKS=2`, `GEMINI_CHUNK_DELAY_MS=3000` → Redeploy. Code mới tự retry 3 lần. |
+| **Gemini 429** Too Many Requests | Free tier giới hạn/phút. Đợi 1–2 phút. Variables: `GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODEL=gemini-2.0-flash-lite`, `AI_MAX_CHUNKS=2`, `GEMINI_CHUNK_DELAY_MS=3000` → Redeploy. Code mới tự retry 3 lần. |
 | Deploy hết credit (free) | Nạp credit hoặc nâng plan Railway |
 
 ### 9.1. Lỗi CORS: `Failed to fetch` / blocked by CORS policy

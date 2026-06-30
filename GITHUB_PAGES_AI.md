@@ -37,7 +37,8 @@ Tóm tắt:
 ```env
 AI_PROVIDER=gemini
 GEMINI_API_KEY=<key bước 1>
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODEL=gemini-2.0-flash
 CORS_ORIGIN=https://phuctt205dev.github.io,http://localhost:5173
 ```
 
@@ -92,7 +93,8 @@ Workflow `.github/workflows/deploy.yml` sẽ build frontend với `VITE_API_URL`
 | CORS error trong Console | `CORS_ORIGIN` sai | Trên Railway: `https://phuctt205dev.github.io` (không có path `/student-attendence-system`) |
 | BadRequest Azure 400 | Vẫn dùng Azure cũ | Đổi sang `AI_PROVIDER=gemini` |
 | Backend sleep (Render free) | Cold start | Đợi 30–60s, thử lại |
-| **429 Too Many Requests** | Gemini free tier — quá nhiều request/phút | Đợi 1–2 phút; Railway: `GEMINI_MODEL=gemini-2.0-flash-lite`, `AI_MAX_CHUNKS=2`, `GEMINI_CHUNK_DELAY_MS=3000`; redeploy |
+| **429 Too Many Requests** | Gemini free tier — quá nhiều request/phút | Đợi 5–10 phút; `AI_MAX_CHUNKS=1`; redeploy |
+| **404 Not Found** | Tên model cũ (vd. `gemini-1.5-flash` đã ngừng) | Railway: `GEMINI_MODEL=gemini-2.5-flash`, `GEMINI_FALLBACK_MODEL=gemini-2.0-flash` |
 | Ollama / localhost | Cấu hình local trên cloud | Trên Railway **không** dùng Ollama |
 
 ---

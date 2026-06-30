@@ -67,8 +67,8 @@ export const config = {
   aiModel: resolveModel(),
   geminiApiKey: resolveGeminiApiKey(),
   geminiModel:
-    process.env.GEMINI_MODEL || process.env.AI_MODEL || 'gemini-2.0-flash-lite',
-  geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-1.5-flash',
+    process.env.GEMINI_MODEL || process.env.AI_MODEL || 'gemini-2.5-flash',
+  geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.0-flash',
   geminiMaxRetries: parseIntEnv('GEMINI_MAX_RETRIES', 4),
   geminiInterChunkDelayMs: parseIntEnv('GEMINI_CHUNK_DELAY_MS', isGeminiProvider ? 3000 : 0),
   aiApiVersion: process.env.AI_API_VERSION || '2024-08-01-preview',
