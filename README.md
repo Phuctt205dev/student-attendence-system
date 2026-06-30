@@ -16,9 +16,11 @@ Website điểm danh sinh viên, ra đề kiểm tra và chấm bài tự độn
 - link: https://drive.google.com/drive/folders/1ffq03E98BJljEA4ldslBVEcKR0kcByJ0?usp=drive_link
 - Tạo nhiều mã đề thi
 - Chấm bài tự động OMR, cho phép
+  + nhận diện mã đề và sinh viên tương ứng
   + nhận diện câu hỏi đúng, sai
   + nhận diện câu tô nhiều đáp án
   + nhận diện câu hỏi bị bỏ trống 
+  + tính điểm cho sinh viên
   + cập nhật điểm lên website
 ## P/s
 Chúng em đã biết làm web và hiểu hệ thống web hoạt động như thế nào.
